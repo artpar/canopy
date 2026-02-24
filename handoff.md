@@ -58,7 +58,18 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - LLM tools: `a2ui_createProcess`, `a2ui_stopProcess` in `transport/llm_tools.go`.
 - Live monitor sample app in `sample_apps/live_monitor/` exercising process lifecycle, data binding, and functionCall-based dynamic updates.
 
-**331 tests pass** across protocol/, engine/, transport/ with race detection. 37 fixtures screenshot-verified.
+**Channel primitives** for inter-process communication:
+- 5 protocol messages: `createChannel`, `deleteChannel`, `publish`, `subscribe`, `unsubscribe`
+- `ChannelManager` in `engine/channel.go` with broadcast (all subscribers) and queue (round-robin) modes
+- Published values written to `/channels/{id}/value` on all surfaces via `HandleUpdateDataModel` (triggers binding re-render)
+- Subscribers receive values at custom `targetPath` in the data model
+- `Unsubscribe` supports granular targetPath-specific removal or process-wide removal
+- Process cleanup: stopping a process removes all its channel subscriptions
+- 6 MCP tools: `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe`
+- 5 LLM tools: `a2ui_createChannel`, `a2ui_deleteChannel`, `a2ui_publish`, `a2ui_subscribe`, `a2ui_unsubscribe`
+- Channel demo sample app in `sample_apps/channel_demo/` exercising broadcast + queue channels with inline tests
+
+**345+ tests pass** across protocol/, engine/, transport/ with race detection. 38+ fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -70,12 +81,14 @@ plan.md                        Roadmap with phases 2-4
 
 protocol/                      JSONL parsing, message types, dynamic values
   types.go                     Envelope, CreateSurface, DeleteSurface, UpdateDataModel, SetTheme,
-                               CreateProcess, StopProcess, SendToProcess
+                               CreateProcess, StopProcess, SendToProcess,
+                               CreateChannel, DeleteChannel, Publish, Subscribe, Unsubscribe
   component.go                 Component struct, Props (all component props in one struct)
   dynamic.go                   DynamicString, DynamicNumber, DynamicBoolean, DynamicStringList
   childlist.go                 ChildList (static array or template)
   action.go                    EventAction, Action, FunctionCall (EventDef.ProcessID for routing)
   process.go                   CreateProcess, StopProcess, SendToProcess structs, ProcessTransportConfig
+  channel.go                   CreateChannel, DeleteChannel, Publish, Subscribe, Unsubscribe structs
   parse.go                     Parser (JSONL line reader)
   parse_test.go                26 parser tests including style, error paths, defineFunction/defineComponent/include, process msgs
 
@@ -97,6 +110,8 @@ engine/                        Session routing, surface management, data model, 
   ffilib.go                    Generic FFI via libffi: dlopen, ffi_prep_cif, ffi_call, handle table
   ffilib_config.go             FFI config loading (JSON file with library/function declarations)
   process.go                   Process model: Process, ProcessManager, TransportFactory, setStatus
+  channel.go                   ChannelManager: named pub/sub channels (broadcast/queue), subscriber delivery
+  channel_test.go              14 channel tests: create/delete, broadcast/queue publish, subscribe/unsubscribe, cleanup
   errlog.go                    Logging helpers: logWarn, logError, logRecover (panic recovery with stack traces)
   ffilib_test.go               FFI unit tests (typed calls, handle table, error cases, session integration)
   ffi_e2e_test.go              FFI e2e tests with real system libraries (libcurl, libsqlite3, libz)
@@ -154,7 +169,7 @@ transport/                     Message sources
   file.go                      FileTransport (reads JSONL from file with include support, SendAction is no-op)
   dir.go                       DirTransport (reads all *.jsonl in a directory, sorted)
   llm.go                       LLMTransport (bidirectional LLM conversation loop)
-  llm_tools.go                 13 A2UI tool definitions (incl. createProcess, stopProcess) + toolCallToMessage + system prompt
+  llm_tools.go                 18 A2UI tool definitions (incl. process + channel tools) + toolCallToMessage + system prompt
   interval.go                  IntervalTransport: sends fixed JSONL message on a timer
   cache.go                     Prompt caching (SHA256 hash, CachePaths, CacheValid, WriteHashFile)
   anthropic.go                 Anthropic provider with prompt caching (cache_control headers)
@@ -167,7 +182,7 @@ mcp/                           Embedded MCP server (JSON-RPC 2.0 on stdin/stdout
   protocol.go                  MCP types (Request, Response, Tool, etc.)
   transport.go                 Stdio transport (line-delimited JSON-RPC)
   server.go                    Server routing + tool registration
-  tools.go                     19 tool handlers (query, interact, data, transport, capture, logging, processes)
+  tools.go                     25 tool handlers (query, interact, data, transport, capture, logging, processes, channels)
   dispatch.go                  dispatchSync generic helper for main-thread queries
   server_test.go               MCP server tests
 
@@ -207,6 +222,8 @@ testdata/                      JSONL fixtures (29 top-level + subdirectories)
   audio_player_app.jsonl       Audio Player sample app (track switching, loop toggle, onEnded)
   reminders.jsonl              Full Reminders app (Tabs, List, CheckBox, Button actions)
   process_interval.jsonl       Counter + interval process that increments it via functionCall
+  channel.jsonl                Channel demo: broadcast + queue channels with data binding
+  channel_test.jsonl           Native e2e test: channel primitives (7 assertions)
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
@@ -226,6 +243,7 @@ sample_apps/                   LLM-generated sample applications (10 apps)
   theme_switcher/              Theme switching demo (light/dark via setTheme functionCall)
   scrollable_feed/             Scrollable feed demo (List with scroll view)
   live_monitor/                Process lifecycle demo (interval timer, status binding, functionCall updates)
+  channel_demo/                Channel primitives demo (broadcast + queue channels with inline tests)
 ```
 
 ## Key Patterns
@@ -304,6 +322,9 @@ sample_apps/                   LLM-generated sample applications (10 apps)
 33. **Process status setStatus pattern** — `setStatus()` must use `HandleUpdateDataModel()`, NOT direct `dm.Set()`. Direct Set skips the binding tracker, so components bound to `/processes/{id}/status` won't re-render.
 34. **HandleUpdateDataModel functionCall resolution** — `HandleUpdateDataModel` (protocol-level) now evaluates functionCalls in op values via `evaluator.resolveArg()`, matching `executeUpdateDataModel` (action-triggered). Without this, interval processes sending `{"functionCall":{"name":"add",...}}` store raw maps instead of computed values.
 35. **MCP always-on** — The MCP server starts on stdin/stdout in ALL modes (not just `jview mcp`). jlog outputs to stderr, leaving stdout free for JSON-RPC. `.mcp.json` should NOT include the `mcp` subcommand in args.
+36. **Channel values stay Go types** — Values published via `cm.Publish()` in Go stay as Go types (e.g. int stays int, not float64). Don't compare against float64 in tests for integer values published from Go code.
+37. **Channel Unsubscribe granularity** — `Unsubscribe` with `targetPath` set removes only that specific subscription. Without `targetPath`, it removes ALL subscriptions for the given `processId`. Empty `processId` matches session-level subscribers.
+38. **MCP ServerOption pattern** — `mcp.NewServer` uses functional options (`WithProcessManager`, `WithChannelManager`). Don't pass raw pointers.
 
 ## What To Work On Next
 

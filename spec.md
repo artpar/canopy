@@ -422,6 +422,110 @@ Routes a message to a process. The inner message is parsed and handled by the se
 | processId | string | yes | Target process ID |
 | message | object | yes | A2UI JSONL message to route |
 
+### createChannel
+
+Registers a named channel for inter-process communication. Channels provide pub/sub messaging with broadcast or queue semantics. Published values are automatically written to `/channels/{id}/value` in the data model of all surfaces.
+
+```json
+{
+  "type": "createChannel",
+  "channelId": "notifications",
+  "mode": "broadcast"
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| channelId | string | yes | | Unique channel identifier |
+| mode | string | no | `"broadcast"` | `"broadcast"` (all subscribers) or `"queue"` (round-robin) |
+| bufferSize | int | no | 0 | Reserved for future use |
+
+Creating a channel with a duplicate `channelId` returns an error. An unknown mode logs a warning and defaults to broadcast.
+
+Channel status is written to `/channels/{id}/status` on all surfaces (`"active"` on create, `"deleted"` on delete).
+
+### deleteChannel
+
+Removes a channel and all its subscriptions.
+
+```json
+{
+  "type": "deleteChannel",
+  "channelId": "notifications"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| channelId | string | yes | Channel to delete |
+
+Deleting a non-existent channel returns an error.
+
+### subscribe
+
+Registers interest in a channel's values. When a value is published to the channel, it is delivered to the subscriber's `targetPath` in the data model.
+
+```json
+{
+  "type": "subscribe",
+  "channelId": "notifications",
+  "processId": "worker1",
+  "targetPath": "/ui/notification"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| channelId | string | yes | Channel to subscribe to |
+| processId | string | no | Subscriber identifier (empty = session-level) |
+| targetPath | string | no | Data model path to deliver values to |
+
+Duplicate subscriptions (same processId + targetPath) are deduplicated silently. Subscribing to a non-existent channel returns an error.
+
+### unsubscribe
+
+Removes a subscription from a channel.
+
+```json
+{
+  "type": "unsubscribe",
+  "channelId": "notifications",
+  "processId": "worker1",
+  "targetPath": "/ui/notification"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| channelId | string | yes | Channel to unsubscribe from |
+| processId | string | no | Subscriber identifier |
+| targetPath | string | no | If set, only remove this specific subscription. If empty, remove all subscriptions for the processId. |
+
+Unsubscribing from a non-existent channel returns an error.
+
+### publish
+
+Sends a value to a channel. The value is written to `/channels/{id}/value` on all surfaces. Subscribers receive the value at their `targetPath`.
+
+```json
+{
+  "type": "publish",
+  "channelId": "notifications",
+  "value": {"text": "Build complete", "status": "success"}
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| channelId | string | yes | Channel to publish to |
+| value | any | yes | Value to publish (any JSON type) |
+
+**Broadcast mode:** All subscribers receive the value at their targetPath.
+
+**Queue mode:** One subscriber receives the value (round-robin). The next publish goes to the next subscriber.
+
+Publishing to a non-existent channel returns an error. Publishing to a channel with no subscribers is allowed — the value is still written to `/channels/{id}/value`.
+
 ---
 
 ## Component Model
@@ -895,7 +999,7 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 The MCP server starts automatically on stdin/stdout in all modes using JSON-RPC 2.0. When running `jview file.jsonl`, the MCP server is available alongside the normal UI. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
-19 tools are available:
+25 tools are available:
 
 | Category | Tools |
 |----------|-------|
@@ -906,6 +1010,7 @@ The MCP server starts automatically on stdin/stdout in all modes using JSON-RPC 
 | Capture | `take_screenshot` (PNG, base64-encoded) |
 | Logging | `get_logs` |
 | Processes | `list_processes`, `create_process`, `stop_process`, `send_to_process` |
+| Channels | `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe` |
 
 The MCP server enables programmatic UI control, testing, and integration with external agents or tools that speak MCP.
 

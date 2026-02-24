@@ -73,9 +73,10 @@ Reliability, process management, and always-on MCP.
 - Interval transport: sends fixed JSONL message on a timer with functionCall evaluation in op values.
 - HandleUpdateDataModel now evaluates functionCalls in op values (matching executeUpdateDataModel).
 - Process status written to `/processes/{id}/status` via HandleUpdateDataModel (triggers binding re-render).
-- Always-on MCP: server starts on stdin/stdout in all modes (not just `jview mcp`). 19 tools including process management.
-- LLM tools: `a2ui_createProcess`, `a2ui_stopProcess`.
-- MCP tools: `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`.
+- Always-on MCP: server starts on stdin/stdout in all modes (not just `jview mcp`). 25 tools including process management and channels.
+- LLM tools: `a2ui_createProcess`, `a2ui_stopProcess`, `a2ui_createChannel`, `a2ui_deleteChannel`, `a2ui_publish`, `a2ui_subscribe`, `a2ui_unsubscribe`.
+- MCP tools: `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`, `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe`.
+- Channel primitives: `createChannel`, `deleteChannel`, `publish`, `subscribe`, `unsubscribe` protocol messages. ChannelManager with broadcast (all subscribers) and queue (round-robin) modes. Published values written to `/channels/{id}/value` on all surfaces. Subscriber targetPath delivery. Process cleanup removes channel subscriptions.
 
 ---
 
@@ -124,3 +125,6 @@ Each phase follows the same pattern:
 | Default to Anthropic Haiku | Fast, cheap, good at tool calling. Sensible default for interactive UI generation. |
 | Real AppKit for e2e tests | Tests query actual NSView frames, fonts, colors — not mock values. Synchronous MockDispatcher + real DarwinRenderer avoids dispatch_async deadlock on main thread. |
 | Test messages inline in JSONL | Tests colocated with app definition. `jview` ignores them, `jview test` executes them. Single source of truth for app + tests. |
+| Channels via DataModel delivery | Channel values delivered through `HandleUpdateDataModel` — no new data path. Reuses existing binding tracker for reactive UI. Components bind to `/channels/{id}/value` like any other data. |
+| ServerOption pattern for MCP | Functional options (`WithProcessManager`, `WithChannelManager`) instead of positional params. Cleanly extensible without breaking callers. |
+| Broadcast + Queue channel modes | Broadcast delivers to all subscribers (fan-out). Queue delivers round-robin (load balancing). Covers both pub/sub and work queue patterns. |

@@ -175,9 +175,21 @@ jview supports background processes — named goroutines with their own transpor
 
 Three transport types: `file` (async JSONL), `interval` (timer with fixed message), `llm` (new LLM conversation). Process status is written to `/processes/{id}/status` in the data model, enabling reactive UI via binding.
 
+### Channel Primitives
+
+Named channels enable inter-process communication with broadcast and queue semantics. Published values integrate directly into the data model at `/channels/{id}/value`, so existing `dataBinding` works automatically.
+
+```json
+{"type":"createChannel","channelId":"notifications","mode":"broadcast"}
+{"type":"subscribe","channelId":"notifications","targetPath":"/ui/notification"}
+{"type":"publish","channelId":"notifications","value":{"text":"Build complete"}}
+```
+
+**Broadcast mode:** All subscribers receive every published value. **Queue mode:** Values are delivered round-robin to one subscriber at a time. Subscribers specify a `targetPath` for custom delivery to any data model path.
+
 ### Embedded MCP Server
 
-The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 19 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, send A2UI messages, and manage processes. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
+The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 25 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, send A2UI messages, manage processes, and manage channels. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
 ```bash
 # Normal mode (MCP available alongside UI)
@@ -240,8 +252,8 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests (331 tests)
-make verify        # Build + screenshot capture for all fixtures (37 fixtures)
+make test          # Headless unit + integration tests (345+ tests)
+make verify        # Build + screenshot capture for all fixtures (38+ fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)

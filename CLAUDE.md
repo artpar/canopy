@@ -131,6 +131,7 @@ Every component and every feature gets a fixture in `testdata/`. Fixtures are:
 | `platform/darwin/viewquery.go/.h/.m` | ObjC view frame/style queries | Test infra |
 | `testdata/*.jsonl` | Fixture files used by E2E + screenshots | Data |
 | `testdata/*_test.jsonl` | Native e2e test fixtures with inline assertions | E2E |
+| `engine/channel_test.go` | Channel manager: create/delete, pub/sub, queue, cleanup | Unit |
 | `samples/dynamic_list.jsonl` | Dynamic list with add/remove + inline tests | E2E |
 | `sample_apps/*/prompt.jsonl` | Sample app cached JSONL with inline tests | E2E |
 
@@ -219,11 +220,14 @@ Live agent connectivity and remaining A2UI components.
 | Theme → NSAppearance | infra | low | **done** |
 | Scroll view for overflow | infra | medium | **done** |
 
-### Phase 4: Production Hardening
-Reliability, performance, packaging.
+### Phase 4: Production Hardening — COMPLETE
+Reliability, process model, channels, always-on MCP.
 
-| Task | Tag | Priority |
-|------|-----|----------|
-| CGo memory cleanup | infra | high |
-| Error recovery / graceful degradation | infra | high |
-| macOS .app bundle packaging | infra | low |
+| Task | Tag | Priority | Status |
+|------|-----|----------|--------|
+| CGo memory cleanup | infra | high | **done** |
+| Error recovery / graceful degradation | infra | high | **done** |
+| Process model (createProcess/stopProcess) | infra | high | **done** |
+| Channel primitives (pub/sub, broadcast/queue) | infra | high | **done** |
+| Always-on MCP server | infra | high | **done** |
+| macOS .app bundle packaging | infra | low | not started |
