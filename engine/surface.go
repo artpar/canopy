@@ -486,6 +486,31 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			node.Callbacks["datechange"] = cbID
 			s.trackCallback(comp.ComponentID, "datechange", cbID)
 		}
+
+	case protocol.CompTabs:
+		if comp.Props.DataBinding != "" {
+			binding := comp.Props.DataBinding
+			compID := comp.ComponentID
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "select", func(value string) {
+				changed, err := s.dm.Set(binding, value)
+				if err != nil {
+					log.Printf("surface %s: tabs binding error: %v", s.id, err)
+					return
+				}
+				affected := s.tracker.Affected(changed)
+				var toRender []string
+				for _, id := range affected {
+					if id != compID {
+						toRender = append(toRender, id)
+					}
+				}
+				if len(toRender) > 0 {
+					s.renderComponents(toRender)
+				}
+			})
+			node.Callbacks["select"] = cbID
+			s.trackCallback(comp.ComponentID, "select", cbID)
+		}
 	}
 }
 
@@ -823,6 +848,7 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	rewriteString(p.Alt)
 	rewriteString(p.Name)
 	rewriteString(p.DateValue)
+	rewriteString(p.ActiveTab)
 	rewriteNumber(p.Min)
 	rewriteNumber(p.Max)
 	rewriteNumber(p.Step)
@@ -887,6 +913,10 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	if p.DateValue != nil {
 		v := *p.DateValue
 		p.DateValue = &v
+	}
+	if p.ActiveTab != nil {
+		v := *p.ActiveTab
+		p.ActiveTab = &v
 	}
 
 	// Deep copy DynamicNumber pointers

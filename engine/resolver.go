@@ -143,6 +143,11 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 			p.Gap = 8
 		}
 		p.Padding = cp.Padding
+
+	case protocol.CompTabs:
+		p.TabLabels = r.resolveTabLabels(cp.TabLabels)
+		p.ActiveTab = r.resolveString(comp.ComponentID, cp.ActiveTab)
+		p.DataBinding = cp.DataBinding
 	}
 
 	node.Style = comp.Style
@@ -294,6 +299,17 @@ func (r *Resolver) resolveOptions(raw []byte) []renderer.OptionItem {
 		items = append(items, renderer.OptionItem{Label: o.Label, Value: o.Value})
 	}
 	return items
+}
+
+func (r *Resolver) resolveTabLabels(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var labels []string
+	if err := json.Unmarshal(raw, &labels); err != nil {
+		return nil
+	}
+	return labels
 }
 
 // registerFuncBindings walks function call args and registers bindings for any path references.

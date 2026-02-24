@@ -79,6 +79,10 @@ type ResolvedProps struct {
 	EnableDate bool   `json:"enableDate,omitempty"`
 	EnableTime bool   `json:"enableTime,omitempty"`
 	DateValue  string `json:"dateValue,omitempty"`
+
+	// Tabs
+	TabLabels []string `json:"tabLabels,omitempty"`
+	ActiveTab string   `json:"activeTab,omitempty"`
 }
 
 // OptionItem represents a single option in a ChoicePicker.

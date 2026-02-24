@@ -270,6 +270,34 @@ func TestE2ELayoutFixture(t *testing.T) {
 	}
 }
 
+// TestE2ETabsTests runs the tabs test fixture through the test runner.
+func TestE2ETabsTests(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+
+	results, err := RunTestFile(filepath.Join(fixtureDir(), "tabs_test.jsonl"), mock, disp)
+	if err != nil {
+		t.Fatalf("RunTestFile: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("no tests found in tabs_test.jsonl")
+	}
+
+	passed := 0
+	totalAssertions := 0
+	for _, r := range results {
+		totalAssertions += r.Assertions
+		if r.Passed {
+			passed++
+		} else {
+			t.Errorf("FAIL: %s: %s", r.Name, r.Error)
+		}
+	}
+
+	t.Logf("%d/%d tests passed, %d assertions total", passed, len(results), totalAssertions)
+}
+
 // TestE2ECalculatorTests runs the calculator test fixture through the test runner.
 func TestE2ECalculatorTests(t *testing.T) {
 	mock := renderer.NewMockRenderer()
@@ -508,6 +536,90 @@ func TestE2ECalculatorV2Fixture(t *testing.T) {
 	}
 	if !found {
 		t.Error("display not updated after equals")
+	}
+}
+
+func TestE2ETabsFixture(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	ft := transport.NewFileTransport(filepath.Join(fixtureDir(), "tabs.jsonl"))
+	ft.Start()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for msg := range ft.Messages() {
+			sess.HandleMessage(msg)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
+	}
+
+	// Tabs component created with correct resolved props
+	tabsNode := mock.LastNode("tabs", "tabs1")
+	if tabsNode == nil {
+		t.Fatal("tabs1 not created")
+	}
+	if len(tabsNode.Props.TabLabels) != 3 {
+		t.Errorf("tabLabels count = %d, want 3", len(tabsNode.Props.TabLabels))
+	}
+	if tabsNode.Props.ActiveTab != "tab-overview" {
+		t.Errorf("activeTab = %q, want tab-overview", tabsNode.Props.ActiveTab)
+	}
+
+	// Tab children created
+	for _, id := range []string{"tab-overview", "tab-settings", "tab-about"} {
+		h := mock.GetHandle("tabs", id)
+		if h == 0 {
+			t.Errorf("child %q not created", id)
+		}
+	}
+
+	// SetChildren called on tabs
+	tabsHandle := mock.GetHandle("tabs", "tabs1")
+	foundChildren := false
+	for _, cs := range mock.Children {
+		if cs.ParentHandle == tabsHandle {
+			foundChildren = true
+			if len(cs.ChildHandles) != 3 {
+				t.Errorf("tabs children = %d, want 3", len(cs.ChildHandles))
+			}
+		}
+	}
+	if !foundChildren {
+		t.Error("no SetChildren for tabs1")
+	}
+
+	// Display shows concat result
+	displayNode := mock.LastNode("tabs", "display")
+	if displayNode == nil {
+		t.Fatal("display not created")
+	}
+	if displayNode.Props.Content != "Selected tab: tab-overview" {
+		t.Errorf("display = %q, want 'Selected tab: tab-overview'", displayNode.Props.Content)
+	}
+
+	// Simulate tab selection
+	beforeUpdates := len(mock.Updated)
+	mock.InvokeCallback("tabs", "tabs1", "select", "tab-settings")
+
+	foundDisplay := false
+	for _, u := range mock.Updated[beforeUpdates:] {
+		if u.Node != nil && u.Node.ComponentID == "display" {
+			foundDisplay = true
+			if u.Node.Props.Content != "Selected tab: tab-settings" {
+				t.Errorf("display after select = %q, want 'Selected tab: tab-settings'", u.Node.Props.Content)
+			}
+		}
+	}
+	if !foundDisplay {
+		t.Error("tabs select did not propagate to display")
 	}
 }
 

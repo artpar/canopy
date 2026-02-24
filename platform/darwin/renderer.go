@@ -96,6 +96,8 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 		handle = createDateTimeInputView(node, surfaceID)
 	case protocol.CompList:
 		handle = createListView(node)
+	case protocol.CompTabs:
+		handle = createTabsView(node, surfaceID)
 	default:
 		log.Printf("darwin: unsupported component type %s", node.Type)
 		return 0
@@ -144,6 +146,8 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 		updateDateTimeInputView(handle, node)
 	case protocol.CompList:
 		updateListView(handle, node)
+	case protocol.CompTabs:
+		updateTabsView(handle, node)
 	default:
 		log.Printf("darwin: unsupported update for component type %s", node.Type)
 	}
@@ -161,6 +165,8 @@ func (r *DarwinRenderer) SetChildren(surfaceID string, parentHandle renderer.Vie
 		setCardChildren(parentHandle, childHandles)
 	case protocol.CompList:
 		setListChildren(parentHandle, childHandles)
+	case protocol.CompTabs:
+		setTabsChildren(parentHandle, childHandles)
 	default:
 		log.Printf("darwin: SetChildren not supported for type %s", parentType)
 	}

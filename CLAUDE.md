@@ -135,7 +135,7 @@ Every component and every feature gets a fixture in `testdata/`. Fixtures are:
 ## Architecture
 
 ```
-Transport (goroutine)          ← reads JSONL from file/SSE/WS
+Transport (goroutine)          ← reads JSONL from file/LLM
     ↓
 engine.Session (goroutine)     ← routes messages to surfaces
     ↓
@@ -208,9 +208,7 @@ Live agent connectivity and remaining A2UI components.
 | LLM transport (any-llm-go) | transport | critical | **done** |
 | Action response pipeline | transport | high | **done** |
 | Native e2e test framework | testing | high | **done** |
-| SSE transport | transport | medium | not started |
-| WebSocket transport | transport | medium | not started |
-| Tabs | component | high | not started |
+| Tabs | component | high | **done** |
 | Modal | component | high | not started |
 | Video (AVPlayerView) | component | medium | not started |
 | AudioPlayer | component | low | not started |

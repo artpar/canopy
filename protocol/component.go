@@ -109,7 +109,8 @@ type Props struct {
 	Size int            `json:"size,omitempty"`
 
 	// Tabs
-	Tabs json.RawMessage `json:"tabs,omitempty"` // deferred to Phase 3
+	TabLabels json.RawMessage `json:"tabLabels,omitempty"` // ["Label1", "Label2", ...]
+	ActiveTab *DynamicString   `json:"activeTab,omitempty"` // selected child ID
 
 	// Modal
 	Visible   *DynamicBoolean `json:"visible,omitempty"`

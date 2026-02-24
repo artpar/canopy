@@ -1024,6 +1024,75 @@ func TestDefineFunctionRedefinition(t *testing.T) {
 	_ = mock
 }
 
+func TestTabsComponent(t *testing.T) {
+	sess, mock := newTestSession()
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/selectedTab","value":"tab-a"}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"tabs1","type":"Tabs","props":{"tabLabels":["Tab A","Tab B"],"activeTab":{"path":"/selectedTab"},"dataBinding":"/selectedTab"},"children":["tab-a","tab-b"]},{"componentId":"tab-a","type":"Text","props":{"content":"Content A"}},{"componentId":"tab-b","type":"Text","props":{"content":"Content B"}},{"componentId":"display","type":"Text","props":{"content":{"path":"/selectedTab"}}}]}`)
+
+	// Tabs component created with correct resolved props
+	tabsNode := mock.LastNode("s1", "tabs1")
+	if tabsNode == nil {
+		t.Fatal("tabs1 not created")
+	}
+	if len(tabsNode.Props.TabLabels) != 2 {
+		t.Errorf("tabLabels count = %d, want 2", len(tabsNode.Props.TabLabels))
+	}
+	if tabsNode.Props.TabLabels[0] != "Tab A" || tabsNode.Props.TabLabels[1] != "Tab B" {
+		t.Errorf("tabLabels = %v, want [Tab A, Tab B]", tabsNode.Props.TabLabels)
+	}
+	if tabsNode.Props.ActiveTab != "tab-a" {
+		t.Errorf("activeTab = %q, want tab-a", tabsNode.Props.ActiveTab)
+	}
+	if tabsNode.Props.DataBinding != "/selectedTab" {
+		t.Errorf("dataBinding = %q, want /selectedTab", tabsNode.Props.DataBinding)
+	}
+
+	// Children set on tabs
+	tabsHandle := mock.GetHandle("s1", "tabs1")
+	if tabsHandle == 0 {
+		t.Fatal("tabs1 handle not found")
+	}
+	foundTabsChildren := false
+	for _, cs := range mock.Children {
+		if cs.ParentHandle == tabsHandle {
+			foundTabsChildren = true
+			if len(cs.ChildHandles) != 2 {
+				t.Errorf("tabs child count = %d, want 2", len(cs.ChildHandles))
+			}
+		}
+	}
+	if !foundTabsChildren {
+		t.Error("no SetChildren call for tabs1")
+	}
+
+	// Simulate tab selection → data model updates
+	initialUpdates := len(mock.Updated)
+	mock.InvokeCallback("s1", "tabs1", "select", "tab-b")
+
+	foundDisplay := false
+	for _, u := range mock.Updated[initialUpdates:] {
+		if u.Node != nil && u.Node.ComponentID == "display" {
+			foundDisplay = true
+			if u.Node.Props.Content != "tab-b" {
+				t.Errorf("display content = %q, want tab-b", u.Node.Props.Content)
+			}
+		}
+	}
+	if !foundDisplay {
+		t.Error("tabs select callback did not propagate to display")
+	}
+
+	// Verify data model
+	if surf, ok := sess.surfaces["s1"]; ok {
+		val, found := surf.dm.Get("/selectedTab")
+		if !found || val != "tab-b" {
+			t.Errorf("/selectedTab = %v (%v), want tab-b", val, found)
+		}
+	}
+}
+
 func TestDefineComponentWithFunctionCall(t *testing.T) {
 	sess, mock := newTestSession()
 

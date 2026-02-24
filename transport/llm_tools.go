@@ -49,7 +49,7 @@ func a2uiTools() []anyllm.Tool {
 								"type": "object",
 								"properties": map[string]any{
 									"componentId": map[string]any{"type": "string"},
-									"type":        map[string]any{"type": "string", "enum": []string{"Text", "Row", "Column", "Card", "Button", "TextField", "CheckBox", "Slider", "Image", "Icon", "Divider", "List", "ChoicePicker", "DateTimeInput"}},
+									"type":        map[string]any{"type": "string", "enum": []string{"Text", "Row", "Column", "Card", "Button", "TextField", "CheckBox", "Slider", "Image", "Icon", "Divider", "List", "Tabs", "ChoicePicker", "DateTimeInput"}},
 									"children":    map[string]any{"type": "object", "description": "Tree structure: {\"static\": [\"childId1\", \"childId2\"]}. Required on containers."},
 									"props":       map[string]any{"type": "object"},
 									"style": map[string]any{
@@ -390,6 +390,7 @@ AVAILABLE COMPONENTS:
 - Icon: SF Symbol. Props: name (string), size (int)
 - Divider: Visual separator. No props needed.
 - List: Scrollable list container.
+- Tabs: Tabbed container showing one child at a time. Props: tabLabels (array of strings, one per child), activeTab (child ID of selected tab), dataBinding (JSON pointer to store selected child ID). Children define tab content.
 - ChoicePicker: Dropdown/selection. Props: options (array of {value, label}), dataBinding (JSON pointer), mutuallyExclusive (bool)
 - DateTimeInput: Date/time picker. Props: enableDate (bool), enableTime (bool), dataBinding (JSON pointer)
 
@@ -597,7 +598,7 @@ Assertion types:
 
 Simulation:
 - event: Trigger user interaction. {"simulate":"event","componentId":"field","event":"change","eventData":"Alice"}
-  Events: change (TextField), click (Button), toggle (CheckBox), slide (Slider), select (ChoicePicker), datechange (DateTimeInput)
+  Events: change (TextField), click (Button), toggle (CheckBox), slide (Slider), select (ChoicePicker/Tabs), datechange (DateTimeInput)
 
 Tests execute in file order. Side effects persist across tests. Actions reset per test.
 
