@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"jview/engine"
+	"jview/mcp"
 	"jview/platform/darwin"
 	"jview/protocol"
 	"jview/renderer"
@@ -30,6 +32,12 @@ func main() {
 	// Handle "jview test <file>" — uses real AppKit for e2e testing
 	if len(os.Args) >= 3 && os.Args[1] == "test" {
 		runTests(os.Args[2])
+		return
+	}
+
+	// Handle "jview mcp [file.jsonl]" — embedded MCP server
+	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
+		runMCP(os.Args[2:])
 		return
 	}
 
@@ -271,6 +279,50 @@ func createProvider(name string, apiKey string) (anyllm.Provider, error) {
 	default:
 		return nil, fmt.Errorf("unknown provider %q (supported: anthropic, openai, gemini, ollama, deepseek, groq, mistral)", name)
 	}
+}
+
+func runMCP(args []string) {
+	darwin.AppInit()
+	disp := darwin.NewDispatcher()
+	rend := darwin.NewRenderer()
+	sess := engine.NewSession(rend, disp)
+
+	// If a file arg is provided, load it as initial UI
+	if len(args) > 0 {
+		tr := createFileTransport(args[0])
+		go func() {
+			tr.Start()
+			for {
+				select {
+				case msg, ok := <-tr.Messages():
+					if !ok {
+						log.Println("mcp: file transport closed")
+						return
+					}
+					sess.HandleMessage(msg)
+				case err, ok := <-tr.Errors():
+					if !ok {
+						return
+					}
+					log.Printf("mcp: file transport error: %v", err)
+				}
+			}
+		}()
+	}
+
+	mcpTransport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
+	mcpServer := mcp.NewServer(sess, rend, disp)
+
+	// Run MCP server in goroutine; on EOF, quit the app
+	go func() {
+		ctx := context.Background()
+		if err := mcpServer.Run(ctx, mcpTransport); err != nil {
+			log.Printf("mcp: server error: %v", err)
+		}
+		darwin.AppStop()
+	}()
+
+	darwin.AppRun()
 }
 
 func runTests(path string) {

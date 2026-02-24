@@ -62,6 +62,26 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher,
 	}
 }
 
+// ID returns the surface ID.
+func (s *Surface) ID() string {
+	return s.id
+}
+
+// Tree returns the component tree.
+func (s *Surface) Tree() *Tree {
+	return s.tree
+}
+
+// DM returns the data model.
+func (s *Surface) DM() *DataModel {
+	return s.dm
+}
+
+// Resolver returns the resolver.
+func (s *Surface) Resolver() *Resolver {
+	return s.resolver
+}
+
 // SetFFI updates the FFI registry for this surface and its evaluator.
 func (s *Surface) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi

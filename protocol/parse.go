@@ -40,6 +40,11 @@ func (p *Parser) Next() (*Message, error) {
 		return p.Next() // skip blank lines
 	}
 
+	return ParseLine(line)
+}
+
+// ParseLine parses a single JSONL line into a Message.
+func ParseLine(line []byte) (*Message, error) {
 	var env Envelope
 	if err := json.Unmarshal(line, &env); err != nil {
 		return nil, fmt.Errorf("parse envelope: %w", err)

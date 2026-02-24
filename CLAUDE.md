@@ -209,6 +209,7 @@ Live agent connectivity and remaining A2UI components.
 | Action response pipeline | transport | high | **done** |
 | Native e2e test framework | testing | high | **done** |
 | Tabs | component | high | **done** |
+| Embedded MCP server | infra | high | **done** |
 | Modal | component | high | not started |
 | Video (AVPlayerView) | component | medium | not started |
 | AudioPlayer | component | low | not started |

@@ -2,8 +2,8 @@
 #import <objc/runtime.h>
 #include "app.h"
 
-// Map from surfaceID → NSWindow
-static NSMutableDictionary<NSString*, NSWindow*> *windowMap = nil;
+// Map from surfaceID → NSWindow (non-static so screenshot.m can access via extern)
+NSMutableDictionary<NSString*, NSWindow*> *windowMap = nil;
 
 @interface JVAppDelegate : NSObject <NSApplicationDelegate>
 @end

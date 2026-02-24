@@ -275,6 +275,11 @@ func (m *MockRenderer) GetAsset(alias string) (AssetSpec, bool) {
 	return a, ok
 }
 
+// CaptureWindow is a no-op for the mock renderer.
+func (m *MockRenderer) CaptureWindow(surfaceID string) ([]byte, error) {
+	return nil, nil
+}
+
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}
 

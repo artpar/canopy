@@ -198,6 +198,20 @@ func (s *Session) handleDefineComponent(dc protocol.DefineComponent) {
 	}
 }
 
+// GetSurface returns the surface with the given ID, or nil if not found.
+func (s *Session) GetSurface(id string) *Surface {
+	return s.surfaces[id]
+}
+
+// SurfaceIDs returns the IDs of all active surfaces.
+func (s *Session) SurfaceIDs() []string {
+	ids := make([]string, 0, len(s.surfaces))
+	for id := range s.surfaces {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (s *Session) handleLoadAssets(la protocol.LoadAssets) {
 	if s.assets == nil {
 		s.assets = NewAssetRegistry()

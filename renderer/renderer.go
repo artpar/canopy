@@ -52,4 +52,7 @@ type Renderer interface {
 
 	// LoadAssets registers fonts, preloads images, and caches asset metadata.
 	LoadAssets(assets []AssetSpec)
+
+	// CaptureWindow captures the window content as a PNG image.
+	CaptureWindow(surfaceID string) ([]byte, error)
 }
