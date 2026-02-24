@@ -63,6 +63,7 @@ func a2uiTools() []anyllm.Tool {
 											"height":          map[string]any{"type": "number", "description": "Fixed height in points"},
 											"fontSize":        map[string]any{"type": "number", "description": "Font size in points"},
 											"fontWeight":      map[string]any{"type": "string", "enum": []string{"bold", "semibold", "medium", "light"}},
+											"fontFamily":      map[string]any{"type": "string", "description": "Font family name (system or registered via a2ui_loadAssets)"},
 											"textAlign":       map[string]any{"type": "string", "enum": []string{"left", "center", "right"}},
 											"opacity":         map[string]any{"type": "number", "description": "Opacity 0.0-1.0"},
 										},
@@ -166,6 +167,31 @@ func a2uiTools() []anyllm.Tool {
 						},
 					},
 					"required": []string{"surfaceId", "name", "steps"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_loadAssets",
+				Description: "Declare fonts, images, audio, or video assets by alias. Fonts are registered with the system (process scope) so they become available via fontFamily in style. Images are preloaded and cached. Components can reference any asset via the \"asset:<alias>\" prefix in string props like src.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"assets": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"alias": map[string]any{"type": "string", "description": "Short name to reference this asset (e.g. \"BrandFont\", \"hero\")"},
+									"kind":  map[string]any{"type": "string", "enum": []string{"font", "image", "audio", "video"}, "description": "Asset type"},
+									"src":   map[string]any{"type": "string", "description": "Local path (absolute or relative to CWD) or URL"},
+								},
+								"required": []string{"alias", "kind", "src"},
+							},
+						},
+					},
+					"required": []string{"assets"},
 				},
 			},
 		},
@@ -324,7 +350,7 @@ AVAILABLE COMPONENTS:
 - TextField: Text input. Props: placeholder (string), value (string), dataBinding (JSON pointer)
 - CheckBox: Toggle. Props: label (string), checked (bool), dataBinding (JSON pointer)
 - Slider: Range input. Props: min (number), max (number), step (number), sliderValue (number), dataBinding (JSON pointer)
-- Image: Display image. Props: src (URL string), alt (string), width (int), height (int)
+- Image: Display image. Props: src (URL string or "asset:<alias>"), alt (string), width (int), height (int)
 - Icon: SF Symbol. Props: name (string), size (int)
 - Divider: Visual separator. No props needed.
 - List: Scrollable list container.
@@ -415,6 +441,7 @@ Any component can have a "style" object alongside "props" with these properties:
 - width/height: number — fixed dimensions in points
 - fontSize: number — font size in points
 - fontWeight: "bold"|"semibold"|"medium"|"light"
+- fontFamily: font family name (e.g. "Comic Sans MS", "Courier New", or a custom font registered via a2ui_loadAssets)
 - textAlign: "left"|"center"|"right"
 - opacity: 0.0-1.0
 
@@ -447,11 +474,26 @@ Example — calling libcurl:
   {"name":"cleanup","symbol":"curl_easy_cleanup","returnType":"void","paramTypes":["pointer"]}
 ]}
 
+ASSETS:
+Use a2ui_loadAssets to register fonts and preload images BEFORE creating components that use them.
+- Font assets: register a .ttf/.otf file by alias. The font becomes available via fontFamily in style (use the font's family name, e.g. "Comic Sans MS").
+  System fonts in /System/Library/Fonts/ and /System/Library/Fonts/Supplemental/ are always available without loading.
+- Image assets: preload by alias. Reference in Image src with "asset:<alias>" prefix (e.g. "asset:hero").
+  Images can also use direct URLs without loadAssets — the asset system is for preloading and aliasing.
+
+Example:
+a2ui_loadAssets({"assets": [
+  {"alias": "logo", "kind": "image", "src": "https://example.com/logo.png"},
+  {"alias": "CustomFont", "kind": "font", "src": "/path/to/font.ttf"}
+]})
+Then: Image src "asset:logo", or Text style {"fontFamily": "Custom Font Family Name"}
+
 WORKFLOW:
-1. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding)
-2. Call a2ui_updateDataModel to set initial data (if needed)
-3. Call a2ui_updateComponents to create the component tree
-4. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.
+1. Call a2ui_loadAssets if you need custom fonts or want to preload images (optional)
+2. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding)
+3. Call a2ui_updateDataModel to set initial data (if needed)
+4. Call a2ui_updateComponents to create the component tree
+5. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.
 
 COMPONENT TREE RULES:
 - Every component needs a unique componentId

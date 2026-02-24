@@ -375,6 +375,49 @@ func TestToolCallToMessageLoadLibrary(t *testing.T) {
 	}
 }
 
+func TestToolCallToMessageLoadAssets(t *testing.T) {
+	args := map[string]interface{}{
+		"assets": []interface{}{
+			map[string]interface{}{"alias": "hero", "kind": "image", "src": "https://example.com/hero.png"},
+			map[string]interface{}{"alias": "MyFont", "kind": "font", "src": "/tmp/font.ttf"},
+		},
+	}
+	argsJSON, _ := json.Marshal(args)
+
+	tc := anyllm.ToolCall{
+		ID:   "call_la",
+		Type: "function",
+		Function: anyllm.FunctionCall{
+			Name:      "a2ui_loadAssets",
+			Arguments: string(argsJSON),
+		},
+	}
+
+	msg, rawBytes, err := toolCallToMessage(tc)
+	if err != nil {
+		t.Fatalf("toolCallToMessage: %v", err)
+	}
+	if msg.Type != protocol.MsgLoadAssets {
+		t.Errorf("expected loadAssets, got %s", msg.Type)
+	}
+	la, ok := msg.Body.(protocol.LoadAssets)
+	if !ok {
+		t.Fatalf("expected LoadAssets body, got %T", msg.Body)
+	}
+	if len(la.Assets) != 2 {
+		t.Fatalf("expected 2 assets, got %d", len(la.Assets))
+	}
+	if la.Assets[0].Alias != "hero" || la.Assets[0].Kind != "image" {
+		t.Errorf("asset[0] = %+v, want {hero, image}", la.Assets[0])
+	}
+	if la.Assets[1].Alias != "MyFont" || la.Assets[1].Kind != "font" {
+		t.Errorf("asset[1] = %+v, want {MyFont, font}", la.Assets[1])
+	}
+	if rawBytes == nil {
+		t.Error("expected non-nil raw bytes for recording")
+	}
+}
+
 func TestLLMTransportInspectLibrary(t *testing.T) {
 	// Test that inspectLibrary tool calls are handled as utility (not protocol messages)
 	mock := &mockProvider{
