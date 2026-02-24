@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -163,12 +164,15 @@ func (p *AnthropicProvider) convertParams(params providers.CompletionParams) ant
 		MaxTokens: maxTokens,
 	}
 
+	// Use automatic caching: the API places a cache breakpoint on the last
+	// cacheable block and moves it forward as conversations grow.
+	req.SetExtraFields(map[string]any{
+		"cache_control": map[string]string{"type": "ephemeral"},
+	})
+
 	if system != "" {
 		req.System = []anthropic.TextBlockParam{
-			{
-				Text:         system,
-				CacheControl: anthropic.NewCacheControlEphemeralParam(),
-			},
+			{Text: system},
 		}
 	}
 
@@ -188,15 +192,6 @@ func (p *AnthropicProvider) convertParams(params providers.CompletionParams) ant
 		tools := make([]anthropic.ToolUnionParam, 0, len(params.Tools))
 		for _, tool := range params.Tools {
 			tools = append(tools, convertAnthropicTool(tool))
-		}
-		// Cache the last tool definition — the API caches everything up to
-		// and including the block with cache_control.
-		if len(tools) > 0 {
-			last := tools[len(tools)-1]
-			if last.OfTool != nil {
-				last.OfTool.CacheControl = anthropic.NewCacheControlEphemeralParam()
-				tools[len(tools)-1] = last
-			}
 		}
 		req.Tools = tools
 	}
@@ -315,15 +310,9 @@ func (p *AnthropicProvider) convertResponse(resp *anthropic.Message) *providers.
 		TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
 	}
 
-	// Log cache metrics when available
-	if resp.Usage.CacheCreationInputTokens > 0 || resp.Usage.CacheReadInputTokens > 0 {
-		fmt.Printf("anthropic cache: created=%d read=%d input=%d output=%d\n",
-			resp.Usage.CacheCreationInputTokens,
-			resp.Usage.CacheReadInputTokens,
-			resp.Usage.InputTokens,
-			resp.Usage.OutputTokens,
-		)
-	}
+	log.Printf("anthropic usage: input=%d output=%d cache_create=%d cache_read=%d",
+		resp.Usage.InputTokens, resp.Usage.OutputTokens,
+		resp.Usage.CacheCreationInputTokens, resp.Usage.CacheReadInputTokens)
 
 	return &providers.ChatCompletion{
 		ID:     resp.ID,

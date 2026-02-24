@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +47,20 @@ func TestPromptHash(t *testing.T) {
 	}
 	if len(h1) != 64 {
 		t.Errorf("hash length = %d, want 64 hex chars", len(h1))
+	}
+}
+
+func TestPromptHashIncludesSystemPrompt(t *testing.T) {
+	content := []byte("Build a calculator")
+
+	// A plain SHA256 of just the content must differ from PromptHash,
+	// proving the system prompt is mixed into the hash.
+	plain := sha256.Sum256(content)
+	plainHex := fmt.Sprintf("%x", plain[:])
+
+	got := PromptHash(content)
+	if got == plainHex {
+		t.Error("PromptHash should differ from plain SHA256 of content (system prompt not included)")
 	}
 }
 
