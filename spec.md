@@ -137,7 +137,7 @@ Defines an inline test case with assertions and event simulations. Test messages
 | `children` | componentId, children | Check ordered list of child component IDs |
 | `count` | componentId, count | Check number of children |
 | `notExists` | componentId | Verify component does not exist |
-| `action` | name, data | Check that a server action was fired with matching name and data |
+| `action` | name, data | Check that an action was fired with matching name and data |
 | `layout` | componentId, layout | Check computed layout (x, y, width, height) from real NSView frames |
 | `style` | componentId, style | Check computed style (fontName, fontSize, bold, italic, textColor, bgColor, hidden, opacity) from real NSView properties |
 
@@ -332,7 +332,7 @@ build/jview testdata/calculator_v2/
 
 ### setTheme
 
-Changes the visual theme. *Not yet implemented — reserved for Phase 3.*
+Changes the visual theme for a surface's window via NSAppearance.
 
 ```json
 {
@@ -342,7 +342,12 @@ Changes the visual theme. *Not yet implemented — reserved for Phase 3.*
 }
 ```
 
-Values: `"light"`, `"dark"`, `"system"`.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| surfaceId | string | yes | Surface whose window to restyle |
+| theme | string | yes | `"light"`, `"dark"`, or `"system"` |
+
+Setting appearance after views exist triggers recursive layer invalidation to flush cached rendering. Can also be invoked as a client-side `functionCall` action (see [Built-in FunctionCall Actions](#built-in-functioncall-actions)).
 
 ---
 
@@ -701,13 +706,14 @@ Executes a client-side function. No server round-trip.
 | functionCall.call | string | Function name to execute |
 | functionCall.args | object | Arguments passed to the function |
 
-#### Built-in Functions
+#### Built-in FunctionCall Actions
 
 | Call | Args | Description |
 |------|------|-------------|
 | `updateDataModel` | `{ops: [{op, path, value}]}` | Apply JSON Patch ops to the data model. Values can be dynamic (path refs, functionCalls). |
+| `setTheme` | `{theme: "light"\|"dark"\|"system"}` | Switch the surface's window theme. No server round-trip. |
 
-Op values are resolved through the evaluator before being applied, so they support the full expression language (path references, nested function calls).
+Op values in `updateDataModel` are resolved through the evaluator before being applied, so they support the full expression language (path references, nested function calls).
 
 ---
 

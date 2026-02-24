@@ -92,7 +92,7 @@ Two modes:
 | Row | Horizontal stack layout |
 | Column | Vertical stack layout |
 | Card | NSBox container with title |
-| Button | Clickable button with server actions |
+| Button | Clickable button with actions |
 | TextField | Text input with two-way data binding |
 | CheckBox | Toggle with two-way data binding |
 | Slider | Numeric range input with data binding |

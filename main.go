@@ -293,6 +293,9 @@ func runMCP(args []string) {
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
 
+	// No-op action handler — MCP mode has no transport to forward actions to
+	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {}
+
 	// If a file arg is provided, load it as initial UI
 	if len(args) > 0 {
 		tr := createFileTransport(args[0])

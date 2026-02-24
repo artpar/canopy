@@ -74,7 +74,7 @@ Runs with real `darwin.Renderer` on the main thread using synchronous `MockDispa
 - Component prop assertions (subset matching on resolved props)
 - Data model value assertions at JSON Pointer paths
 - Child relationship assertions (ordered child IDs, count)
-- Action assertions (server action fired with correct name/data)
+- Action assertions (action fired with correct name/data)
 - Layout assertions (real NSView frame: x, y, width, height)
 - Style assertions (real NSView font, text color, background, opacity)
 - Event simulation (change, click, toggle, slide, select, datechange)
@@ -201,7 +201,7 @@ Protocol parsing, engine core, 7 component bridges (Text, Row, Column, Card, But
 ### Phase 2: Full Interactivity + Remaining Components — COMPLETE
 FunctionCall evaluator, validation, template expansion, 7 new components (Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List).
 
-### Phase 3: Media + Live Transport + Polish
+### Phase 3: Media + Live Transport + Polish — COMPLETE
 Live agent connectivity and remaining A2UI components.
 
 | Task | Tag | Priority | Status |

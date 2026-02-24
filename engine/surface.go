@@ -273,6 +273,8 @@ func (s *Surface) executeFunctionCall(fc *protocol.ActionFuncCall) {
 	switch fc.Call {
 	case "updateDataModel":
 		s.executeUpdateDataModel(fc.Args)
+	case "setTheme":
+		s.executeSetTheme(fc.Args)
 	default:
 		log.Printf("surface %s: unknown functionCall: %s", s.id, fc.Call)
 	}
@@ -344,6 +346,24 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 	if len(affected) > 0 {
 		s.renderComponents(affected)
 	}
+}
+
+// executeSetTheme changes the window theme via the renderer.
+// Args is expected to be map[string]interface{} with a "theme" key ("light", "dark", or "system").
+func (s *Surface) executeSetTheme(args interface{}) {
+	argsMap, ok := args.(map[string]interface{})
+	if !ok {
+		log.Printf("surface %s: setTheme args not a map", s.id)
+		return
+	}
+	theme, ok := argsMap["theme"].(string)
+	if !ok || theme == "" {
+		log.Printf("surface %s: setTheme missing or invalid theme", s.id)
+		return
+	}
+	s.dispatch.RunOnMain(func() {
+		s.rend.SetTheme(s.id, theme)
+	})
 }
 
 func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.RenderNode) {

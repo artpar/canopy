@@ -303,7 +303,12 @@ func (s *Server) registerClick() {
 		if err := json.Unmarshal(args, &p); err != nil {
 			return errorResult("invalid params: " + err.Error())
 		}
-		s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "click", "")
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "click", "")
+			return struct{}{}
+		})
+		// Flush: callback may have queued renders via dispatch_async
+		dispatchSync(s.disp, func() struct{} { return struct{}{} })
 		return &ToolCallResult{Content: []ContentBlock{TextContent("clicked: " + p.ComponentID)}}
 	})
 }
@@ -327,7 +332,11 @@ func (s *Server) registerFill() {
 		if err := json.Unmarshal(args, &p); err != nil {
 			return errorResult("invalid params: " + err.Error())
 		}
-		s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "change", p.Value)
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "change", p.Value)
+			return struct{}{}
+		})
+		dispatchSync(s.disp, func() struct{} { return struct{}{} })
 		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("filled %s with %q", p.ComponentID, p.Value))}}
 	})
 }
@@ -355,7 +364,11 @@ func (s *Server) registerToggle() {
 		if p.Checked {
 			val = "true"
 		}
-		s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "toggle", val)
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, "toggle", val)
+			return struct{}{}
+		})
+		dispatchSync(s.disp, func() struct{} { return struct{}{} })
 		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("toggled %s to %s", p.ComponentID, val))}}
 	})
 }
@@ -381,7 +394,11 @@ func (s *Server) registerInteract() {
 		if err := json.Unmarshal(args, &p); err != nil {
 			return errorResult("invalid params: " + err.Error())
 		}
-		s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, p.Event, p.Value)
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.InvokeCallback(p.SurfaceID, p.ComponentID, p.Event, p.Value)
+			return struct{}{}
+		})
+		dispatchSync(s.disp, func() struct{} { return struct{}{} })
 		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("sent %s to %s with value %q", p.Event, p.ComponentID, p.Value))}}
 	})
 }

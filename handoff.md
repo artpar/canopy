@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated after AudioPlayer component completion (all Phase 3 media components done). This document gives a new session everything it needs to continue work on jview.
+Last updated after Theme Switcher fix and MCP thread-safety (Phase 3 complete). This document gives a new session everything it needs to continue work on jview.
 
 ## What Is jview
 
@@ -16,7 +16,7 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Template expansion for dynamic child lists
 - 7 new native component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
 
-**Phase 3 in progress.** LLM transport, native testing, visual styling, FFI, and DX features done:
+**Phase 3 complete.** LLM transport, native testing, visual styling, FFI, and DX features done:
 - Bidirectional LLM transport via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) v0.8.0
 - 7 providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral
 - Default: Anthropic claude-haiku-4-5-20251001 (fast, cheap, good at tool calling)
@@ -44,6 +44,10 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Modal component: NSPanel floating dialog with data-bound visible state, onDismiss callback, and children layout
 - Video component: AVPlayerView with src (data-bound), autoplay, loop, controls, muted, onEnded callback, URL change detection
 - AudioPlayer component: AVPlayer with compact control bar (play/pause, scrubber, time label), src, autoplay, loop, onEnded callback
+- Theme (NSAppearance): `setTheme` message + `setTheme` built-in functionCall action for client-side theme switching (light/dark/system)
+- Scroll View: List component wraps NSStackView in NSScrollView for overflow handling
+- MCP thread-safety: interaction tools (click/fill/toggle/interact) wrapped in dispatchSync to run on main thread with render flush
+- MCP OnAction wiring: no-op action handler prevents nil panic when buttons fire events in MCP mode
 
 **300+ tests pass** across protocol/, engine/, transport/ with race detection. 31 fixtures screenshot-verified.
 
@@ -189,7 +193,7 @@ testdata/                      JSONL fixtures (29 top-level + subdirectories)
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
-sample_apps/                   LLM-generated sample applications (7 apps)
+sample_apps/                   LLM-generated sample applications (9 apps)
   */prompt.txt                 Natural language app description (sent to LLM)
   */prompt.jsonl               Cached JSONL output (auto-generated, .gitignored except sysinfo)
   sysinfo/                     FFI demo: loads libcurl, libsqlite3, libz and displays versions
@@ -199,6 +203,8 @@ sample_apps/                   LLM-generated sample applications (7 apps)
   gallery/                     Image gallery
   registration/                Registration form
   settings/                    Settings panel
+  theme_switcher/              Theme switching demo (light/dark via setTheme functionCall)
+  scrollable_feed/             Scrollable feed demo (List with scroll view)
 ```
 
 ## Key Patterns
@@ -272,15 +278,19 @@ sample_apps/                   LLM-generated sample applications (7 apps)
 28. **flexGrow bypasses NSStackView distribution** — `NSStackViewDistributionFill` doesn't expand NSStackView children (intrinsicContentSize returns {-1,-1}). When any child has flexGrow, stackview.m adds children as regular subviews with manual constraint chains instead of using `addArrangedSubview`.
 29. **forEach clone ID namespacing** — Template clone IDs are prefixed by the parent List's component ID (e.g. `myList_row_0` instead of `row_0`). This prevents ID collisions when multiple forEach lists share the same template.
 30. **MCP server on pipe** — `jview mcp` uses real AppKit (not headless). Layout queries return real NSView frames. The file transport (if provided) loads UI before MCP client connects. Surfaces may not be available immediately after `send_message` — use `wait_for` to poll.
+31. **MCP interaction thread safety** — `InvokeCallback` from MCP goroutine must be wrapped in `dispatchSync` to run on the main thread. After the callback, a second `dispatchSync` no-op flushes renders queued via `dispatch_async` (GCD serial queue is FIFO). Without this, tool returns before renders complete and queries see stale state.
+32. **MCP OnAction handler** — `sess.OnAction` must be set to a no-op in MCP mode. Without it, buttons with event actions (serverAction) panic on nil function call. MCP has no transport to forward actions to.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. LLM transport, FFI, DX abstractions, Modal, Video, and AudioPlayer are done. The immediate next priorities are:
+See `plan.md` for the full roadmap. Phase 3 is complete — all components, transport, testing, and styling are done. The next phase is Production Hardening:
 
-1. **Scroll view** — overflow handling for long content
-3. **SSE transport** — EventSource-style HTTP streaming for non-LLM agents
-4. **WebSocket transport** — bidirectional messaging
-5. **Theme → NSAppearance** — dark/light mode switching
+1. **CGo memory cleanup** — audit and fix any leaks in the ObjC bridge
+2. **Error recovery / graceful degradation** — handle malformed messages, missing components
+3. **Multi-surface window management** — multiple windows, surface lifecycle
+4. **Incremental tree diff** — only re-render actually changed components
+5. **CLI flags + stdin transport** — pipe JSONL from stdin
+6. **macOS .app bundle packaging** — distributable application
 
 ## Commands
 
