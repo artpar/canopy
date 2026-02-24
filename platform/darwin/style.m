@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #include "style.h"
 
 static NSColor* colorFromHex(NSString *hex) {
@@ -34,7 +35,7 @@ static NSTextAlignment textAlignFromString(NSString *align) {
 void JVApplyStyle(void* handle, const char* bg, const char* tc,
     double cornerRadius, double width, double height,
     double fontSize, const char* fontWeight, const char* textAlign, double opacity,
-    const char* fontFamily) {
+    const char* fontFamily, double flexGrow) {
 
     NSView *view = (__bridge NSView*)handle;
     NSString *bgStr = [NSString stringWithUTF8String:bg];
@@ -150,5 +151,13 @@ void JVApplyStyle(void* handle, const char* bg, const char* tc,
                 btn.font = [NSFont systemFontOfSize:size weight:weight];
             }
         }
+    }
+
+    // flexGrow: store on view as associated object; applied during SetChildren
+    if (flexGrow > 0) {
+        extern const void *kJVFlexGrowKey;
+        objc_setAssociatedObject(view, kJVFlexGrowKey, @(flexGrow), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [view setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+        [view setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationVertical];
     }
 }

@@ -120,10 +120,10 @@ void JVTabsSetChildren(void* handle, void** children, int count) {
             }
         }
 
-        // Set the child as the tab item's view
-        // Wrap in a container to manage constraints
+        // Set the child as the tab item's view.
+        // Container keeps translatesAutoresizingMaskIntoConstraints=YES (default)
+        // so NSTabView can manage its frame. Child uses Auto Layout inside it.
         NSView *container = [[NSView alloc] initWithFrame:NSZeroRect];
-        container.translatesAutoresizingMaskIntoConstraints = NO;
         childView.translatesAutoresizingMaskIntoConstraints = NO;
         [container addSubview:childView];
 

@@ -136,6 +136,15 @@ func (s *Server) register(name, description string, schema json.RawMessage, fn f
 	}
 }
 
+// ToolNames returns the registered tool names.
+func (s *Server) ToolNames() []string {
+	names := make([]string, 0, len(s.tools))
+	for name := range s.tools {
+		names = append(names, name)
+	}
+	return names
+}
+
 // SendMessage allows the MCP client to send A2UI JSONL messages to the session.
 func (s *Server) SendMessage(raw json.RawMessage) error {
 	msg, err := protocol.ParseLine(raw)

@@ -744,27 +744,30 @@ func (s *Surface) expandTemplates(comps []protocol.Component) []protocol.Compone
 
 		// Generate children
 		var childIDs []string
+		parentPrefix := comp.ComponentID
 		for idx := range items {
 			itemPath := fmt.Sprintf("%s/%d", tmpl.ForEach, idx)
 
 			// Clone the entire template subtree for this index
+			// IDs are namespaced by parent to avoid collisions when
+			// multiple forEach blocks share the same template.
 			for _, tc := range templateTree {
 				clone := deepCopyComponent(tc)
-				clone.ComponentID = fmt.Sprintf("%s_%d", tc.ComponentID, idx)
+				clone.ComponentID = fmt.Sprintf("%s_%s_%d", parentPrefix, tc.ComponentID, idx)
 
 				// Rewrite parent references
 				if tc.ComponentID == tmpl.TemplateID {
 					clone.ParentID = comp.ComponentID
 					childIDs = append(childIDs, clone.ComponentID)
 				} else {
-					clone.ParentID = fmt.Sprintf("%s_%d", tc.ParentID, idx)
+					clone.ParentID = fmt.Sprintf("%s_%s_%d", parentPrefix, tc.ParentID, idx)
 				}
 
 				// Rewrite static children IDs
 				if clone.Children != nil && clone.Children.Static != nil {
 					newChildren := make([]string, len(clone.Children.Static))
 					for j, cid := range clone.Children.Static {
-						newChildren[j] = fmt.Sprintf("%s_%d", cid, idx)
+						newChildren[j] = fmt.Sprintf("%s_%s_%d", parentPrefix, cid, idx)
 					}
 					clone.Children = &protocol.ChildList{Static: newChildren}
 				}
@@ -886,6 +889,28 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	if p.DataBinding != "" {
 		p.DataBinding = rewritePath(p.DataBinding, prefix, itemPath)
 	}
+
+	// Rewrite paths in onClick action
+	rewriteAction := func(ea *protocol.EventAction) {
+		if ea == nil || ea.Action == nil {
+			return
+		}
+		if ea.Action.FunctionCall != nil {
+			rewriteActionArgs(ea.Action.FunctionCall.Args, prefix, itemPath)
+		}
+		if ea.Action.Event != nil {
+			for i, ref := range ea.Action.Event.DataRefs {
+				ea.Action.Event.DataRefs[i] = rewritePath(ref, prefix, itemPath)
+			}
+		}
+	}
+	rewriteAction(p.OnClick)
+	rewriteAction(p.OnChange)
+	rewriteAction(p.OnToggle)
+	rewriteAction(p.OnSlide)
+	rewriteAction(p.OnSelect)
+	rewriteAction(p.OnDateChange)
+	rewriteAction(p.OnDismiss)
 }
 
 // deepCopyComponent creates a deep copy of a component, including all pointer fields in Props.
@@ -995,6 +1020,15 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 		p.Visible = &v
 	}
 
+	// Deep copy event actions (contain mutable Args trees)
+	p.OnClick = deepCopyEventAction(p.OnClick)
+	p.OnChange = deepCopyEventAction(p.OnChange)
+	p.OnToggle = deepCopyEventAction(p.OnToggle)
+	p.OnSlide = deepCopyEventAction(p.OnSlide)
+	p.OnSelect = deepCopyEventAction(p.OnSelect)
+	p.OnDateChange = deepCopyEventAction(p.OnDateChange)
+	p.OnDismiss = deepCopyEventAction(p.OnDismiss)
+
 	// Deep copy children
 	if c.Children != nil {
 		cl := *c.Children
@@ -1007,6 +1041,74 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	}
 
 	return clone
+}
+
+// deepCopyEventAction creates a deep copy of an EventAction, including its Args tree.
+func deepCopyEventAction(ea *protocol.EventAction) *protocol.EventAction {
+	if ea == nil {
+		return nil
+	}
+	clone := *ea
+	if ea.Action != nil {
+		a := *ea.Action
+		if a.FunctionCall != nil {
+			fc := *a.FunctionCall
+			fc.Args = deepCopyInterface(fc.Args)
+			a.FunctionCall = &fc
+		}
+		if a.Event != nil {
+			e := *a.Event
+			if e.DataRefs != nil {
+				refs := make([]string, len(e.DataRefs))
+				copy(refs, e.DataRefs)
+				e.DataRefs = refs
+			}
+			a.Event = &e
+		}
+		clone.Action = &a
+	}
+	return &clone
+}
+
+// deepCopyInterface deep-copies a JSON-like interface{} tree (maps and slices).
+func deepCopyInterface(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			m[k] = deepCopyInterface(v)
+		}
+		return m
+	case []interface{}:
+		s := make([]interface{}, len(val))
+		for i, v := range val {
+			s[i] = deepCopyInterface(v)
+		}
+		return s
+	default:
+		return v
+	}
+}
+
+// rewriteActionArgs recursively walks a functionCall's args tree and rewrites
+// path strings that match the forEach item variable prefix.
+func rewriteActionArgs(args interface{}, prefix, replacement string) {
+	switch v := args.(type) {
+	case map[string]interface{}:
+		for key, val := range v {
+			if key == "path" {
+				if s, ok := val.(string); ok {
+					v[key] = rewritePath(s, prefix, replacement)
+				}
+			} else {
+				rewriteActionArgs(val, prefix, replacement)
+			}
+		}
+	case []interface{}:
+		for _, item := range v {
+			rewriteActionArgs(item, prefix, replacement)
+		}
+	}
 }
 
 func rewritePath(path, prefix, replacement string) string {

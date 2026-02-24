@@ -213,17 +213,17 @@ func TestE2EListFixture(t *testing.T) {
 	}
 
 	// 3 items in data model → 3 card+role pairs
-	if createdTitles["itemCard_0"] != "Alice" {
-		t.Errorf("itemCard_0 title = %q, want Alice", createdTitles["itemCard_0"])
+	if createdTitles["itemList_itemCard_0"] != "Alice" {
+		t.Errorf("itemList_itemCard_0 title = %q, want Alice", createdTitles["itemList_itemCard_0"])
 	}
-	if createdTitles["itemCard_1"] != "Bob" {
-		t.Errorf("itemCard_1 title = %q, want Bob", createdTitles["itemCard_1"])
+	if createdTitles["itemList_itemCard_1"] != "Bob" {
+		t.Errorf("itemList_itemCard_1 title = %q, want Bob", createdTitles["itemList_itemCard_1"])
 	}
-	if createdTitles["itemCard_2"] != "Charlie" {
-		t.Errorf("itemCard_2 title = %q, want Charlie", createdTitles["itemCard_2"])
+	if createdTitles["itemList_itemCard_2"] != "Charlie" {
+		t.Errorf("itemList_itemCard_2 title = %q, want Charlie", createdTitles["itemList_itemCard_2"])
 	}
-	if created["itemRole_0"] != "Engineer" {
-		t.Errorf("itemRole_0 = %q, want Engineer", created["itemRole_0"])
+	if created["itemList_itemRole_0"] != "Engineer" {
+		t.Errorf("itemList_itemRole_0 = %q, want Engineer", created["itemList_itemRole_0"])
 	}
 }
 

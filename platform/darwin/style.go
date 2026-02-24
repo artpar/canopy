@@ -40,5 +40,6 @@ func applyStyle(handle renderer.ViewHandle, style protocol.StyleProps) {
 		cFw, cTa,
 		C.double(style.Opacity),
 		cFf,
+		C.double(style.FlexGrow),
 	)
 }

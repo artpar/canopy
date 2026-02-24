@@ -153,7 +153,26 @@ func (e *Evaluator) resolveArg(arg interface{}) (interface{}, error) {
 			rawArgs, _ := fc["args"].([]interface{})
 			return e.Eval(name, rawArgs)
 		}
-		return nil, fmt.Errorf("unrecognized object arg: %v", v)
+		// Plain object — recursively resolve each value
+		resolved := make(map[string]interface{}, len(v))
+		for key, val := range v {
+			r, err := e.resolveArg(val)
+			if err != nil {
+				return nil, fmt.Errorf("key %q: %w", key, err)
+			}
+			resolved[key] = r
+		}
+		return resolved, nil
+	case []interface{}:
+		resolved := make([]interface{}, len(v))
+		for i, val := range v {
+			r, err := e.resolveArg(val)
+			if err != nil {
+				return nil, fmt.Errorf("index %d: %w", i, err)
+			}
+			resolved[i] = r
+		}
+		return resolved, nil
 	default:
 		return arg, nil
 	}
@@ -314,6 +333,10 @@ func (e *Evaluator) fnSubstring(args []interface{}) (interface{}, error) {
 func (e *Evaluator) fnLength(args []interface{}) (interface{}, error) {
 	if len(args) < 1 {
 		return float64(0), nil
+	}
+	// Handle arrays — return element count
+	if arr, ok := args[0].([]interface{}); ok {
+		return float64(len(arr)), nil
 	}
 	return float64(len(toString(args[0]))), nil
 }

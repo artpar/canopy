@@ -513,11 +513,11 @@ func TestTemplateExpansion(t *testing.T) {
 	if _, ok := created["tmpl"]; ok {
 		t.Error("template source component 'tmpl' should not be created")
 	}
-	if created["tmpl_0"] != "Alice" {
-		t.Errorf("tmpl_0 content = %q, want 'Alice'", created["tmpl_0"])
+	if created["list_tmpl_0"] != "Alice" {
+		t.Errorf("list_tmpl_0 content = %q, want 'Alice'", created["list_tmpl_0"])
 	}
-	if created["tmpl_1"] != "Bob" {
-		t.Errorf("tmpl_1 content = %q, want 'Bob'", created["tmpl_1"])
+	if created["list_tmpl_1"] != "Bob" {
+		t.Errorf("list_tmpl_1 content = %q, want 'Bob'", created["list_tmpl_1"])
 	}
 
 	// List should have 2 children
@@ -552,26 +552,26 @@ func TestTemplateExpansionNested(t *testing.T) {
 		created[c.Node.ComponentID] = c.Node.Props.Content
 	}
 
-	// card_0 and card_1 should exist
+	// list_card_0 and list_card_1 should exist
 	cardCreated := false
 	for _, c := range mock.Created {
-		if c.Node.ComponentID == "card_0" {
+		if c.Node.ComponentID == "list_card_0" {
 			cardCreated = true
 			if c.Node.Props.Title != "Alice" {
-				t.Errorf("card_0 title = %q, want Alice", c.Node.Props.Title)
+				t.Errorf("list_card_0 title = %q, want Alice", c.Node.Props.Title)
 			}
 		}
 	}
 	if !cardCreated {
-		t.Error("card_0 not created")
+		t.Error("list_card_0 not created")
 	}
 
-	// cardRole_0 and cardRole_1 should exist
-	if created["cardRole_0"] != "Engineer" {
-		t.Errorf("cardRole_0 content = %q, want 'Engineer'", created["cardRole_0"])
+	// list_cardRole_0 and list_cardRole_1 should exist
+	if created["list_cardRole_0"] != "Engineer" {
+		t.Errorf("list_cardRole_0 content = %q, want 'Engineer'", created["list_cardRole_0"])
 	}
-	if created["cardRole_1"] != "Designer" {
-		t.Errorf("cardRole_1 content = %q, want 'Designer'", created["cardRole_1"])
+	if created["list_cardRole_1"] != "Designer" {
+		t.Errorf("list_cardRole_1 content = %q, want 'Designer'", created["list_cardRole_1"])
 	}
 }
 

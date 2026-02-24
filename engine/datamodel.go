@@ -181,6 +181,11 @@ func setChild(parent *interface{}, token string, value interface{}) error {
 		p[token] = value
 		return nil
 	case []interface{}:
+		if token == "-" {
+			// JSON Patch: "-" means append to end of array
+			*parent = append(p, value)
+			return nil
+		}
 		idx, err := strconv.Atoi(token)
 		if err != nil {
 			return fmt.Errorf("cannot index array with %q", token)

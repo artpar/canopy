@@ -38,6 +38,7 @@ type StyleProps struct {
 	TextAlign       string  `json:"textAlign,omitempty"`  // left, center, right
 	Opacity         float64 `json:"opacity,omitempty"`
 	FontFamily      string  `json:"fontFamily,omitempty"`
+	FlexGrow        float64 `json:"flexGrow,omitempty"` // expand to fill available space in parent stack
 }
 
 // Component is a single A2UI component definition.

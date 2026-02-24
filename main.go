@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 
 	anyllm "github.com/mozilla-ai/any-llm-go"
 	"github.com/mozilla-ai/any-llm-go/providers/deepseek"
@@ -189,6 +190,11 @@ func main() {
 		sess.SetFFI(ffiRegistry)
 	}
 
+	// Log MCP availability
+	mcpServer := mcp.NewServer(sess, rend, disp)
+	toolNames := mcpServer.ToolNames()
+	log.Printf("mcp: available via 'jview mcp [file.jsonl]' (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
+
 	// Wire action events — all transports implement SendAction
 	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
 		tr.SendAction(surfaceID, event, data)
@@ -312,6 +318,8 @@ func runMCP(args []string) {
 
 	mcpTransport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
 	mcpServer := mcp.NewServer(sess, rend, disp)
+	toolNames := mcpServer.ToolNames()
+	log.Printf("mcp: server started on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
 
 	// Run MCP server in goroutine; on EOF, quit the app
 	go func() {
