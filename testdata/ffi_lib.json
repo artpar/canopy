@@ -1,0 +1,22 @@
+{
+  "libraries": [
+    {
+      "path": "/tmp/jview_test_ffi_lib.dylib",
+      "prefix": "test",
+      "functions": [
+        {
+          "name": "add",
+          "symbol": "math_add"
+        },
+        {
+          "name": "reverse",
+          "symbol": "string_reverse"
+        },
+        {
+          "name": "echo",
+          "symbol": "echo"
+        }
+      ]
+    }
+  ]
+}

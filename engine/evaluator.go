@@ -9,7 +9,8 @@ import (
 
 // Evaluator handles FunctionCall evaluation against a DataModel.
 type Evaluator struct {
-	dm *DataModel
+	dm  *DataModel
+	FFI *FFIRegistry
 }
 
 func NewEvaluator(dm *DataModel) *Evaluator {
@@ -73,17 +74,27 @@ func init() {
 // Args can be: string, float64, bool literals, map with "path" key, or map with "functionCall" key.
 func (e *Evaluator) Eval(name string, args []interface{}) (interface{}, error) {
 	fn, ok := dispatchMap[name]
-	if !ok {
-		return nil, fmt.Errorf("unknown function: %s", name)
+	if ok {
+		if lazySet[name] {
+			return fn(e, args)
+		}
+		resolved, err := e.resolveArgs(args)
+		if err != nil {
+			return nil, err
+		}
+		return fn(e, resolved)
 	}
-	if lazySet[name] {
-		return fn(e, args)
+
+	// Fallthrough to FFI registry for native functions
+	if e.FFI != nil && e.FFI.Has(name) {
+		resolved, err := e.resolveArgs(args)
+		if err != nil {
+			return nil, err
+		}
+		return e.FFI.Call(name, resolved)
 	}
-	resolved, err := e.resolveArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	return fn(e, resolved)
+
+	return nil, fmt.Errorf("unknown function: %s", name)
 }
 
 // resolveArgs resolves each argument: literals pass through, path refs look up DataModel,

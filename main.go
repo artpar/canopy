@@ -31,6 +31,9 @@ func main() {
 		return
 	}
 
+	pluginPath := flag.String("plugin", "", "Path to native plugin (.dylib)")
+	pluginConfig := flag.String("plugin-config", "{}", "JSON config string passed to plugin_init")
+	ffiConfigPath := flag.String("ffi-config", "", "Path to FFI convention file (JSON) for native function calls")
 	llmProvider := flag.String("llm", "anthropic", "LLM provider: anthropic, openai, gemini, ollama, deepseek, groq, mistral")
 	model := flag.String("model", "claude-opus-4-6", "Model name (default: claude-opus-4-6)")
 	prompt := flag.String("prompt", "", "Prompt describing the UI to build")
@@ -59,7 +62,10 @@ func main() {
 	var generateDone chan struct{} // closed when generate-only can exit
 
 	args := flag.Args()
-	if len(args) > 0 && *prompt == "" {
+	if *pluginPath != "" {
+		// FFI plugin mode
+		tr = transport.NewFFITransport(*pluginPath, *pluginConfig)
+	} else if len(args) > 0 && *prompt == "" {
 		// File mode: positional arg with no --prompt
 		tr = transport.NewFileTransport(args[0])
 	} else if *prompt != "" {
@@ -121,10 +127,12 @@ func main() {
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "usage: jview <file.jsonl>\n")
+		fmt.Fprintf(os.Stderr, "       jview --plugin path/to/plugin.dylib\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt \"Build a todo app\"\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt\n")
 		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt-file prompt.txt\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt --generate-only\n")
+		fmt.Fprintf(os.Stderr, "       jview --ffi-config libs.json testdata/app.jsonl\n")
 		os.Exit(1)
 	}
 
@@ -152,17 +160,34 @@ func main() {
 		return
 	}
 
+	// Load FFI config if specified
+	var ffiRegistry *engine.FFIRegistry
+	if *ffiConfigPath != "" {
+		cfg, err := engine.LoadFFIConfig(*ffiConfigPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		ffiRegistry = engine.NewFFIRegistry()
+		if err := ffiRegistry.LoadFromConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		log.Printf("ffi: loaded %d libraries from %s", len(cfg.Libraries), *ffiConfigPath)
+	}
+
 	// Interactive mode: initialize platform and engine
 	darwin.AppInit()
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
+	if ffiRegistry != nil {
+		sess.SetFFI(ffiRegistry)
+	}
 
-	// Wire events for LLM transport
-	if lt, ok := tr.(*transport.LLMTransport); ok {
-		sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
-			lt.SendAction(surfaceID, event, data)
-		}
+	// Wire action events — all transports implement SendAction
+	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
+		tr.SendAction(surfaceID, event, data)
 	}
 
 	// Process messages in a goroutine

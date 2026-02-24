@@ -17,6 +17,7 @@ type Surface struct {
 	validator *Validator
 	rend      renderer.Renderer
 	dispatch  renderer.Dispatcher
+	ffi       *FFIRegistry
 
 	// activeCallbacks tracks registered callbacks: componentID → eventType → CallbackID
 	activeCallbacks map[string]map[string]renderer.CallbackID
@@ -28,10 +29,11 @@ type Surface struct {
 	ActionHandler func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
 }
 
-func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher) *Surface {
+func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher, ffi *FFIRegistry) *Surface {
 	dm := NewDataModel()
 	tracker := NewBindingTracker()
 	evaluator := NewEvaluator(dm)
+	evaluator.FFI = ffi
 	return &Surface{
 		id:               id,
 		tree:             NewTree(),
@@ -41,6 +43,7 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher)
 		validator:        NewValidator(),
 		rend:             rend,
 		dispatch:         dispatch,
+		ffi:              ffi,
 		activeCallbacks:  make(map[string]map[string]renderer.CallbackID),
 		validationErrors: make(map[string][]string),
 	}
@@ -239,6 +242,7 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 	}
 
 	evaluator := NewEvaluator(s.dm)
+	evaluator.FFI = s.ffi
 	var allChanged []string
 
 	for _, opRaw := range ops {

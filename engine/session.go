@@ -11,6 +11,7 @@ type Session struct {
 	surfaces map[string]*Surface
 	rend     renderer.Renderer
 	dispatch renderer.Dispatcher
+	ffi      *FFIRegistry
 
 	// OnAction is called when any surface triggers a server-bound event.
 	OnAction func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -22,6 +23,11 @@ func NewSession(rend renderer.Renderer, dispatch renderer.Dispatcher) *Session {
 		rend:     rend,
 		dispatch: dispatch,
 	}
+}
+
+// SetFFI sets the FFI registry for all surfaces created by this session.
+func (s *Session) SetFFI(ffi *FFIRegistry) {
+	s.ffi = ffi
 }
 
 // HandleMessage routes a parsed A2UI message to the appropriate surface.
@@ -72,7 +78,7 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 		return
 	}
 
-	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch)
+	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch, s.ffi)
 	surf.ActionHandler = s.OnAction
 	s.surfaces[cs.SurfaceID] = surf
 
