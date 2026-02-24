@@ -1093,6 +1093,116 @@ func TestTabsComponent(t *testing.T) {
 	}
 }
 
+func TestComponentRemovalCleansUp(t *testing.T) {
+	sess, mock := newTestSession()
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/name","value":""}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"root","type":"Column","children":["field","display"]},{"componentId":"field","type":"TextField","props":{"value":{"path":"/name"},"dataBinding":"/name"}},{"componentId":"display","type":"Text","props":{"content":{"path":"/name"}}}]}`)
+
+	// Verify both components exist
+	if mock.GetHandle("s1", "field") == 0 {
+		t.Fatal("field not created")
+	}
+	if mock.GetHandle("s1", "display") == 0 {
+		t.Fatal("display not created")
+	}
+
+	// Get the callback for the field
+	fieldCBID := mock.GetCallbackID("s1", "field", "change")
+	if fieldCBID == 0 {
+		t.Fatal("field callback not registered")
+	}
+
+	// Remove display from root's children
+	feedMessages(t, sess, `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"root","type":"Column","children":["field"]}]}`)
+
+	// display should be removed
+	if mock.GetHandle("s1", "display") != 0 {
+		t.Error("display handle still exists after removal")
+	}
+
+	// RemoveView should have been called
+	if len(mock.Removed) == 0 {
+		t.Error("no RemoveView calls")
+	}
+
+	// display's bindings should be cleaned up — typing in field should not trigger display update
+	beforeUpdates := len(mock.Updated)
+	mock.InvokeCallback("s1", "field", "change", "Alice")
+
+	for _, u := range mock.Updated[beforeUpdates:] {
+		if u.Node != nil && u.Node.ComponentID == "display" {
+			t.Error("display was updated despite being removed")
+		}
+	}
+}
+
+func TestComponentRemovalCleansUpCallbacks(t *testing.T) {
+	sess, mock := newTestSession()
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"root","type":"Column","children":["btn"]},{"componentId":"btn","type":"Button","props":{"label":"Go","onClick":{"action":{"event":{"name":"doThing"}}}}}]}`)
+
+	// Verify button callback registered
+	btnCBID := mock.GetCallbackID("s1", "btn", "click")
+	if btnCBID == 0 {
+		t.Fatal("button callback not registered")
+	}
+	if !mock.HasCallback(btnCBID) {
+		t.Fatal("button callback not in callback map")
+	}
+
+	// Remove button from root's children
+	feedMessages(t, sess, `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"root","type":"Column","children":[]}]}`)
+
+	// Callback should be unregistered
+	if mock.HasCallback(btnCBID) {
+		t.Error("button callback still registered after removal")
+	}
+
+	// Handle should be gone
+	if mock.GetHandle("s1", "btn") != 0 {
+		t.Error("button handle still exists after removal")
+	}
+}
+
+func TestTemplateReExpansionCleansUp(t *testing.T) {
+	sess, mock := newTestSession()
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/items","value":[{"name":"Alice"},{"name":"Bob"},{"name":"Charlie"}]}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"list","type":"List","props":{"gap":8},"children":{"forEach":"/items","templateId":"tmpl","itemVariable":"item"}},{"componentId":"tmpl","type":"Text","props":{"content":{"path":"/item/name"}}}]}`)
+
+	// Verify 3 template instances created
+	if mock.GetHandle("s1", "list_tmpl_0") == 0 {
+		t.Fatal("list_tmpl_0 not created")
+	}
+	if mock.GetHandle("s1", "list_tmpl_1") == 0 {
+		t.Fatal("list_tmpl_1 not created")
+	}
+	if mock.GetHandle("s1", "list_tmpl_2") == 0 {
+		t.Fatal("list_tmpl_2 not created")
+	}
+
+	// Shrink the array to 1 item, then re-send the list component
+	// (template re-expansion happens in HandleUpdateComponents, not data model change)
+	feedMessages(t, sess, `{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"replace","path":"/items","value":[{"name":"Alice"}]}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"list","type":"List","props":{"gap":8},"children":{"forEach":"/items","templateId":"tmpl","itemVariable":"item"}},{"componentId":"tmpl","type":"Text","props":{"content":{"path":"/item/name"}}}]}`)
+
+	// list_tmpl_0 should exist (re-created for new data)
+	if mock.GetHandle("s1", "list_tmpl_0") == 0 {
+		t.Error("list_tmpl_0 should exist after re-expansion")
+	}
+	// list_tmpl_1 and list_tmpl_2 should be gone
+	if mock.GetHandle("s1", "list_tmpl_1") != 0 {
+		t.Error("list_tmpl_1 should be removed after array shrink")
+	}
+	if mock.GetHandle("s1", "list_tmpl_2") != 0 {
+		t.Error("list_tmpl_2 should be removed after array shrink")
+	}
+}
+
 func TestDefineComponentWithFunctionCall(t *testing.T) {
 	sess, mock := newTestSession()
 

@@ -109,8 +109,41 @@ func (s *Surface) SetCompDefs(defs map[string]*protocol.DefineComponent) {
 func (s *Surface) HandleUpdateComponents(msg protocol.UpdateComponents) {
 	comps := s.expandComponentInstances(msg.Components)
 	expanded := s.expandTemplates(comps)
+	oldRoots := s.tree.RootIDs()
+	prevRoots := make([]string, len(oldRoots))
+	copy(prevRoots, oldRoots)
 	changed := s.tree.Update(expanded)
+	removed := s.tree.Prune(prevRoots, changed)
+	if len(removed) > 0 {
+		s.cleanupComponents(removed)
+	}
 	s.renderComponents(changed)
+}
+
+// cleanupComponents removes orphaned components: unregisters callbacks, bindings,
+// validation errors, and dispatches RemoveView for each.
+func (s *Surface) cleanupComponents(removedIDs []string) {
+	// Unregister callbacks and bindings (Go-side, no dispatch needed)
+	for _, id := range removedIDs {
+		if events, exists := s.activeCallbacks[id]; exists {
+			for _, cbID := range events {
+				s.rend.UnregisterCallback(cbID)
+			}
+			delete(s.activeCallbacks, id)
+		}
+		s.tracker.Unregister(id)
+		delete(s.validationErrors, id)
+	}
+
+	// Dispatch RemoveView on main thread for components that have handles
+	s.dispatch.RunOnMain(func() {
+		for _, id := range removedIDs {
+			handle := s.rend.GetHandle(s.id, id)
+			if handle != 0 {
+				s.rend.RemoveView(s.id, id, handle)
+			}
+		}
+	})
 }
 
 // HandleUpdateDataModel applies data model operations and re-renders affected components.

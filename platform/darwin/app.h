@@ -10,5 +10,6 @@ void* JVCreateWindow(const char* title, int width, int height, const char* surfa
 void JVDestroyWindow(const char* surfaceID);
 void JVSetWindowRootView(const char* surfaceID, void* view, int padding);
 void JVSetWindowTheme(const char* surfaceID, const char* theme);
+void JVRemoveView(void* view);
 
 #endif

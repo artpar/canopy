@@ -23,7 +23,7 @@ type Renderer interface {
 	SetChildren(surfaceID string, parentHandle ViewHandle, childHandles []ViewHandle)
 
 	// RemoveView removes a native view from its parent and deallocates it.
-	RemoveView(surfaceID string, handle ViewHandle)
+	RemoveView(surfaceID string, componentID string, handle ViewHandle)
 
 	// GetHandle returns the current handle for a component ID, or 0 if not found.
 	GetHandle(surfaceID string, componentID string) ViewHandle

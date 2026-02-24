@@ -186,11 +186,28 @@ func (r *DarwinRenderer) SetChildren(surfaceID string, parentHandle renderer.Vie
 	}
 }
 
-func (r *DarwinRenderer) RemoveView(surfaceID string, handle renderer.ViewHandle) {
+func (r *DarwinRenderer) RemoveView(surfaceID string, componentID string, handle renderer.ViewHandle) {
 	removeView(handle)
+
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Clean up handle map
+	if m, ok := r.handles[surfaceID]; ok {
+		delete(m, componentID)
+	}
+
+	// Clean up callbacks for this component + unregister from globalRegistry
+	if s, ok := r.callbacks[surfaceID]; ok {
+		if events, ok := s[componentID]; ok {
+			for _, cbID := range events {
+				globalRegistry.Unregister(uint64(cbID))
+			}
+			delete(s, componentID)
+		}
+	}
+
 	delete(r.types, handle)
-	r.mu.Unlock()
 }
 
 func (r *DarwinRenderer) GetHandle(surfaceID string, componentID string) renderer.ViewHandle {
@@ -274,6 +291,5 @@ func (r *DarwinRenderer) LoadAssets(assets []renderer.AssetSpec) {
 
 // removeView removes an NSView from its superview.
 func removeView(handle renderer.ViewHandle) {
-	// Implemented in ObjC — for now just a placeholder
-	// In Phase 2 we'll add proper cleanup
+	C.JVRemoveView(unsafe.Pointer(handle))
 }

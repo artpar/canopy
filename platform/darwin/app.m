@@ -198,6 +198,11 @@ void JVSetWindowTheme(const char* surfaceID, const char* theme) {
     [window invalidateShadow];
 }
 
+void JVRemoveView(void* view) {
+    NSView *nsView = (__bridge NSView*)view;
+    [nsView removeFromSuperview];
+}
+
 void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSWindow *window = windowMap[sid];

@@ -99,10 +99,27 @@ func (m *MockRenderer) SetChildren(surfaceID string, parentHandle ViewHandle, ch
 	m.Children = append(m.Children, ChildrenSet{SurfaceID: surfaceID, ParentHandle: parentHandle, ChildHandles: childHandles})
 }
 
-func (m *MockRenderer) RemoveView(surfaceID string, handle ViewHandle) {
+func (m *MockRenderer) RemoveView(surfaceID string, componentID string, handle ViewHandle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Removed = append(m.Removed, handle)
+
+	// Clean up handle map
+	if s, ok := m.handles[surfaceID]; ok {
+		delete(s, componentID)
+	}
+
+	// Clean up callbacks for this component
+	if s, ok := m.callbacks[surfaceID]; ok {
+		if events, ok := s[componentID]; ok {
+			for _, cbID := range events {
+				delete(m.callbackFn, cbID)
+			}
+			delete(s, componentID)
+		}
+	}
+
+	delete(m.types, handle)
 }
 
 func (m *MockRenderer) GetHandle(surfaceID string, componentID string) ViewHandle {
