@@ -99,6 +99,8 @@ Paths use JSON Pointer syntax (RFC 6901): `/foo/bar/0` addresses `root.foo.bar[0
 
 The `"-"` token in a path (e.g. `/items/-`) appends to the end of an array, following JSON Patch (RFC 6902) conventions.
 
+Op values for `add`/`replace` support the full expression language — path references and function calls are resolved through the evaluator before being stored. This enables computed updates like `{"functionCall": {"name": "add", "args": [{"path": "/counter"}, 1]}}`.
+
 After all ops execute, the engine finds components bound to affected paths and re-renders them.
 
 ### test
@@ -348,6 +350,77 @@ Changes the visual theme for a surface's window via NSAppearance.
 | theme | string | yes | `"light"`, `"dark"`, or `"system"` |
 
 Setting appearance after views exist triggers recursive layer invalidation to flush cached rendering. Can also be invoked as a client-side `functionCall` action (see [Built-in FunctionCall Actions](#built-in-functioncall-actions)).
+
+### createProcess
+
+Creates a named background process with its own transport. The process routes messages through the shared session. Process status is automatically written to `/processes/{id}/status` in the data model of all surfaces.
+
+```json
+{
+  "type": "createProcess",
+  "processId": "ticker",
+  "transport": {
+    "type": "interval",
+    "interval": 1000,
+    "message": {"type": "updateDataModel", "surfaceId": "main", "ops": [
+      {"op": "replace", "path": "/counter", "value": {"functionCall": {"name": "add", "args": [{"path": "/counter"}, 1]}}}
+    ]}
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| processId | string | yes | Unique identifier for this process |
+| transport | ProcessTransportConfig | yes | Transport configuration (see below) |
+
+#### Process Transport Types
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `file` | `path` | Reads JSONL from a file asynchronously |
+| `interval` | `interval`, `message` | Sends a fixed message on a timer (ms) |
+| `llm` | `provider`, `model`, `prompt` | Starts a new LLM conversation |
+
+Process status values: `"running"`, `"stopped"`, `"error"`. Binding to `/processes/{id}/status` enables reactive UI updates when process state changes.
+
+Creating a process with a duplicate `processId` returns an error.
+
+### stopProcess
+
+Terminates a running process.
+
+```json
+{
+  "type": "stopProcess",
+  "processId": "ticker"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| processId | string | yes | ID of the process to stop |
+
+Stopping a non-existent process returns an error. The process status is set to `"stopped"` in the data model.
+
+### sendToProcess
+
+Routes a message to a process. The inner message is parsed and handled by the session.
+
+```json
+{
+  "type": "sendToProcess",
+  "processId": "agent",
+  "message": {"type": "updateDataModel", "surfaceId": "main", "ops": [
+    {"op": "replace", "path": "/response", "value": "Hello"}
+  ]}
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| processId | string | yes | Target process ID |
+| message | object | yes | A2UI JSONL message to route |
 
 ---
 
@@ -820,9 +893,9 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 ## Embedded MCP Server
 
-`jview mcp [file.jsonl]` starts an MCP server on stdin/stdout using JSON-RPC 2.0. An optional JSONL file can pre-load UI before the MCP client connects.
+The MCP server starts automatically on stdin/stdout in all modes using JSON-RPC 2.0. When running `jview file.jsonl`, the MCP server is available alongside the normal UI. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
-14 tools are available:
+19 tools are available:
 
 | Category | Tools |
 |----------|-------|
@@ -831,6 +904,8 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 | Data | `set_data_model`, `wait_for` |
 | Transport | `send_message` (send A2UI JSONL messages to create/update surfaces) |
 | Capture | `take_screenshot` (PNG, base64-encoded) |
+| Logging | `get_logs` |
+| Processes | `list_processes`, `create_process`, `stop_process`, `send_to_process` |
 
 The MCP server enables programmatic UI control, testing, and integration with external agents or tools that speak MCP.
 

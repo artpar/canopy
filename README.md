@@ -49,7 +49,7 @@ make test
 # Run native e2e tests (real AppKit rendering)
 build/jview test testdata/contact_form_test.jsonl
 
-# Start embedded MCP server
+# MCP server is always on (stdin/stdout); dedicated mode:
 build/jview mcp testdata/hello.jsonl
 
 # Full gate (tests + screenshot verification)
@@ -164,15 +164,29 @@ Components support `flexGrow` in their `style` to expand and fill available spac
 {"componentId": "info", "type": "Column", "style": {"flexGrow": 1}}
 ```
 
+### Process Model
+
+jview supports background processes — named goroutines with their own transports that route messages through the shared session. Processes enable timers, background LLM conversations, and async file loading.
+
+```json
+{"type":"createProcess","processId":"ticker","transport":{"type":"interval","interval":1000,"message":{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"replace","path":"/counter","value":{"functionCall":{"name":"add","args":[{"path":"/counter"},1]}}}]}}}
+{"type":"stopProcess","processId":"ticker"}
+```
+
+Three transport types: `file` (async JSONL), `interval` (timer with fixed message), `llm` (new LLM conversation). Process status is written to `/processes/{id}/status` in the data model, enabling reactive UI via binding.
+
 ### Embedded MCP Server
 
-`jview mcp [file.jsonl]` starts an MCP server on stdin/stdout (JSON-RPC 2.0) with 14 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, and send A2UI messages. Enables integration with external agents and testing tools.
+The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 19 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, send A2UI messages, and manage processes. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
 ```bash
-# Start MCP server with pre-loaded UI
+# Normal mode (MCP available alongside UI)
+build/jview testdata/reminders.jsonl
+
+# Dedicated MCP mode
 build/jview mcp testdata/reminders.jsonl
 
-# Start empty MCP server (create UI via send_message tool)
+# Empty MCP server (create UI via send_message tool)
 build/jview mcp
 ```
 
@@ -226,8 +240,8 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests (318 tests)
-make verify        # Build + screenshot capture for all fixtures (31 fixtures)
+make test          # Headless unit + integration tests (331 tests)
+make verify        # Build + screenshot capture for all fixtures (37 fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)

@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated after Theme Switcher fix and MCP thread-safety (Phase 3 complete). This document gives a new session everything it needs to continue work on jview.
+Last updated after Phase 4 (Hardening + Process Model). This document gives a new session everything it needs to continue work on jview.
 
 ## What Is jview
 
@@ -37,7 +37,7 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - 7 sample apps in `sample_apps/` including sysinfo (FFI demo with libcurl, libsqlite3, libz)
 - DX abstractions: `defineFunction` (reusable parametric expressions), `defineComponent` (reusable component templates with ID rewriting + state scoping), `include` (file inclusion with circular detection), directory mode
 - Tabs component: NSTabView with tabLabels, activeTab data binding, and tab selection callbacks
-- Embedded MCP server: `jview mcp [file.jsonl]` with 14 tools (query, interact, screenshot, send_message) on stdin/stdout JSON-RPC 2.0
+- Embedded MCP server: always-on on stdin/stdout (JSON-RPC 2.0), `jview mcp` for dedicated mode
 - flexGrow style property: children expand to fill available space in Row/Column via manual Auto Layout constraint chains (bypasses NSStackView distribution)
 - forEach action rewriting: onClick/onChange/etc. actions in templates get data model paths rewritten per iteration
 - forEach clone ID namespacing: IDs prefixed by parent List ID to avoid collisions across multiple lists
@@ -49,7 +49,16 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - MCP thread-safety: interaction tools (click/fill/toggle/interact) wrapped in dispatchSync to run on main thread with render flush
 - MCP OnAction wiring: no-op action handler prevents nil panic when buttons fire events in MCP mode
 
-**318 tests pass** across protocol/, engine/, transport/ with race detection. 31 fixtures screenshot-verified.
+**Phase 4 complete.** Hardening and process model:
+- CGo memory cleanup: type-aware cleanup for Audio (removeTimeObserver + removeEndedObserver + pause), Video (removeEndedObserver + pause), Modal (nil delegate + orderOut). `cleanupView()` in `cleanup.go` dispatches by component type. `CleanupAll()` dispatches RemoveView for all components.
+- Error recovery: `logRecover(component, surfaceID, context)` helper with stack traces. Panic recovery in Session.HandleMessage, per-component render (IIFE wrapping), executeFunctionCall, and transport goroutines.
+- Process model: `createProcess`, `stopProcess`, `sendToProcess` protocol messages. `ProcessManager` in `engine/process.go` with `TransportFactory` injected from main.go. Three transport types: file, interval (`transport/interval.go`), LLM. Process status written to `/processes/{id}/status` via HandleUpdateDataModel (triggers binding re-render). `ProcessTransport` interface in engine/ avoids circular imports.
+- HandleUpdateDataModel now evaluates functionCalls in op values (matching executeUpdateDataModel). Enables interval processes to send dynamic computed updates.
+- Always-on MCP: server starts on stdin/stdout in all modes (jlog outputs to stderr). 19 tools including `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`.
+- LLM tools: `a2ui_createProcess`, `a2ui_stopProcess` in `transport/llm_tools.go`.
+- Live monitor sample app in `sample_apps/live_monitor/` exercising process lifecycle, data binding, and functionCall-based dynamic updates.
+
+**331 tests pass** across protocol/, engine/, transport/ with race detection. 37 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -60,13 +69,15 @@ spec.md                        A2UI protocol specification (as implemented)
 plan.md                        Roadmap with phases 2-4
 
 protocol/                      JSONL parsing, message types, dynamic values
-  types.go                     Envelope, CreateSurface, DeleteSurface, UpdateDataModel, SetTheme
+  types.go                     Envelope, CreateSurface, DeleteSurface, UpdateDataModel, SetTheme,
+                               CreateProcess, StopProcess, SendToProcess
   component.go                 Component struct, Props (all component props in one struct)
   dynamic.go                   DynamicString, DynamicNumber, DynamicBoolean, DynamicStringList
   childlist.go                 ChildList (static array or template)
-  action.go                    EventAction, Action, FunctionCall
+  action.go                    EventAction, Action, FunctionCall (EventDef.ProcessID for routing)
+  process.go                   CreateProcess, StopProcess, SendToProcess structs, ProcessTransportConfig
   parse.go                     Parser (JSONL line reader)
-  parse_test.go                21 parser tests including style, error paths, defineFunction/defineComponent/include
+  parse_test.go                26 parser tests including style, error paths, defineFunction/defineComponent/include, process msgs
 
 engine/                        Session routing, surface management, data model, bindings, FFI
   session.go                   Routes messages to surfaces by surfaceId, handles loadLibrary,
@@ -85,13 +96,15 @@ engine/                        Session routing, surface management, data model, 
   validator.go                 Validation engine: 5 rule types with custom messages
   ffilib.go                    Generic FFI via libffi: dlopen, ffi_prep_cif, ffi_call, handle table
   ffilib_config.go             FFI config loading (JSON file with library/function declarations)
+  process.go                   Process model: Process, ProcessManager, TransportFactory, setStatus
+  errlog.go                    Logging helpers: logWarn, logError, logRecover (panic recovery with stack traces)
   ffilib_test.go               FFI unit tests (typed calls, handle table, error cases, session integration)
   ffi_e2e_test.go              FFI e2e tests with real system libraries (libcurl, libsqlite3, libz)
   evaluator_test.go            30 evaluator tests (all functions incl. array ops, nesting, paths, errors)
   validator_test.go            9 validator tests (all rules, custom messages, clearing)
   substitution_test.go         8 tests for substituteParams, rewriteComponentIDs, rewriteScopedPaths
   integration_test.go          Integration tests including slider, choicepicker, validation, templates,
-                               defineFunction, defineComponent, state scoping
+                               defineFunction, defineComponent, state scoping, process lifecycle
   testrunner.go                Native e2e test runner (real AppKit assertions, 8 assert types)
   testrunner_test.go           Test runner tests (all assertion types, edge cases, simulation, integration)
   e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout, calculator,
@@ -134,13 +147,15 @@ platform/darwin/               macOS CGo + ObjC implementation
   audio.go/.h/.m               Audio player (AVPlayer) compact control bar + onEnded
   screenshot.go/.h/.m          Window capture (NSBitmapImageRep → PNG bytes)
   style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment, flexGrow)
+  cleanup.go                   Type-aware CGo cleanup dispatch (Audio/Video/Modal) before removeFromSuperview
 
 transport/                     Message sources
   transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
   file.go                      FileTransport (reads JSONL from file with include support, SendAction is no-op)
   dir.go                       DirTransport (reads all *.jsonl in a directory, sorted)
   llm.go                       LLMTransport (bidirectional LLM conversation loop)
-  llm_tools.go                 11 A2UI tool definitions + toolCallToMessage + inspectLibrary + system prompt
+  llm_tools.go                 13 A2UI tool definitions (incl. createProcess, stopProcess) + toolCallToMessage + system prompt
+  interval.go                  IntervalTransport: sends fixed JSONL message on a timer
   cache.go                     Prompt caching (SHA256 hash, CachePaths, CacheValid, WriteHashFile)
   anthropic.go                 Anthropic provider with prompt caching (cache_control headers)
   file_test.go                 8 tests: channel lifecycle + include + circular detection + depth limit
@@ -152,7 +167,7 @@ mcp/                           Embedded MCP server (JSON-RPC 2.0 on stdin/stdout
   protocol.go                  MCP types (Request, Response, Tool, etc.)
   transport.go                 Stdio transport (line-delimited JSON-RPC)
   server.go                    Server routing + tool registration
-  tools.go                     14 tool handlers (query, interact, data, transport, capture)
+  tools.go                     19 tool handlers (query, interact, data, transport, capture, logging, processes)
   dispatch.go                  dispatchSync generic helper for main-thread queries
   server_test.go               MCP server tests
 
@@ -191,13 +206,14 @@ testdata/                      JSONL fixtures (29 top-level + subdirectories)
   audio_test.jsonl             Native e2e test: audio player props and children
   audio_player_app.jsonl       Audio Player sample app (track switching, loop toggle, onEnded)
   reminders.jsonl              Full Reminders app (Tabs, List, CheckBox, Button actions)
+  process_interval.jsonl       Counter + interval process that increments it via functionCall
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
 samples/                       Hand-authored JSONL sample apps
   dynamic_list.jsonl           Dynamic list with add/remove via append/removeLast functionCalls + tests
 
-sample_apps/                   LLM-generated sample applications (9 apps)
+sample_apps/                   LLM-generated sample applications (10 apps)
   */prompt.txt                 Natural language app description (sent to LLM)
   */prompt.jsonl               Cached JSONL output (auto-generated, .gitignored except sysinfo)
   sysinfo/                     FFI demo: loads libcurl, libsqlite3, libz and displays versions
@@ -209,6 +225,7 @@ sample_apps/                   LLM-generated sample applications (9 apps)
   settings/                    Settings panel
   theme_switcher/              Theme switching demo (light/dark via setTheme functionCall)
   scrollable_feed/             Scrollable feed demo (List with scroll view)
+  live_monitor/                Process lifecycle demo (interval timer, status binding, functionCall updates)
 ```
 
 ## Key Patterns
@@ -284,34 +301,37 @@ sample_apps/                   LLM-generated sample applications (9 apps)
 30. **MCP server on pipe** — `jview mcp` uses real AppKit (not headless). Layout queries return real NSView frames. The file transport (if provided) loads UI before MCP client connects. Surfaces may not be available immediately after `send_message` — use `wait_for` to poll.
 31. **MCP interaction thread safety** — `InvokeCallback` from MCP goroutine must be wrapped in `dispatchSync` to run on the main thread. After the callback, a second `dispatchSync` no-op flushes renders queued via `dispatch_async` (GCD serial queue is FIFO). Without this, tool returns before renders complete and queries see stale state.
 32. **MCP OnAction handler** — `sess.OnAction` must be set to a no-op in MCP mode. Without it, buttons with event actions (serverAction) panic on nil function call. MCP has no transport to forward actions to.
+33. **Process status setStatus pattern** — `setStatus()` must use `HandleUpdateDataModel()`, NOT direct `dm.Set()`. Direct Set skips the binding tracker, so components bound to `/processes/{id}/status` won't re-render.
+34. **HandleUpdateDataModel functionCall resolution** — `HandleUpdateDataModel` (protocol-level) now evaluates functionCalls in op values via `evaluator.resolveArg()`, matching `executeUpdateDataModel` (action-triggered). Without this, interval processes sending `{"functionCall":{"name":"add",...}}` store raw maps instead of computed values.
+35. **MCP always-on** — The MCP server starts on stdin/stdout in ALL modes (not just `jview mcp`). jlog outputs to stderr, leaving stdout free for JSON-RPC. `.mcp.json` should NOT include the `mcp` subcommand in args.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. Phase 3 is complete — all components, transport, testing, and styling are done. The next phase is Production Hardening:
+See `plan.md` for the full roadmap. Phase 4 is complete — hardening and process model are done. The next phase is Production Polish:
 
-1. **CGo memory cleanup** — audit and fix any leaks in the ObjC bridge
-2. **Error recovery / graceful degradation** — handle malformed messages, missing components
-3. **Multi-surface window management** — multiple windows, surface lifecycle
-4. **Incremental tree diff** — only re-render actually changed components
-5. **CLI flags + stdin transport** — pipe JSONL from stdin
-6. **macOS .app bundle packaging** — distributable application
+1. **Multi-surface window management** — multiple windows from one session, window positioning, focus management
+2. **Incremental tree diff** — only re-render components whose resolved props actually changed
+3. **SSE transport** — EventSource-style HTTP streaming. Must pass `RunTransportContractTests`
+4. **WebSocket transport** — bidirectional messaging. Must pass `RunTransportContractTests`
+5. **CLI flags** — `--title`, `--width`, `--height`, `--transport=sse|ws|file`, `--url`
+6. **macOS .app bundle packaging** — Info.plist, icon, code signing, .dmg or Homebrew
 
 ## Commands
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race (300+ tests)
-make verify                          # Screenshot verification (31 fixtures)
+make test                            # Headless tests with -race (331 tests)
+make verify                          # Screenshot verification (37 fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
-build/jview testdata/hello.jsonl     # File mode (static fixture)
+build/jview testdata/hello.jsonl     # File mode (static fixture, MCP on stdin/stdout)
 build/jview testdata/calculator_v2/  # Directory mode (reads all *.jsonl sorted)
 build/jview --ffi-config libs.json testdata/app.jsonl  # With FFI config
 build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
 build/jview --prompt-file prompt.txt    # LLM mode with prompt from file
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
-build/jview mcp testdata/hello.jsonl    # MCP server with pre-loaded UI
-build/jview mcp                          # MCP server (empty, create UI via send_message)
+build/jview mcp testdata/hello.jsonl    # Dedicated MCP mode (quits on EOF)
+build/jview mcp                          # Dedicated MCP mode (empty, create UI via send_message)
 make verify-fixture F=testdata/hello.jsonl  # Single fixture screenshot
 make run-app A=sysinfo               # Run a sample app
 make generate-apps                   # Generate all sample apps (headless)

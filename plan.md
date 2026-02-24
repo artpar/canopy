@@ -62,16 +62,33 @@ Live agent connectivity and remaining A2UI components.
 
 ---
 
-## Phase 4: Production Hardening
+## Phase 4: Hardening + Process Model — COMPLETE
 
-Reliability, performance, packaging.
+Reliability, process management, and always-on MCP.
+
+**Delivered:**
+- CGo memory cleanup: type-aware cleanup for Audio/Video/Modal (observer removal, player pause, panel close). CleanupAll dispatches RemoveView for all components.
+- Error recovery: `logRecover` helper with stack traces. Panic recovery in Session.HandleMessage, per-component render, executeFunctionCall, and transport goroutines.
+- Process model: `createProcess`, `stopProcess`, `sendToProcess` protocol messages. ProcessManager with TransportFactory. Three transport types: file, interval, LLM.
+- Interval transport: sends fixed JSONL message on a timer with functionCall evaluation in op values.
+- HandleUpdateDataModel now evaluates functionCalls in op values (matching executeUpdateDataModel).
+- Process status written to `/processes/{id}/status` via HandleUpdateDataModel (triggers binding re-render).
+- Always-on MCP: server starts on stdin/stdout in all modes (not just `jview mcp`). 19 tools including process management.
+- LLM tools: `a2ui_createProcess`, `a2ui_stopProcess`.
+- MCP tools: `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`.
+
+---
+
+## Phase 5: Production Polish
+
+Packaging and remaining transport modes.
 
 | Task | Priority | Description |
 |------|----------|-------------|
-| CGo memory cleanup | high | Audit all `unsafe.Pointer` usage. Ensure no ObjC objects leak. Add destructor tracking. |
-| Error recovery | high | Graceful degradation when components fail to render. Surface-level error boundaries. |
 | Multi-surface window management | medium | Multiple windows from one session. Window positioning, focus management. |
 | Incremental tree diff | medium | Only re-render components whose resolved props actually changed, not all affected components. |
+| SSE transport | medium | `EventSource`-style HTTP streaming. Must pass `RunTransportContractTests`. |
+| WebSocket transport | medium | Bidirectional messaging. Must pass `RunTransportContractTests`. |
 | CLI flags | medium | `--title`, `--width`, `--height`, `--transport=sse\|ws\|file`, `--url`. |
 | macOS .app bundle | low | Proper Info.plist, icon, code signing. Distribute as .dmg or via Homebrew. |
 
