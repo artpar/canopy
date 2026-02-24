@@ -211,8 +211,8 @@ Live agent connectivity and remaining A2UI components.
 | Native e2e test framework | testing | high | **done** |
 | Tabs | component | high | **done** |
 | Embedded MCP server | infra | high | **done** |
-| Modal | component | high | not started |
-| Video (AVPlayerView) | component | medium | not started |
+| Modal | component | high | **done** |
+| Video (AVPlayerView) | component | medium | **done** |
 | AudioPlayer | component | low | not started |
 | Theme → NSAppearance | infra | low | not started |
 | Scroll view for overflow | infra | medium | not started |

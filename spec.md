@@ -155,6 +155,7 @@ Defines an inline test case with assertions and event simulations. Test messages
 | `slide` | Slider | Set slider value |
 | `select` | ChoicePicker | Select option |
 | `datechange` | DateTimeInput | Set date value |
+| `ended` | Video | Fire onEnded callback |
 
 #### Test Runner Behavior
 
@@ -560,6 +561,38 @@ Tabbed container (NSTabView). Each child is a tab panel.
 
 Children of a Tabs component are displayed one at a time, selected by the tab bar. The `activeTab` value is the component ID of the active child. When `dataBinding` is set, tab selection writes the selected child's component ID to the data model.
 
+### Modal
+
+Modal dialog overlay (NSPanel). A zero-height proxy view participates in the component tree while a floating NSPanel shows the actual content.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| title | DynamicString | `""` | Panel title |
+| visible | DynamicBoolean | `false` | Show/hide the panel |
+| dataBinding | string | | JSON Pointer for visible state |
+| width | int | 480 | Panel width in points |
+| height | int | 320 | Panel height in points |
+| onDismiss | EventAction | | Action to fire when the close button is clicked |
+
+When `dataBinding` is set, dismissing the panel writes `false` to the data model path, allowing data-driven show/hide. Children are laid out in a vertical stack inside the panel.
+
+### Video
+
+Video playback using AVKit's AVPlayerView.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| src | DynamicString | `""` | Video URL |
+| width | int | | Fixed width in points |
+| height | int | | Fixed height in points |
+| autoplay | DynamicBoolean | `false` | Start playing on load |
+| loop | DynamicBoolean | `false` | Loop playback when video ends |
+| controls | DynamicBoolean | `true` | Show native player controls |
+| muted | DynamicBoolean | `false` | Mute audio |
+| onEnded | EventAction | | Action to fire when playback reaches end (non-loop mode only) |
+
+The Video component is a leaf node (no children). URL change detection avoids reloading the same video. Autoplay only applies on initial load, not on updates. Loop mode seeks to the beginning and plays again on end. The `onEnded` callback fires only when loop is false.
+
 ---
 
 ## Visual Styling
@@ -785,8 +818,6 @@ The MCP server enables programmatic UI control, testing, and integration with ex
 
 | Type | Phase | Description |
 |------|-------|-------------|
-| Modal | 3 | Modal dialog overlay |
-| Video | 3 | AVPlayerView video playback |
 | AudioPlayer | 3 | Audio playback controls |
 
-Props for these types are parsed but not rendered. The protocol types and JSON structs are already defined.
+Props for this type are parsed but not rendered. The protocol type and JSON struct are already defined.

@@ -41,8 +41,10 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - flexGrow style property: children expand to fill available space in Row/Column via manual Auto Layout constraint chains (bypasses NSStackView distribution)
 - forEach action rewriting: onClick/onChange/etc. actions in templates get data model paths rewritten per iteration
 - forEach clone ID namespacing: IDs prefixed by parent List ID to avoid collisions across multiple lists
+- Modal component: NSPanel floating dialog with data-bound visible state, onDismiss callback, and children layout
+- Video component: AVPlayerView with src (data-bound), autoplay, loop, controls, muted, onEnded callback, URL change detection
 
-**300+ tests pass** across protocol/, engine/, transport/ with race detection. 26 fixtures screenshot-verified.
+**300+ tests pass** across protocol/, engine/, transport/ with race detection. 28 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -88,7 +90,8 @@ engine/                        Session routing, surface management, data model, 
   testrunner.go                Native e2e test runner (real AppKit assertions, 8 assert types)
   testrunner_test.go           Test runner tests (all assertion types, edge cases, simulation, integration)
   e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout, calculator,
-                               custom_functions, component_defs, includes, calculator_v2, scoped_components
+                               custom_functions, component_defs, includes, calculator_v2, scoped_components,
+                               modal, video
   *_test.go                    Unit tests for datamodel, binding, tree, resolver
   testhelper_test.go           goroutineLeakCheck, assertCreated, assertUpdated, newTestSession
 
@@ -102,7 +105,7 @@ renderer/                      Platform-agnostic interface
 platform/darwin/               macOS CGo + ObjC implementation
   app.go/.h/.m                 NSApplication init/run loop + AppStop/AppRunUntilIdle/ForceLayout
   viewquery.go/.h/.m           ObjC view frame/style queries (JVGetViewFrame, JVGetViewStyle)
-  renderer.go                  DarwinRenderer implementing Renderer interface (17 component types + InvokeCallback + QueryLayout/Style)
+  renderer.go                  DarwinRenderer implementing Renderer interface (19 component types + InvokeCallback + QueryLayout/Style)
   dispatch.go/.h/.m            GCD-based main thread dispatcher
   registry.go                  CallbackRegistry (uint64 -> Go func)
   callback.go                  CGo callback bridge (GoCallbackInvoke)
@@ -120,6 +123,8 @@ platform/darwin/               macOS CGo + ObjC implementation
   datetimeinput.go/.h/.m       NSDatePicker with ISO 8601 formatting
   list.go/.h/.m                Vertical NSStackView container (delegates to stackview)
   tabs.go/.h/.m                Tabbed container (NSTabView) with delegate callbacks
+  modal.go/.h/.m               Modal dialog (NSPanel) with dismiss delegate + data binding
+  video.go/.h/.m               Video player (AVPlayerView) with playback controls + onEnded
   screenshot.go/.h/.m          Window capture (NSBitmapImageRep → PNG bytes)
   style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment, flexGrow)
 
@@ -144,7 +149,7 @@ mcp/                           Embedded MCP server (JSON-RPC 2.0 on stdin/stdout
   dispatch.go                  dispatchSync generic helper for main-thread queries
   server_test.go               MCP server tests
 
-testdata/                      JSONL fixtures (21 top-level + subdirectories)
+testdata/                      JSONL fixtures (26 top-level + subdirectories)
   hello.jsonl                  Card with heading + body text
   contact_form.jsonl           Form with data binding, preview card, checkbox, submit
   contact_form_test.jsonl      Native e2e test: contact form with test cases
@@ -170,6 +175,11 @@ testdata/                      JSONL fixtures (21 top-level + subdirectories)
   tabs_test.jsonl              Native e2e test: tabs with assertions
   flexgrow_test.jsonl          FlexGrow: Text and Column children expanding in Row
   flexlist_test.jsonl          FlexGrow in forEach List template
+  modal.jsonl                  Modal dialog with data-bound visibility and dismiss
+  modal_test.jsonl             Native e2e test: modal open/close via data binding
+  video.jsonl                  Video player with controls and caption
+  video_test.jsonl             Native e2e test: video props and children
+  video_player_app.jsonl       Video Player sample app (all Video features: autoplay, mute, switch, onEnded)
   reminders.jsonl              Full Reminders app (Tabs, List, CheckBox, Button actions)
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
@@ -260,13 +270,13 @@ sample_apps/                   LLM-generated sample applications (7 apps)
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. LLM transport, FFI, and DX abstractions are done. The immediate next priorities are:
+See `plan.md` for the full roadmap. LLM transport, FFI, DX abstractions, Modal, and Video are done. The immediate next priorities are:
 
-1. **Scroll view** — overflow handling for long content
-2. **Modal component** — overlay dialogs
+1. **AudioPlayer** — audio playback controls
+2. **Scroll view** — overflow handling for long content
 3. **SSE transport** — EventSource-style HTTP streaming for non-LLM agents
 4. **WebSocket transport** — bidirectional messaging
-5. **Video / AudioPlayer** — media components
+5. **Theme → NSAppearance** — dark/light mode switching
 
 ## Commands
 

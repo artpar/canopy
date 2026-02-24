@@ -103,6 +103,8 @@ Two modes:
 | Tabs | Tabbed container with data binding |
 | ChoicePicker | Dropdown selection |
 | DateTimeInput | Date/time picker |
+| Modal | Floating dialog panel |
+| Video | AVPlayerView video playback |
 
 ### Reusable Abstractions
 
