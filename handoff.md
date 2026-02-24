@@ -36,8 +36,13 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Prompt caching for LLM-generated apps (SHA256 hash validation, atomic writes)
 - 7 sample apps in `sample_apps/` including sysinfo (FFI demo with libcurl, libsqlite3, libz)
 - DX abstractions: `defineFunction` (reusable parametric expressions), `defineComponent` (reusable component templates with ID rewriting + state scoping), `include` (file inclusion with circular detection), directory mode
+- Tabs component: NSTabView with tabLabels, activeTab data binding, and tab selection callbacks
+- Embedded MCP server: `jview mcp [file.jsonl]` with 14 tools (query, interact, screenshot, send_message) on stdin/stdout JSON-RPC 2.0
+- flexGrow style property: children expand to fill available space in Row/Column via manual Auto Layout constraint chains (bypasses NSStackView distribution)
+- forEach action rewriting: onClick/onChange/etc. actions in templates get data model paths rewritten per iteration
+- forEach clone ID namespacing: IDs prefixed by parent List ID to avoid collisions across multiple lists
 
-**292 tests pass** across protocol/, engine/, transport/ with race detection. 21 fixtures screenshot-verified.
+**300+ tests pass** across protocol/, engine/, transport/ with race detection. 26 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -114,7 +119,9 @@ platform/darwin/               macOS CGo + ObjC implementation
   choicepicker.go/.h/.m        NSPopUpButton with option label/value pairs
   datetimeinput.go/.h/.m       NSDatePicker with ISO 8601 formatting
   list.go/.h/.m                Vertical NSStackView container (delegates to stackview)
-  style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment)
+  tabs.go/.h/.m                Tabbed container (NSTabView) with delegate callbacks
+  screenshot.go/.h/.m          Window capture (NSBitmapImageRep → PNG bytes)
+  style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment, flexGrow)
 
 transport/                     Message sources
   transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
@@ -128,6 +135,14 @@ transport/                     Message sources
   llm_test.go                  Mock provider tests: tool call parsing, transport lifecycle, action turns
   contract_test.go             RunTransportContractTests (reusable suite, includes SendActionDoesNotPanic)
   testhelper_test.go           goroutineLeakCheck, drain helpers
+
+mcp/                           Embedded MCP server (JSON-RPC 2.0 on stdin/stdout)
+  protocol.go                  MCP types (Request, Response, Tool, etc.)
+  transport.go                 Stdio transport (line-delimited JSON-RPC)
+  server.go                    Server routing + tool registration
+  tools.go                     14 tool handlers (query, interact, data, transport, capture)
+  dispatch.go                  dispatchSync generic helper for main-thread queries
+  server_test.go               MCP server tests
 
 testdata/                      JSONL fixtures (21 top-level + subdirectories)
   hello.jsonl                  Card with heading + body text
@@ -151,6 +166,11 @@ testdata/                      JSONL fixtures (21 top-level + subdirectories)
   custom_functions.jsonl       defineFunction: digit buttons using appendDigit user function
   component_defs.jsonl         defineComponent: DigitButton + OpButton templates
   scoped_components.jsonl      State scoping: two Counter instances with isolated state
+  tabs.jsonl                   Tabs with data-bound tab selection
+  tabs_test.jsonl              Native e2e test: tabs with assertions
+  flexgrow_test.jsonl          FlexGrow: Text and Column children expanding in Row
+  flexlist_test.jsonl          FlexGrow in forEach List template
+  reminders.jsonl              Full Reminders app (Tabs, List, CheckBox, Button actions)
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
@@ -233,12 +253,16 @@ sample_apps/                   LLM-generated sample applications (7 apps)
 24. **State scoping $ prefix** — `$` in paths is replaced with the scope value. Default scope is `"/instanceId"`. The `$` replacement is recursive through all JSON values including nested functionCall args and data model ops.
 25. **Include circular detection** — uses absolute path tracking. The include stack is a `map[string]bool` passed through recursive calls. Max depth is 10 to prevent accidental infinite recursion.
 26. **Directory mode vs include** — directory mode reads all `*.jsonl` sorted; include reads specific files. They can be combined but files will be processed twice (with "redefining" warnings for duplicate definitions). This is harmless.
+27. **NSTabView content layout** — NSTabView manages `item.view` frame via frame-based layout. The container wrapping tab content must keep `translatesAutoresizingMaskIntoConstraints = YES` (default). Setting it to NO gives zero-size content.
+28. **flexGrow bypasses NSStackView distribution** — `NSStackViewDistributionFill` doesn't expand NSStackView children (intrinsicContentSize returns {-1,-1}). When any child has flexGrow, stackview.m adds children as regular subviews with manual constraint chains instead of using `addArrangedSubview`.
+29. **forEach clone ID namespacing** — Template clone IDs are prefixed by the parent List's component ID (e.g. `myList_row_0` instead of `row_0`). This prevents ID collisions when multiple forEach lists share the same template.
+30. **MCP server on pipe** — `jview mcp` uses real AppKit (not headless). Layout queries return real NSView frames. The file transport (if provided) loads UI before MCP client connects. Surfaces may not be available immediately after `send_message` — use `wait_for` to poll.
 
 ## What To Work On Next
 
 See `plan.md` for the full roadmap. LLM transport, FFI, and DX abstractions are done. The immediate next priorities are:
 
-1. **Tabs component** — tabbed container for multi-view layouts
+1. **Scroll view** — overflow handling for long content
 2. **Modal component** — overlay dialogs
 3. **SSE transport** — EventSource-style HTTP streaming for non-LLM agents
 4. **WebSocket transport** — bidirectional messaging
@@ -248,8 +272,8 @@ See `plan.md` for the full roadmap. LLM transport, FFI, and DX abstractions are 
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race (292 tests)
-make verify                          # Screenshot verification (21 fixtures)
+make test                            # Headless tests with -race (300+ tests)
+make verify                          # Screenshot verification (26 fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
 build/jview testdata/hello.jsonl     # File mode (static fixture)
@@ -258,6 +282,8 @@ build/jview --ffi-config libs.json testdata/app.jsonl  # With FFI config
 build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
 build/jview --prompt-file prompt.txt    # LLM mode with prompt from file
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
+build/jview mcp testdata/hello.jsonl    # MCP server with pre-loaded UI
+build/jview mcp                          # MCP server (empty, create UI via send_message)
 make verify-fixture F=testdata/hello.jsonl  # Single fixture screenshot
 make run-app A=sysinfo               # Run a sample app
 make generate-apps                   # Generate all sample apps (headless)

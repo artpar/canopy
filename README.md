@@ -49,6 +49,9 @@ make test
 # Run native e2e tests (real AppKit rendering)
 build/jview test testdata/contact_form_test.jsonl
 
+# Start embedded MCP server
+build/jview mcp testdata/hello.jsonl
+
 # Full gate (tests + screenshot verification)
 make check
 ```
@@ -97,6 +100,7 @@ Two modes:
 | Icon | SF Symbols (macOS 11+) |
 | Divider | Visual separator |
 | List | Scrollable templated list |
+| Tabs | Tabbed container with data binding |
 | ChoicePicker | Dropdown selection |
 | DateTimeInput | Date/time picker |
 
@@ -149,6 +153,26 @@ Supported types: void, int, uint32, int64, uint64, float, double, pointer, strin
 
 Components can bind to the data model using JSON Pointers. When a user types in a TextField bound to `/name`, any Text component displaying `{"path": "/name"}` updates automatically.
 
+### Flex Layout
+
+Components support `flexGrow` in their `style` to expand and fill available space in a parent Row or Column, similar to CSS flex-grow:
+
+```json
+{"componentId": "info", "type": "Column", "style": {"flexGrow": 1}}
+```
+
+### Embedded MCP Server
+
+`jview mcp [file.jsonl]` starts an MCP server on stdin/stdout (JSON-RPC 2.0) with 14 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, and send A2UI messages. Enables integration with external agents and testing tools.
+
+```bash
+# Start MCP server with pre-loaded UI
+build/jview mcp testdata/reminders.jsonl
+
+# Start empty MCP server (create UI via send_message tool)
+build/jview mcp
+```
+
 ## Example
 
 ### LLM-generated UI
@@ -199,8 +223,8 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests (292 tests)
-make verify        # Build + screenshot capture for all fixtures (21 fixtures)
+make test          # Headless unit + integration tests (300+ tests)
+make verify        # Build + screenshot capture for all fixtures (26 fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)

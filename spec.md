@@ -97,6 +97,8 @@ Applies JSON Patch-style operations to the surface's data model.
 
 Paths use JSON Pointer syntax (RFC 6901): `/foo/bar/0` addresses `root.foo.bar[0]`.
 
+The `"-"` token in a path (e.g. `/items/-`) appends to the end of an array, following JSON Patch (RFC 6902) conventions.
+
 After all ops execute, the engine finds components bound to affected paths and re-renders them.
 
 ### test
@@ -546,6 +548,18 @@ Date and/or time picker with two-way data binding.
 | enableTime | DynamicBoolean | `false` | Show time picker |
 | dataBinding | string | | JSON Pointer for two-way binding |
 
+### Tabs
+
+Tabbed container (NSTabView). Each child is a tab panel.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| tabLabels | string[] | `[]` | Tab titles (one per child) |
+| activeTab | DynamicString | `""` | Component ID of the active tab panel |
+| dataBinding | string | | JSON Pointer for active tab state |
+
+Children of a Tabs component are displayed one at a time, selected by the tab bar. The `activeTab` value is the component ID of the active child. When `dataBinding` is set, tab selection writes the selected child's component ID to the data model.
+
 ---
 
 ## Visual Styling
@@ -578,6 +592,8 @@ Any component can have a `style` object alongside `props`:
 | fontWeight | string | `bold`, `semibold`, `medium`, `light` |
 | textAlign | string | `left`, `center`, `right` |
 | opacity | number | Opacity 0.0–1.0 |
+| flexGrow | number | Expand to fill remaining space in parent Row/Column (CSS-like flex-grow) |
+| fontFamily | string | Custom font family name (falls back to system font if not found) |
 
 Surface-level styling on `createSurface`:
 
@@ -705,6 +721,7 @@ Functions registered via `defineFunction` are available in the same expression c
 | `toString` | val | string | Convert any value to string |
 | `calc` | operator, left, right | number | Evaluate `+`/`-`/`*`/`/` dynamically |
 | `contains` | str, substr | bool | String contains check |
+| `length` | collection_or_string | number | Array element count or string character count |
 | `negate` | num | number | Multiply by -1 |
 
 ---
@@ -746,11 +763,28 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 ---
 
+## Embedded MCP Server
+
+`jview mcp [file.jsonl]` starts an MCP server on stdin/stdout using JSON-RPC 2.0. An optional JSONL file can pre-load UI before the MCP client connects.
+
+14 tools are available:
+
+| Category | Tools |
+|----------|-------|
+| Query | `list_surfaces`, `get_tree`, `get_component`, `get_data_model`, `get_layout`, `get_style` |
+| Interaction | `click`, `fill`, `toggle`, `interact` |
+| Data | `set_data_model`, `wait_for` |
+| Transport | `send_message` (send A2UI JSONL messages to create/update surfaces) |
+| Capture | `take_screenshot` (PNG, base64-encoded) |
+
+The MCP server enables programmatic UI control, testing, and integration with external agents or tools that speak MCP.
+
+---
+
 ## Reserved Component Types (Not Yet Implemented)
 
 | Type | Phase | Description |
 |------|-------|-------------|
-| Tabs | 3 | Tabbed container |
 | Modal | 3 | Modal dialog overlay |
 | Video | 3 | AVPlayerView video playback |
 | AudioPlayer | 3 | Audio playback controls |

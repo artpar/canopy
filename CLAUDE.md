@@ -157,6 +157,7 @@ Native Cocoa widgets           ← visible on screen
 | renderer/ | protocol | engine, platform |
 | platform/darwin/ | protocol, renderer | engine |
 | transport/ | protocol | engine, renderer, platform |
+| mcp/ | protocol, engine, renderer | platform, transport |
 | main.go | everything | — |
 
 ## CGo Conventions
