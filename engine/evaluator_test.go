@@ -366,6 +366,69 @@ func TestEvalAnd(t *testing.T) {
 	}
 }
 
+func TestEvalIfLazy(t *testing.T) {
+	eval, _ := newTestEvaluator()
+	// When condition is true, falseVal is NOT evaluated (contains error-producing calc("",0,0))
+	brokenExpr := map[string]interface{}{
+		"functionCall": map[string]interface{}{
+			"name": "calc",
+			"args": []interface{}{"", float64(0), float64(0)},
+		},
+	}
+	result, err := eval.Eval("if", []interface{}{true, "yes", brokenExpr})
+	if err != nil {
+		t.Fatalf("if(true, 'yes', broken) should not error, got: %v", err)
+	}
+	if result != "yes" {
+		t.Errorf("if(true, 'yes', broken) = %v, want 'yes'", result)
+	}
+
+	// When condition is false, trueVal is NOT evaluated
+	result, err = eval.Eval("if", []interface{}{false, brokenExpr, "no"})
+	if err != nil {
+		t.Fatalf("if(false, broken, 'no') should not error, got: %v", err)
+	}
+	if result != "no" {
+		t.Errorf("if(false, broken, 'no') = %v, want 'no'", result)
+	}
+}
+
+func TestEvalOrLazy(t *testing.T) {
+	eval, _ := newTestEvaluator()
+	// First arg is true → short-circuit, never evaluate broken second arg
+	brokenExpr := map[string]interface{}{
+		"functionCall": map[string]interface{}{
+			"name": "calc",
+			"args": []interface{}{"", float64(0), float64(0)},
+		},
+	}
+	result, err := eval.Eval("or", []interface{}{true, brokenExpr})
+	if err != nil {
+		t.Fatalf("or(true, broken) should not error, got: %v", err)
+	}
+	if result != true {
+		t.Errorf("or(true, broken) = %v, want true", result)
+	}
+}
+
+func TestEvalAndLazy(t *testing.T) {
+	eval, _ := newTestEvaluator()
+	// First arg is false → short-circuit, never evaluate broken second arg
+	brokenExpr := map[string]interface{}{
+		"functionCall": map[string]interface{}{
+			"name": "calc",
+			"args": []interface{}{"", float64(0), float64(0)},
+		},
+	}
+	result, err := eval.Eval("and", []interface{}{false, brokenExpr})
+	if err != nil {
+		t.Fatalf("and(false, broken) should not error, got: %v", err)
+	}
+	if result != false {
+		t.Errorf("and(false, broken) = %v, want false", result)
+	}
+}
+
 func TestEvalToNumber(t *testing.T) {
 	eval, _ := newTestEvaluator()
 	result, err := eval.Eval("toNumber", []interface{}{"42"})

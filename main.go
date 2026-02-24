@@ -13,7 +13,6 @@ import (
 	"runtime"
 
 	anyllm "github.com/mozilla-ai/any-llm-go"
-	"github.com/mozilla-ai/any-llm-go/providers/anthropic"
 	"github.com/mozilla-ai/any-llm-go/providers/deepseek"
 	"github.com/mozilla-ai/any-llm-go/providers/gemini"
 	"github.com/mozilla-ai/any-llm-go/providers/groq"
@@ -33,7 +32,7 @@ func main() {
 	}
 
 	llmProvider := flag.String("llm", "anthropic", "LLM provider: anthropic, openai, gemini, ollama, deepseek, groq, mistral")
-	model := flag.String("model", "claude-haiku-4-5-20251001", "Model name (default: claude-haiku-4-5-20251001)")
+	model := flag.String("model", "claude-opus-4-6", "Model name (default: claude-opus-4-6)")
 	prompt := flag.String("prompt", "", "Prompt describing the UI to build")
 	mode := flag.String("mode", "tools", "LLM mode: tools (default) or raw")
 	apiKey := flag.String("api-key", "", "API key (overrides environment variable)")
@@ -200,7 +199,7 @@ func createProvider(name string, apiKey string) (anyllm.Provider, error) {
 
 	switch name {
 	case "anthropic":
-		return anthropic.New(opts...)
+		return transport.NewAnthropicProvider(apiKey)
 	case "openai":
 		return openai.New(opts...)
 	case "gemini":

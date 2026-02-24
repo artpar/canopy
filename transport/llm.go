@@ -179,10 +179,12 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 		}
 
 		log.Printf("llm: sending completion request (%d messages in history)", len(history))
+		maxTok := 16384
 		resp, err := t.config.Provider.Completion(ctx, anyllm.CompletionParams{
-			Model:    t.config.Model,
-			Messages: history,
-			Tools:    a2uiTools(),
+			Model:     t.config.Model,
+			Messages:  history,
+			Tools:     a2uiTools(),
+			MaxTokens: &maxTok,
 		})
 		if err != nil {
 			log.Printf("llm: completion error: %v", err)
@@ -236,8 +238,8 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 				})
 			}
 
-			// If finish reason is tool_calls, loop to let the LLM continue
-			if choice.FinishReason == anyllm.FinishReasonToolCalls {
+			// If finish reason is tool_calls or length, loop to let the LLM continue
+			if choice.FinishReason == anyllm.FinishReasonToolCalls || choice.FinishReason == anyllm.FinishReasonLength {
 				continue
 			}
 		}

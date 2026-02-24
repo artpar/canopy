@@ -36,7 +36,7 @@ func a2uiTools() []anyllm.Tool {
 			Type: "function",
 			Function: anyllm.Function{
 				Name:        "a2ui_updateComponents",
-				Description: "Create or update UI components on a surface. Components form a tree: containers (Row, Column, Card, List) have children, leaf components (Text, Button, TextField, etc.) do not. Each component has a unique componentId and optional parentId. Props vary by type.",
+				Description: "Create or update UI components on a surface. Components form a tree: containers (Row, Column, Card, List) declare their children via children.static, leaf components (Text, Button, TextField, etc.) do not. Each component has a unique componentId. Props vary by type.",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -48,8 +48,7 @@ func a2uiTools() []anyllm.Tool {
 								"properties": map[string]any{
 									"componentId": map[string]any{"type": "string"},
 									"type":        map[string]any{"type": "string", "enum": []string{"Text", "Row", "Column", "Card", "Button", "TextField", "CheckBox", "Slider", "Image", "Icon", "Divider", "List", "ChoicePicker", "DateTimeInput"}},
-									"parentId":    map[string]any{"type": "string"},
-									"children":    map[string]any{"type": "object"},
+									"children":    map[string]any{"type": "object", "description": "Tree structure: {\"static\": [\"childId1\", \"childId2\"]}. Required on containers."},
 									"props":       map[string]any{"type": "object"},
 									"style": map[string]any{
 										"type":        "object",
@@ -388,8 +387,10 @@ WORKFLOW:
 
 COMPONENT TREE RULES:
 - Every component needs a unique componentId
-- Containers (Row, Column, Card, List) use children.static (array of child componentIds)
-- Set parentId on children to point to their container
+- Tree structure is defined ONLY by children.static on the parent container — this is what determines layout
+- Every container (Row, Column, Card, List) MUST have "children": {"static": ["childId1", "childId2", ...]} listing ALL its direct children in order
+- Leaf components (Text, Button, TextField, etc.) do not need children
+- Do NOT rely on parentId — it is not used for tree construction
 - Data binding: set dataBinding to a JSON Pointer (e.g. "/form/name") and the component auto-syncs with the data model
 
 TESTING:

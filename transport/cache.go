@@ -19,10 +19,16 @@ func CachePaths(promptFile string) (jsonl, hash, tmp string) {
 	return
 }
 
-// PromptHash computes the SHA256 hex digest of file content.
+// PromptHash computes a SHA256 hex digest that covers both the prompt
+// content and the system prompt derived from it. This ensures the cache
+// invalidates when the system prompt template changes (e.g. new functions,
+// updated component docs).
 func PromptHash(content []byte) string {
-	h := sha256.Sum256(content)
-	return fmt.Sprintf("%x", h[:])
+	h := sha256.New()
+	h.Write(content)
+	h.Write([]byte{0}) // separator
+	h.Write([]byte(systemPrompt(string(content))))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // CacheValid returns true if the cached JSONL exists and its hash file
