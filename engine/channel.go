@@ -54,8 +54,13 @@ func (cm *ChannelManager) Create(cc protocol.CreateChannel) error {
 	}
 
 	mode := ChannelBroadcast
-	if cc.Mode == "queue" {
+	switch cc.Mode {
+	case "queue":
 		mode = ChannelQueue
+	case "", "broadcast":
+		// default
+	default:
+		logWarn("channel", "", fmt.Sprintf("unknown channel mode %q for %q, defaulting to broadcast", cc.Mode, cc.ChannelID))
 	}
 
 	cm.channels[cc.ChannelID] = &Channel{
@@ -115,9 +120,13 @@ func (cm *ChannelManager) Unsubscribe(unsub protocol.Unsubscribe) error {
 		return fmt.Errorf("channel %q not found", unsub.ChannelID)
 	}
 
-	filtered := ch.Subscribers[:0]
+	filtered := make([]Subscription, 0, len(ch.Subscribers))
 	for _, s := range ch.Subscribers {
-		if s.ProcessID != unsub.ProcessID {
+		match := s.ProcessID == unsub.ProcessID
+		if match && unsub.TargetPath != "" {
+			match = s.TargetPath == unsub.TargetPath
+		}
+		if !match {
 			filtered = append(filtered, s)
 		}
 	}

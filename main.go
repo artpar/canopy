@@ -361,6 +361,10 @@ func runMCP(args []string) {
 	// No-op action handler — MCP mode has no transport to forward actions to
 	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {}
 
+	// Set up channel manager
+	cm := engine.NewChannelManager(sess)
+	sess.SetChannelManager(cm)
+
 	// If a file arg is provided, load it as initial UI
 	if len(args) > 0 {
 		tr := createFileTransport(args[0])
@@ -391,7 +395,7 @@ func runMCP(args []string) {
 	}
 
 	mcpTransport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
-	mcpServer := mcp.NewServer(sess, rend, disp)
+	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithChannelManager(cm))
 	toolNames := mcpServer.ToolNames()
 	jlog.Infof("main", "", "mcp: server started on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
 

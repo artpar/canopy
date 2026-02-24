@@ -746,7 +746,7 @@ func (s *Server) registerListChannels() {
 			Subscribers []subInfo `json:"subscribers"`
 			LastValue   any       `json:"lastValue,omitempty"`
 		}
-		var result []channelInfo
+		result := make([]channelInfo, 0, len(ids))
 		for _, id := range ids {
 			ch := s.cm.GetChannel(id)
 			if ch == nil {

@@ -253,3 +253,69 @@ func TestChannelSubscribeToNonexistent(t *testing.T) {
 		t.Fatal("expected error subscribing to nonexistent channel")
 	}
 }
+
+func TestChannelUnsubscribeFromNonexistent(t *testing.T) {
+	_, cm := setupChannelTest(t)
+
+	err := cm.Unsubscribe(protocol.Unsubscribe{ChannelID: "nope"})
+	if err == nil {
+		t.Fatal("expected error unsubscribing from nonexistent channel")
+	}
+}
+
+func TestChannelQueueWithNoSubscribers(t *testing.T) {
+	sess, cm := setupChannelTest(t)
+
+	cm.Create(protocol.CreateChannel{ChannelID: "q", Mode: "queue"})
+
+	// Publish to a queue channel with no subscribers — should not panic
+	err := cm.Publish(protocol.Publish{ChannelID: "q", Value: "msg"})
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	// Value should still be written to /channels/q/value
+	surf := sess.GetSurface("main")
+	val, ok := surf.DM().Get("/channels/q/value")
+	if !ok {
+		t.Fatal("channel value not set")
+	}
+	if val != "msg" {
+		t.Errorf("value = %v, want msg", val)
+	}
+}
+
+func TestChannelUnsubscribeByTargetPath(t *testing.T) {
+	_, cm := setupChannelTest(t)
+
+	cm.Create(protocol.CreateChannel{ChannelID: "ch"})
+	cm.Subscribe(protocol.Subscribe{ChannelID: "ch", ProcessID: "p1", TargetPath: "/a"})
+	cm.Subscribe(protocol.Subscribe{ChannelID: "ch", ProcessID: "p1", TargetPath: "/b"})
+
+	// Unsubscribe only /a, keep /b
+	cm.Unsubscribe(protocol.Unsubscribe{ChannelID: "ch", ProcessID: "p1", TargetPath: "/a"})
+
+	ch := cm.GetChannel("ch")
+	if len(ch.Subscribers) != 1 {
+		t.Fatalf("subscribers = %d, want 1", len(ch.Subscribers))
+	}
+	if ch.Subscribers[0].TargetPath != "/b" {
+		t.Errorf("remaining = %q, want /b", ch.Subscribers[0].TargetPath)
+	}
+}
+
+func TestChannelUnsubscribeAllForProcess(t *testing.T) {
+	_, cm := setupChannelTest(t)
+
+	cm.Create(protocol.CreateChannel{ChannelID: "ch"})
+	cm.Subscribe(protocol.Subscribe{ChannelID: "ch", ProcessID: "p1", TargetPath: "/a"})
+	cm.Subscribe(protocol.Subscribe{ChannelID: "ch", ProcessID: "p1", TargetPath: "/b"})
+
+	// Unsubscribe without targetPath removes all for p1
+	cm.Unsubscribe(protocol.Unsubscribe{ChannelID: "ch", ProcessID: "p1"})
+
+	ch := cm.GetChannel("ch")
+	if len(ch.Subscribers) != 0 {
+		t.Errorf("subscribers = %d, want 0", len(ch.Subscribers))
+	}
+}
