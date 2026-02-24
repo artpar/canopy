@@ -4,6 +4,7 @@ package darwin
 #cgo CFLAGS: -x objective-c -fobjc-arc
 #cgo LDFLAGS: -framework Cocoa
 
+#include <stdlib.h>
 #include "app.h"
 */
 import "C"
