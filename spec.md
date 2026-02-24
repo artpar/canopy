@@ -223,6 +223,110 @@ Multiple `loadLibrary` messages can be sent. Libraries persist for the session l
 
 `loadLibrary` does not require a `surfaceId` — it operates at the session level.
 
+### defineFunction
+
+Registers a reusable parametric function for use in expressions. Defined functions are available in `functionCall` nodes just like built-in functions. Operates at session level (no surfaceId).
+
+```json
+{
+  "type": "defineFunction",
+  "name": "appendDigit",
+  "params": ["current", "digit"],
+  "body": {"functionCall": {"name": "concat", "args": [{"param": "current"}, {"param": "digit"}]}}
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | yes | Function name (used in `functionCall.name`) |
+| params | string[] | yes | Parameter names |
+| body | any | yes | Expression tree with `{"param":"name"}` placeholders |
+
+The body is deep-copied and parameters are substituted at call time. Custom functions are checked after built-ins but before FFI. Arity is enforced — wrong arg count produces an error.
+
+### defineComponent
+
+Registers a reusable component template. Instances are expanded inline before rendering. Operates at session level (no surfaceId).
+
+```json
+{
+  "type": "defineComponent",
+  "name": "DigitButton",
+  "params": ["digit"],
+  "components": [
+    {"componentId": "_root", "type": "Button", "props": {
+      "label": {"param": "digit"},
+      "onClick": {"action": {"functionCall": {"call": "updateDataModel", "args": {
+        "ops": [{"op": "replace", "path": "/display", "value": {"functionCall": {"name": "appendDigit", "args": [{"path": "/display"}, {"param": "digit"}]}}}]
+      }}}}
+    }}
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | yes | Component name (used in `useComponent`) |
+| params | string[] | yes | Parameter names |
+| components | Component[] | yes | Template components. Must include `_root`. |
+
+#### ID Rewriting Convention
+
+- `_root` → replaced with the instance's `componentId`
+- `_X` (any ID starting with `_`) → replaced with `instanceId__X`
+- Non-underscore IDs are left as-is
+
+#### Component Instance
+
+To use a defined component, set `useComponent` instead of `type`:
+
+```json
+{"componentId": "btn7", "useComponent": "DigitButton", "args": {"digit": "7"}}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| useComponent | string | yes | Name of defined component |
+| args | object | no | Arguments matching the component's params |
+| scope | string | no | Data model path prefix for `$` paths (default: `/instanceId`) |
+
+#### State Scoping
+
+Component templates can use `$` as a path prefix placeholder. During expansion, `$` is replaced with the instance's `scope` value:
+
+```json
+// In template:
+"content": {"path": "$/count"}
+
+// Instance with scope="/c1":
+"content": {"path": "/c1/count"}
+```
+
+This enables multiple instances of the same component with isolated state.
+
+### include
+
+Includes another JSONL file at the transport level. The included file is read and its messages are injected in-place. Operates at transport level (no surfaceId).
+
+```json
+{"type": "include", "path": "defs.jsonl"}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| path | string | yes | Relative path to JSONL file (resolved from current file's directory) |
+
+Includes are recursive (max depth 10). Circular includes are detected by absolute path and produce an error. Include messages are consumed by the transport — the engine never sees them.
+
+#### Directory Mode
+
+When the argument to jview is a directory instead of a file, all `*.jsonl` files in that directory are read in sorted (lexicographic) order:
+
+```bash
+build/jview testdata/calculator_v2/
+# Reads: components.jsonl, functions.jsonl, main.jsonl (sorted)
+```
+
 ### setTheme
 
 Changes the visual theme. *Not yet implemented — reserved for Phase 3.*
@@ -255,9 +359,14 @@ Values: `"light"`, `"dark"`, `"system"`.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | componentId | string | yes | Unique ID within the surface |
-| type | string | yes | Component type name |
+| type | string | yes* | Component type name |
 | props | object | no | Component-specific properties |
 | children | ChildList | no | Child component references |
+| useComponent | string | no | Name of a defined component (replaces `type`) |
+| args | object | no | Arguments for the component template |
+| scope | string | no | Data model scope prefix for `$` paths |
+
+*`type` is required unless `useComponent` is set.
 
 ### ChildList
 
@@ -571,7 +680,11 @@ Functions loaded via `loadLibrary` are available in expressions using the `prefi
 
 FFI functions are resolved through the same evaluator as built-in functions. Arguments are converted from JSON types to the declared C types, the native function is invoked via libffi, and the result is converted back to a JSON-compatible value.
 
-### Available Functions
+### User-Defined Functions
+
+Functions registered via `defineFunction` are available in the same expression contexts as built-in functions. They are checked after built-ins but before FFI functions. See [defineFunction](#definefunction) for details.
+
+### Available Built-in Functions
 
 | Function | Args | Returns | Description |
 |----------|------|---------|-------------|

@@ -16,12 +16,12 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Template expansion for dynamic child lists
 - 7 new native component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
 
-**Phase 3 in progress.** LLM transport, native testing, visual styling, and FFI done:
+**Phase 3 in progress.** LLM transport, native testing, visual styling, FFI, and DX features done:
 - Bidirectional LLM transport via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) v0.8.0
 - 7 providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral
 - Default: Anthropic claude-haiku-4-5-20251001 (fast, cheap, good at tool calling)
 - Two modes: "tools" (preferred, structured tool calls) and "raw" (JSONL in text stream)
-- 8 A2UI tools: createSurface, updateComponents, updateDataModel, deleteSurface, setTheme, test, loadLibrary, inspectLibrary
+- 11 A2UI tools: createSurface, updateComponents, updateDataModel, deleteSurface, setTheme, test, loadAssets, loadLibrary, inspectLibrary, defineFunction, defineComponent
 - Action response: button `dataRefs` resolved from DataModel, sent back to LLM as user message → new turn
 - Conversation loop runs for the lifetime of the process — each user action triggers a new LLM turn
 - Native e2e testing framework: `jview test <file.jsonl>` runs inline test messages with real AppKit rendering
@@ -35,8 +35,9 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Generic FFI via libffi: load any native .dylib and call C functions with arbitrary signatures (10 types, handle table for pointers, variadic support)
 - Prompt caching for LLM-generated apps (SHA256 hash validation, atomic writes)
 - 7 sample apps in `sample_apps/` including sysinfo (FFI demo with libcurl, libsqlite3, libz)
+- DX abstractions: `defineFunction` (reusable parametric expressions), `defineComponent` (reusable component templates with ID rewriting + state scoping), `include` (file inclusion with circular detection), directory mode
 
-**249 tests pass** across protocol/, engine/, transport/ with race detection. 17 fixtures screenshot-verified.
+**292 tests pass** across protocol/, engine/, transport/ with race detection. 21 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -53,18 +54,22 @@ protocol/                      JSONL parsing, message types, dynamic values
   childlist.go                 ChildList (static array or template)
   action.go                    EventAction, Action, FunctionCall
   parse.go                     Parser (JSONL line reader)
-  parse_test.go                17 parser tests including style and error paths
+  parse_test.go                21 parser tests including style, error paths, defineFunction/defineComponent/include
 
 engine/                        Session routing, surface management, data model, bindings, FFI
-  session.go                   Routes messages to surfaces by surfaceId, handles loadLibrary
+  session.go                   Routes messages to surfaces by surfaceId, handles loadLibrary,
+                               defineFunction, defineComponent
   surface.go                   Tree + DataModel + Bindings + Resolver + render dispatch
-                               + template expansion + validation tracking + callback registration
+                               + template expansion + component instance expansion
+                               + validation tracking + callback registration
+  substitution.go              Shared JSON tree walkers: substituteParams, rewriteComponentIDs,
+                               rewriteScopedPaths, deepCopyJSON
   tree.go                      Flat component map, root detection, child ordering
   datamodel.go                 JSON Pointer get/set/delete with proper array shrinking
   binding.go                   BindingTracker: path -> component reverse index
   resolver.go                  Resolves DynamicValues against DataModel, registers bindings
                                Handles all 17 component types + function call evaluation
-  evaluator.go                 FunctionCall evaluator: 14 built-in + FFI fallthrough, recursive arg resolution
+  evaluator.go                 FunctionCall evaluator: 14 built-in + user-defined + FFI fallthrough, recursive arg resolution
   validator.go                 Validation engine: 5 rule types with custom messages
   ffilib.go                    Generic FFI via libffi: dlopen, ffi_prep_cif, ffi_call, handle table
   ffilib_config.go             FFI config loading (JSON file with library/function declarations)
@@ -72,10 +77,13 @@ engine/                        Session routing, surface management, data model, 
   ffi_e2e_test.go              FFI e2e tests with real system libraries (libcurl, libsqlite3, libz)
   evaluator_test.go            23 evaluator tests (all functions, nesting, paths, errors)
   validator_test.go            9 validator tests (all rules, custom messages, clearing)
-  integration_test.go          Integration tests including slider, choicepicker, validation, templates
+  substitution_test.go         8 tests for substituteParams, rewriteComponentIDs, rewriteScopedPaths
+  integration_test.go          Integration tests including slider, choicepicker, validation, templates,
+                               defineFunction, defineComponent, state scoping
   testrunner.go                Native e2e test runner (real AppKit assertions, 8 assert types)
   testrunner_test.go           Test runner tests (all assertion types, edge cases, simulation, integration)
-  e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout, calculator
+  e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout, calculator,
+                               custom_functions, component_defs, includes, calculator_v2, scoped_components
   *_test.go                    Unit tests for datamodel, binding, tree, resolver
   testhelper_test.go           goroutineLeakCheck, assertCreated, assertUpdated, newTestSession
 
@@ -110,17 +118,18 @@ platform/darwin/               macOS CGo + ObjC implementation
 
 transport/                     Message sources
   transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
-  file.go                      FileTransport (reads JSONL from file, SendAction is no-op)
+  file.go                      FileTransport (reads JSONL from file with include support, SendAction is no-op)
+  dir.go                       DirTransport (reads all *.jsonl in a directory, sorted)
   llm.go                       LLMTransport (bidirectional LLM conversation loop)
-  llm_tools.go                 8 A2UI tool definitions + toolCallToMessage + inspectLibrary + system prompt
+  llm_tools.go                 11 A2UI tool definitions + toolCallToMessage + inspectLibrary + system prompt
   cache.go                     Prompt caching (SHA256 hash, CachePaths, CacheValid, WriteHashFile)
   anthropic.go                 Anthropic provider with prompt caching (cache_control headers)
-  file_test.go                 5 channel lifecycle tests
+  file_test.go                 8 tests: channel lifecycle + include + circular detection + depth limit
   llm_test.go                  Mock provider tests: tool call parsing, transport lifecycle, action turns
   contract_test.go             RunTransportContractTests (reusable suite, includes SendActionDoesNotPanic)
   testhelper_test.go           goroutineLeakCheck, drain helpers
 
-testdata/                      JSONL fixtures (17 total)
+testdata/                      JSONL fixtures (21 top-level + subdirectories)
   hello.jsonl                  Card with heading + body text
   contact_form.jsonl           Form with data binding, preview card, checkbox, submit
   contact_form_test.jsonl      Native e2e test: contact form with test cases
@@ -138,6 +147,12 @@ testdata/                      JSONL fixtures (17 total)
   calculator_test.jsonl        Native e2e test: calculator with assertions
   ffi_runtime_test.jsonl       FFI: runtime loadLibrary + functionCall (typed signatures)
   ffi_test.jsonl               FFI: static --ffi-config with typed function declarations
+  assets.jsonl                 Asset loading demo
+  custom_functions.jsonl       defineFunction: digit buttons using appendDigit user function
+  component_defs.jsonl         defineComponent: DigitButton + OpButton templates
+  scoped_components.jsonl      State scoping: two Counter instances with isolated state
+  includes/                    Include feature: main.jsonl includes defs.jsonl
+  calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
 sample_apps/                   LLM-generated sample applications (7 apps)
   */prompt.txt                 Natural language app description (sent to LLM)
@@ -212,10 +227,16 @@ sample_apps/                   LLM-generated sample applications (7 apps)
 18. **libffi required** — the FFI subsystem links against `-lffi`. On macOS, libffi is in the SDK (`/Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk/usr/include/ffi`). Also available via Homebrew.
 19. **FFI test dylib** — `ffi_runtime_test.jsonl` and `ffi_test.jsonl` depend on `/tmp/jview_test_ffi_lib.dylib` which is only built by `go test ./engine/`. Run `make test` before `make verify` (or use `make check` which does both) for full FFI fixture rendering.
 20. **ChildList dual format** — LLMs generate `"children":{"static":["a","b"]}` (object with "static" key). Hand-written JSONL uses `"children":["a","b"]` (bare array). The parser handles both.
+21. **defineFunction body deep copy** — the function body is deep-copied before param substitution on every call. Without this, substitution mutates the shared definition and subsequent calls break.
+22. **Component expansion order** — `expandComponentInstances` runs before `expandTemplates`. Component instances are expanded first (useComponent → inline components), then forEach templates expand. Both operate on the same component list.
+23. **Component ID rewriting** — `_root` becomes the instance ID, `_X` becomes `instanceId__X`. Non-underscore IDs are left as-is. The instance's parent, style, and children (if any on the instance) override the template root's.
+24. **State scoping $ prefix** — `$` in paths is replaced with the scope value. Default scope is `"/instanceId"`. The `$` replacement is recursive through all JSON values including nested functionCall args and data model ops.
+25. **Include circular detection** — uses absolute path tracking. The include stack is a `map[string]bool` passed through recursive calls. Max depth is 10 to prevent accidental infinite recursion.
+26. **Directory mode vs include** — directory mode reads all `*.jsonl` sorted; include reads specific files. They can be combined but files will be processed twice (with "redefining" warnings for duplicate definitions). This is harmless.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. LLM transport and FFI are done. The immediate next priorities are:
+See `plan.md` for the full roadmap. LLM transport, FFI, and DX abstractions are done. The immediate next priorities are:
 
 1. **Tabs component** — tabbed container for multi-view layouts
 2. **Modal component** — overlay dialogs
@@ -227,11 +248,12 @@ See `plan.md` for the full roadmap. LLM transport and FFI are done. The immediat
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race (249 tests)
-make verify                          # Screenshot verification (17 fixtures)
+make test                            # Headless tests with -race (292 tests)
+make verify                          # Screenshot verification (21 fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
 build/jview testdata/hello.jsonl     # File mode (static fixture)
+build/jview testdata/calculator_v2/  # Directory mode (reads all *.jsonl sorted)
 build/jview --ffi-config libs.json testdata/app.jsonl  # With FFI config
 build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
 build/jview --prompt-file prompt.txt    # LLM mode with prompt from file

@@ -34,6 +34,9 @@ build/jview --llm ollama --model llama3 --prompt-file app-spec.txt --mode raw
 # File mode (static JSONL fixtures)
 build/jview testdata/hello.jsonl
 
+# Directory mode (reads all *.jsonl sorted)
+build/jview testdata/calculator_v2/
+
 # Load native libraries via FFI config
 build/jview --ffi-config libs.json testdata/app.jsonl
 
@@ -70,7 +73,7 @@ Native Cocoa widgets           <- visible on screen
 
 ### LLM Transport
 
-In LLM mode, jview connects to any supported provider via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) and gives the LLM 8 A2UI tools (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`, `setTheme`, `test`, `loadLibrary`, `inspectLibrary`). The LLM calls these tools to build the UI, load native libraries, and define inline tests. When the user clicks a button with `dataRefs`, the referenced data model values are resolved and sent back to the LLM as a new conversation turn.
+In LLM mode, jview connects to any supported provider via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) and gives the LLM 11 A2UI tools (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`, `setTheme`, `test`, `loadAssets`, `loadLibrary`, `inspectLibrary`, `defineFunction`, `defineComponent`). The LLM calls these tools to build the UI, define reusable abstractions, load native libraries, and define inline tests. When the user clicks a button with `dataRefs`, the referenced data model values are resolved and sent back to the LLM as a new conversation turn.
 
 Supported providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral.
 
@@ -96,6 +99,37 @@ Two modes:
 | List | Scrollable templated list |
 | ChoicePicker | Dropdown selection |
 | DateTimeInput | Date/time picker |
+
+### Reusable Abstractions
+
+jview supports `defineFunction`, `defineComponent`, and `include` to reduce verbosity and enable composition.
+
+**defineFunction** — reusable parametric expressions:
+```json
+{"type":"defineFunction","name":"appendDigit","params":["current","digit"],
+ "body":{"functionCall":{"name":"concat","args":[{"param":"current"},{"param":"digit"}]}}}
+```
+
+**defineComponent** — reusable component templates with ID rewriting and state scoping:
+```json
+{"type":"defineComponent","name":"DigitButton","params":["digit"],"components":[
+  {"componentId":"_root","type":"Button","props":{"label":{"param":"digit"}}}
+]}
+```
+Use with: `{"componentId":"btn7","useComponent":"DigitButton","args":{"digit":"7"}}`
+
+**include** — split apps across files:
+```json
+{"type":"include","path":"defs.jsonl"}
+```
+
+**State scoping** — `$` paths isolate state per instance:
+```json
+{"componentId":"c1","useComponent":"Counter","scope":"/c1"}
+{"componentId":"c2","useComponent":"Counter","scope":"/c2"}
+```
+
+See `testdata/calculator_v2/` for a full example using all four features.
 
 ### Native FFI
 
@@ -145,10 +179,10 @@ The LLM creates a window, initializes the data model, and renders components —
 
 ```
 protocol/          JSONL parsing, message types, dynamic values
-engine/            Session, Surface, DataModel, BindingTracker, Resolver, FFI registry
+engine/            Session, Surface, DataModel, BindingTracker, Resolver, Substitution, FFI registry
 renderer/          Platform-agnostic Renderer interface + mock for tests
 platform/darwin/   CGo + Objective-C AppKit implementation
-transport/         Message sources (file, LLM; future: SSE, WebSocket)
+transport/         Message sources (file, directory, LLM; future: SSE, WebSocket)
 testdata/          JSONL fixtures for testing and demos
 sample_apps/       LLM-generated sample applications (prompt.txt -> cached prompt.jsonl)
 ```
@@ -165,8 +199,8 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests (249 tests)
-make verify        # Build + screenshot capture for all fixtures (17 fixtures)
+make test          # Headless unit + integration tests (292 tests)
+make verify        # Build + screenshot capture for all fixtures (21 fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)
