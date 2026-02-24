@@ -217,6 +217,27 @@ func TestParseDynamicBooleanLiteral(t *testing.T) {
 	}
 }
 
+func TestParseChildListStaticObject(t *testing.T) {
+	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"row1","type":"Row","children":{"static":["btn1","btn2","btn3"]}}]}`
+	p := NewParser(strings.NewReader(input))
+
+	msg, err := p.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc := msg.Body.(UpdateComponents)
+	cl := uc.Components[0].Children
+	if cl == nil {
+		t.Fatal("expected children")
+	}
+	if len(cl.Static) != 3 {
+		t.Fatalf("static children = %d, want 3", len(cl.Static))
+	}
+	if cl.Static[0] != "btn1" || cl.Static[1] != "btn2" || cl.Static[2] != "btn3" {
+		t.Errorf("static = %v, want [btn1 btn2 btn3]", cl.Static)
+	}
+}
+
 func TestParseChildListTemplate(t *testing.T) {
 	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"list1","type":"Column","children":{"forEach":"/items","templateId":"item_tmpl","itemVariable":"item"}}]}`
 	p := NewParser(strings.NewReader(input))
