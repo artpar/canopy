@@ -4,11 +4,12 @@ Native macOS renderer for the [A2UI](https://a2ui.org) JSONL protocol. No webvie
 
 ## What It Does
 
-jview renders A2UI JSONL as native Cocoa widgets. Messages come from static files or live from an LLM — the LLM calls tools to create windows, add components, and update data, producing a native macOS UI. User interactions (button clicks, form input) flow back as conversation turns, so the LLM can update the UI in response.
+jview renders A2UI JSONL as native Cocoa widgets. Messages come from static files or live from an LLM — the LLM calls tools to create windows, add components, and update data, producing a native macOS UI. User interactions (button clicks, form input) flow back as conversation turns, so the LLM can update the UI in response. Native libraries can be loaded at runtime via FFI — call any C function with any signature directly from the UI layer.
 
 ```
 LLM / File  -->  Transport  -->  Engine (Go)  -->  CGo bridge  -->  AppKit (Obj-C)  -->  Native UI
-                     ^                                                                      |
+                     ^               |                                                      |
+                     |               +-- FFI (libffi) --> any native .dylib                 |
                      |--- user actions (button clicks, form data) <-------------------------+
 ```
 
@@ -32,6 +33,12 @@ build/jview --llm ollama --model llama3 --prompt-file app-spec.txt --mode raw
 
 # File mode (static JSONL fixtures)
 build/jview testdata/hello.jsonl
+
+# Load native libraries via FFI config
+build/jview --ffi-config libs.json testdata/app.jsonl
+
+# Run a sample app (from cache or LLM)
+make run-app A=sysinfo
 
 # Run all tests
 make test
@@ -63,7 +70,7 @@ Native Cocoa widgets           <- visible on screen
 
 ### LLM Transport
 
-In LLM mode, jview connects to any supported provider via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) and gives the LLM 6 A2UI tools (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`, `setTheme`, `test`). The LLM calls these tools to build the UI and define inline tests. When the user clicks a button with `dataRefs`, the referenced data model values are resolved and sent back to the LLM as a new conversation turn.
+In LLM mode, jview connects to any supported provider via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) and gives the LLM 8 A2UI tools (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`, `setTheme`, `test`, `loadLibrary`, `inspectLibrary`). The LLM calls these tools to build the UI, load native libraries, and define inline tests. When the user clicks a button with `dataRefs`, the referenced data model values are resolved and sent back to the LLM as a new conversation turn.
 
 Supported providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral.
 
@@ -89,6 +96,20 @@ Two modes:
 | List | Scrollable templated list |
 | ChoicePicker | Dropdown selection |
 | DateTimeInput | Date/time picker |
+
+### Native FFI
+
+Load any native dynamic library at runtime and call its functions directly from component expressions — no C wrappers needed. Uses libffi for generic function invocation with full type support.
+
+```json
+{"type":"loadLibrary","path":"libcurl.dylib","prefix":"curl","functions":[
+  {"name":"version","symbol":"curl_version","returnType":"string","paramTypes":[]}
+]}
+```
+
+Then use in components: `"content": {"functionCall": {"name": "curl.version", "args": []}}`
+
+Supported types: void, int, uint32, int64, uint64, float, double, pointer, string, bool. Pointer returns are managed via a handle table — pass handle IDs back to functions expecting pointer args.
 
 ### Data Binding
 
@@ -124,11 +145,12 @@ The LLM creates a window, initializes the data model, and renders components —
 
 ```
 protocol/          JSONL parsing, message types, dynamic values
-engine/            Session, Surface, DataModel, BindingTracker, Resolver
+engine/            Session, Surface, DataModel, BindingTracker, Resolver, FFI registry
 renderer/          Platform-agnostic Renderer interface + mock for tests
 platform/darwin/   CGo + Objective-C AppKit implementation
 transport/         Message sources (file, LLM; future: SSE, WebSocket)
 testdata/          JSONL fixtures for testing and demos
+sample_apps/       LLM-generated sample applications (prompt.txt -> cached prompt.jsonl)
 ```
 
 ## Testing
@@ -143,12 +165,17 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests
-make verify        # Build + screenshot capture for all fixtures
+make test          # Headless unit + integration tests (249 tests)
+make verify        # Build + screenshot capture for all fixtures (17 fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)
 build/jview test testdata/contact_form_test.jsonl
+
+# Sample apps
+make run-app A=sysinfo           # Run from cache or LLM
+make generate-app A=calculator   # Generate without opening window
+make regen-app A=todo            # Force-regenerate from LLM
 ```
 
 Native e2e tests use `test` messages interleaved in JSONL files. They run with real `darwin.Renderer` and query actual NSView frames, fonts, and colors. See [spec.md](spec.md#test) for the full test message format.

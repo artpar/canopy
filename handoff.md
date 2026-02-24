@@ -16,26 +16,27 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Template expansion for dynamic child lists
 - 7 new native component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
 
-**Phase 3 in progress.** LLM transport, native testing, and visual styling done:
+**Phase 3 in progress.** LLM transport, native testing, visual styling, and FFI done:
 - Bidirectional LLM transport via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) v0.8.0
 - 7 providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral
 - Default: Anthropic claude-haiku-4-5-20251001 (fast, cheap, good at tool calling)
 - Two modes: "tools" (preferred, structured tool calls) and "raw" (JSONL in text stream)
-- 6 A2UI tools map 1:1 to protocol message types, parsed through standard protocol.NewParser
+- 8 A2UI tools: createSurface, updateComponents, updateDataModel, deleteSurface, setTheme, test, loadLibrary, inspectLibrary
 - Action response: button `dataRefs` resolved from DataModel, sent back to LLM as user message → new turn
 - Conversation loop runs for the lifetime of the process — each user action triggers a new LLM turn
 - Native e2e testing framework: `jview test <file.jsonl>` runs inline test messages with real AppKit rendering
 - 8 assertion types (component, dataModel, children, notExists, count, action, layout, style) + event simulation
 - ObjC view queries for layout (NSView frame) and style (font, color, opacity)
-- 75 test runner tests covering all assertion types, edge cases, simulation, multi-surface, and integration flows
 - Visual styling system: `StyleProps` on any component (backgroundColor, textColor, cornerRadius, width, height, fontSize, fontWeight, textAlign, opacity)
 - Surface-level styling: window backgroundColor and configurable padding on createSurface
 - `fillEqually` justify value for equal-width/height children in Row/Column
 - Single `applyStyle()` function in platform layer — called after every CreateView/UpdateView, no per-component logic
 - Button with custom backgroundColor → auto-switches to borderless mode so layer bg shows through
-- Calculator sample app styled to match macOS Calculator.app (dark bg, circular buttons, orange operators, pill-shaped 0)
+- Generic FFI via libffi: load any native .dylib and call C functions with arbitrary signatures (10 types, handle table for pointers, variadic support)
+- Prompt caching for LLM-generated apps (SHA256 hash validation, atomic writes)
+- 7 sample apps in `sample_apps/` including sysinfo (FFI demo with libcurl, libsqlite3, libz)
 
-**149 tests pass** across protocol/, engine/, transport/ with race detection. 13 fixtures screenshot-verified.
+**249 tests pass** across protocol/, engine/, transport/ with race detection. 17 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -54,8 +55,8 @@ protocol/                      JSONL parsing, message types, dynamic values
   parse.go                     Parser (JSONL line reader)
   parse_test.go                17 parser tests including style and error paths
 
-engine/                        Session routing, surface management, data model, bindings
-  session.go                   Routes messages to surfaces by surfaceId
+engine/                        Session routing, surface management, data model, bindings, FFI
+  session.go                   Routes messages to surfaces by surfaceId, handles loadLibrary
   surface.go                   Tree + DataModel + Bindings + Resolver + render dispatch
                                + template expansion + validation tracking + callback registration
   tree.go                      Flat component map, root detection, child ordering
@@ -63,14 +64,18 @@ engine/                        Session routing, surface management, data model, 
   binding.go                   BindingTracker: path -> component reverse index
   resolver.go                  Resolves DynamicValues against DataModel, registers bindings
                                Handles all 17 component types + function call evaluation
-  evaluator.go                 FunctionCall evaluator: 14 functions, recursive arg resolution
+  evaluator.go                 FunctionCall evaluator: 14 built-in + FFI fallthrough, recursive arg resolution
   validator.go                 Validation engine: 5 rule types with custom messages
+  ffilib.go                    Generic FFI via libffi: dlopen, ffi_prep_cif, ffi_call, handle table
+  ffilib_config.go             FFI config loading (JSON file with library/function declarations)
+  ffilib_test.go               FFI unit tests (typed calls, handle table, error cases, session integration)
+  ffi_e2e_test.go              FFI e2e tests with real system libraries (libcurl, libsqlite3, libz)
   evaluator_test.go            23 evaluator tests (all functions, nesting, paths, errors)
   validator_test.go            9 validator tests (all rules, custom messages, clearing)
   integration_test.go          Integration tests including slider, choicepicker, validation, templates
   testrunner.go                Native e2e test runner (real AppKit assertions, 8 assert types)
-  testrunner_test.go           75 test runner tests (all assertion types, edge cases, simulation, integration)
-  e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout
+  testrunner_test.go           Test runner tests (all assertion types, edge cases, simulation, integration)
+  e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout, calculator
   *_test.go                    Unit tests for datamodel, binding, tree, resolver
   testhelper_test.go           goroutineLeakCheck, assertCreated, assertUpdated, newTestSession
 
@@ -107,15 +112,18 @@ transport/                     Message sources
   transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
   file.go                      FileTransport (reads JSONL from file, SendAction is no-op)
   llm.go                       LLMTransport (bidirectional LLM conversation loop)
-  llm_tools.go                 6 A2UI tool definitions + toolCallToMessage converter + system prompt
+  llm_tools.go                 8 A2UI tool definitions + toolCallToMessage + inspectLibrary + system prompt
+  cache.go                     Prompt caching (SHA256 hash, CachePaths, CacheValid, WriteHashFile)
+  anthropic.go                 Anthropic provider with prompt caching (cache_control headers)
   file_test.go                 5 channel lifecycle tests
   llm_test.go                  Mock provider tests: tool call parsing, transport lifecycle, action turns
   contract_test.go             RunTransportContractTests (reusable suite, includes SendActionDoesNotPanic)
   testhelper_test.go           goroutineLeakCheck, drain helpers
 
-testdata/                      JSONL fixtures (13 total)
+testdata/                      JSONL fixtures (17 total)
   hello.jsonl                  Card with heading + body text
   contact_form.jsonl           Form with data binding, preview card, checkbox, submit
+  contact_form_test.jsonl      Native e2e test: contact form with test cases
   layout.jsonl                 Nested Row/Column with Cards and Button
   function_calls.jsonl         concat, toUpperCase, format with nested length
   divider.jsonl                Text above/below separator
@@ -126,7 +134,21 @@ testdata/                      JSONL fixtures (13 total)
   datetimeinput.jsonl          Date picker with binding
   validation.jsonl             Form with required + minLength + email rules
   list.jsonl                   List with forEach template over 3 items
-  contact_form_test.jsonl      Native e2e test: contact form with 6 test cases
+  calculator.jsonl             Full calculator with styled buttons and expression evaluator
+  calculator_test.jsonl        Native e2e test: calculator with assertions
+  ffi_runtime_test.jsonl       FFI: runtime loadLibrary + functionCall (typed signatures)
+  ffi_test.jsonl               FFI: static --ffi-config with typed function declarations
+
+sample_apps/                   LLM-generated sample applications (7 apps)
+  */prompt.txt                 Natural language app description (sent to LLM)
+  */prompt.jsonl               Cached JSONL output (auto-generated, .gitignored except sysinfo)
+  sysinfo/                     FFI demo: loads libcurl, libsqlite3, libz and displays versions
+  calculator/                  Calculator app matching macOS Calculator.app style
+  todo/                        Todo list app
+  dashboard/                   Dashboard layout demo
+  gallery/                     Image gallery
+  registration/                Registration form
+  settings/                    Settings panel
 ```
 
 ## Key Patterns
@@ -185,10 +207,15 @@ testdata/                      JSONL fixtures (13 total)
 13. **Slider callback float conversion** — slider eventData arrives as a string but `surface.go` converts it to float64 via `fmt.Sscanf` before storing in DataModel. Test expectations must use numbers, not strings.
 14. **Test style vs layout fields** — TestStep has separate `Layout` and `Style` fields (each `map[string]interface{}`). The `assertStyle` function reads from `step.Style`, not `step.Layout`. These must not be conflated.
 15. **assertChildren/assertCount on nonexistent components** — returns a "not found" error, not a silent 0 or empty list. Tests that check count=0 must use an existing component.
+16. **FFI string returns are library-owned** — `returnType: "string"` copies via `C.GoString()` but does NOT free the native pointer. The library is assumed to own the memory (static buffers, etc.). If the native code malloc'd the string, call a registered free function explicitly.
+17. **FFI pointer handle table** — pointer returns become integer handle IDs. Pass handle IDs (not raw pointers) back to functions expecting `pointer` args. Invalid handle IDs produce a clear error, not a crash.
+18. **libffi required** — the FFI subsystem links against `-lffi`. On macOS, libffi is in the SDK (`/Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk/usr/include/ffi`). Also available via Homebrew.
+19. **FFI test dylib** — `ffi_runtime_test.jsonl` and `ffi_test.jsonl` depend on `/tmp/jview_test_ffi_lib.dylib` which is only built by `go test ./engine/`. Run `make test` before `make verify` (or use `make check` which does both) for full FFI fixture rendering.
+20. **ChildList dual format** — LLMs generate `"children":{"static":["a","b"]}` (object with "static" key). Hand-written JSONL uses `"children":["a","b"]` (bare array). The parser handles both.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. LLM transport is done. The immediate next priorities are:
+See `plan.md` for the full roadmap. LLM transport and FFI are done. The immediate next priorities are:
 
 1. **Tabs component** — tabbed container for multi-view layouts
 2. **Modal component** — overlay dialogs
@@ -200,15 +227,19 @@ See `plan.md` for the full roadmap. LLM transport is done. The immediate next pr
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race
-make verify                          # Screenshot verification (13 fixtures)
+make test                            # Headless tests with -race (249 tests)
+make verify                          # Screenshot verification (17 fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
 build/jview testdata/hello.jsonl     # File mode (static fixture)
+build/jview --ffi-config libs.json testdata/app.jsonl  # With FFI config
 build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
 build/jview --prompt-file prompt.txt    # LLM mode with prompt from file
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
 make verify-fixture F=testdata/hello.jsonl  # Single fixture screenshot
+make run-app A=sysinfo               # Run a sample app
+make generate-apps                   # Generate all sample apps (headless)
+make regen-app A=calculator          # Force-regenerate a sample app
 ```
 
 ## Environment

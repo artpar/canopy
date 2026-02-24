@@ -162,6 +162,67 @@ Defines an inline test case with assertions and event simulations. Test messages
 - `jview test` uses real AppKit rendering (not mocked) with synchronous dispatch
 - Exit code 0 if all pass, 1 if any fail
 
+### loadLibrary
+
+Loads a native dynamic library at runtime and registers its exported functions for use in component expressions via `functionCall`. Uses libffi for generic function invocation — any C function with any signature can be called directly, no wrappers needed.
+
+```json
+{
+  "type": "loadLibrary",
+  "path": "libcurl.dylib",
+  "prefix": "curl",
+  "functions": [
+    {"name": "version", "symbol": "curl_version", "returnType": "string", "paramTypes": []},
+    {"name": "init", "symbol": "curl_easy_init", "returnType": "pointer", "paramTypes": []},
+    {"name": "perform", "symbol": "curl_easy_perform", "returnType": "int", "paramTypes": ["pointer"]},
+    {"name": "cleanup", "symbol": "curl_easy_cleanup", "returnType": "void", "paramTypes": ["pointer"]}
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| path | string | yes | Path to the dynamic library (.dylib/.so/.dll). Resolved by dlopen. |
+| prefix | string | yes | Namespace prefix for registered functions (e.g. `curl` → callable as `curl.version`) |
+| functions | FuncDef[] | yes | Array of function declarations |
+
+#### Function Declaration
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | yes | Function name used in expressions (prefixed: `prefix.name`) |
+| symbol | string | yes | Exported C symbol name in the library |
+| returnType | string | yes | C return type (see type table below) |
+| paramTypes | string[] | yes | C parameter types in order (empty array for no-arg functions) |
+| fixedArgs | int | no | For variadic functions: number of fixed parameters before the `...` part |
+
+#### Supported Types
+
+| Type | C equivalent | JSON representation |
+|------|-------------|---------------------|
+| `void` | void | null (return only) |
+| `int` | int32_t | number |
+| `uint32` | uint32_t | number |
+| `int64` | int64_t | number |
+| `uint64` | uint64_t | number |
+| `float` | float | number |
+| `double` | double | number |
+| `string` | const char* | string |
+| `bool` | int (0/1) | boolean |
+| `pointer` | void* | number (handle ID) |
+
+#### Pointer Handle Table
+
+Functions returning `pointer` register the raw pointer in an internal handle table and return an integer handle ID. Pass that handle ID as an argument to functions expecting a `pointer` parameter — the engine resolves it back to the actual pointer. This allows safe opaque pointer management across function calls (e.g. `init` → handle → `perform(handle)` → `cleanup(handle)`).
+
+#### String Return Convention
+
+`returnType: "string"` returns a Go string copied from the native `char*`. The native memory is assumed library-owned and is NOT freed by the engine.
+
+Multiple `loadLibrary` messages can be sent. Libraries persist for the session lifetime. The FFI registry is propagated to all existing surfaces after loading.
+
+`loadLibrary` does not require a `surfaceId` — it operates at the session level.
+
 ### setTheme
 
 Changes the visual theme. *Not yet implemented — reserved for Phase 3.*
@@ -498,6 +559,17 @@ Resolves to the current value at that JSON Pointer in the data model.
 ```
 
 Args are resolved recursively — they can be literals, path refs, or nested function calls.
+
+### Native FFI Functions
+
+Functions loaded via `loadLibrary` are available in expressions using the `prefix.name` convention:
+
+```json
+{"functionCall": {"name": "curl.version", "args": []}}
+{"functionCall": {"name": "z.compressBound", "args": [10000]}}
+```
+
+FFI functions are resolved through the same evaluator as built-in functions. Arguments are converted from JSON types to the declared C types, the native function is invoked via libffi, and the result is converted back to a JSON-compatible value.
 
 ### Available Functions
 
