@@ -20,10 +20,12 @@ func a2uiTools() []anyllm.Tool {
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"surfaceId": map[string]any{"type": "string", "description": "Unique surface identifier"},
-						"title":     map[string]any{"type": "string", "description": "Window title"},
-						"width":     map[string]any{"type": "integer", "description": "Window width in points (default 800)"},
-						"height":    map[string]any{"type": "integer", "description": "Window height in points (default 600)"},
+						"surfaceId":       map[string]any{"type": "string", "description": "Unique surface identifier"},
+						"title":           map[string]any{"type": "string", "description": "Window title"},
+						"width":           map[string]any{"type": "integer", "description": "Window width in points (default 800)"},
+						"height":          map[string]any{"type": "integer", "description": "Window height in points (default 600)"},
+						"backgroundColor": map[string]any{"type": "string", "description": "Window background color as hex (#RRGGBB)"},
+						"padding":         map[string]any{"type": "integer", "description": "Root view inset in points (default 20, use -1 for edge-to-edge)"},
 					},
 					"required": []string{"surfaceId", "title"},
 				},
@@ -48,6 +50,21 @@ func a2uiTools() []anyllm.Tool {
 									"parentId":    map[string]any{"type": "string"},
 									"children":    map[string]any{"type": "object"},
 									"props":       map[string]any{"type": "object"},
+									"style": map[string]any{
+										"type":        "object",
+										"description": "Visual styling overrides",
+										"properties": map[string]any{
+											"backgroundColor": map[string]any{"type": "string", "description": "Background color (#RRGGBB)"},
+											"textColor":       map[string]any{"type": "string", "description": "Text color (#RRGGBB)"},
+											"cornerRadius":    map[string]any{"type": "number", "description": "Corner radius in points"},
+											"width":           map[string]any{"type": "number", "description": "Fixed width in points"},
+											"height":          map[string]any{"type": "number", "description": "Fixed height in points"},
+											"fontSize":        map[string]any{"type": "number", "description": "Font size in points"},
+											"fontWeight":      map[string]any{"type": "string", "enum": []string{"bold", "semibold", "medium", "light"}},
+											"textAlign":       map[string]any{"type": "string", "enum": []string{"left", "center", "right"}},
+											"opacity":         map[string]any{"type": "number", "description": "Opacity 0.0-1.0"},
+										},
+									},
 								},
 								"required": []string{"componentId", "type"},
 							},
@@ -194,8 +211,8 @@ func systemPrompt(userPrompt string) string {
 
 AVAILABLE COMPONENTS:
 - Text: Display text. Props: content (string), variant ("h1"|"h2"|"h3"|"body"|"caption")
-- Row: Horizontal layout. Props: gap (int), padding (int), justify, align
-- Column: Vertical layout. Props: gap (int), padding (int), justify, align
+- Row: Horizontal layout. Props: gap (int), padding (int), justify ("start"|"center"|"end"|"spaceBetween"|"spaceAround"|"fillEqually"), align ("start"|"center"|"end"|"stretch")
+- Column: Vertical layout. Props: gap (int), padding (int), justify, align (same values as Row)
 - Card: Titled container. Props: title (string), subtitle (string)
 - Button: Clickable button. Props: label (string), style ("primary"|"secondary"|"destructive"), onClick.action.type ("serverAction"), onClick.action.name (string), onClick.action.dataRefs (array of JSON pointers)
 - TextField: Text input. Props: placeholder (string), value (string), dataBinding (JSON pointer)
@@ -208,8 +225,25 @@ AVAILABLE COMPONENTS:
 - ChoicePicker: Dropdown/selection. Props: options (array of {value, label}), dataBinding (JSON pointer), mutuallyExclusive (bool)
 - DateTimeInput: Date/time picker. Props: enableDate (bool), enableTime (bool), dataBinding (JSON pointer)
 
+VISUAL STYLING:
+Any component can have a "style" object alongside "props" with these properties:
+- backgroundColor: hex color (#RRGGBB) — sets background; on Buttons, switches to borderless mode
+- textColor: hex color — sets text/tint color
+- cornerRadius: number — rounds corners
+- width/height: number — fixed dimensions in points
+- fontSize: number — font size in points
+- fontWeight: "bold"|"semibold"|"medium"|"light"
+- textAlign: "left"|"center"|"right"
+- opacity: 0.0-1.0
+
+Surface-level styling:
+- backgroundColor on createSurface sets the window background color
+- padding on createSurface sets root inset (default 20, use -1 for edge-to-edge)
+
+Layout tip: use justify:"fillEqually" on Row/Column to make all children equal-width/height.
+
 WORKFLOW:
-1. Call a2ui_createSurface to create a window
+1. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding)
 2. Call a2ui_updateDataModel to set initial data (if needed)
 3. Call a2ui_updateComponents to create the component tree
 4. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.

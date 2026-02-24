@@ -26,6 +26,19 @@ const (
 	CompAudioPlayer   ComponentType = "AudioPlayer"
 )
 
+// StyleProps holds visual styling overrides applicable to any component.
+type StyleProps struct {
+	BackgroundColor string  `json:"backgroundColor,omitempty"`
+	TextColor       string  `json:"textColor,omitempty"`
+	CornerRadius    float64 `json:"cornerRadius,omitempty"`
+	Width           float64 `json:"width,omitempty"`
+	Height          float64 `json:"height,omitempty"`
+	FontSize        float64 `json:"fontSize,omitempty"`
+	FontWeight      string  `json:"fontWeight,omitempty"` // bold, medium, light
+	TextAlign       string  `json:"textAlign,omitempty"`  // left, center, right
+	Opacity         float64 `json:"opacity,omitempty"`
+}
+
 // Component is a single A2UI component definition.
 type Component struct {
 	ComponentID string        `json:"componentId"`
@@ -33,6 +46,7 @@ type Component struct {
 	ParentID    string        `json:"parentId,omitempty"`
 	Children    *ChildList    `json:"children,omitempty"`
 	Props       Props         `json:"props,omitempty"`
+	Style       StyleProps    `json:"style,omitempty"`
 }
 
 // Props holds all possible component properties across types.

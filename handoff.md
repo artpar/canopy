@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated after Phase 3 LLM transport completion. This document gives a new session everything it needs to continue work on jview.
+Last updated after native testing framework completion and hardening. This document gives a new session everything it needs to continue work on jview.
 
 ## What Is jview
 
@@ -16,7 +16,7 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Template expansion for dynamic child lists
 - 7 new native component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
 
-**Phase 3 in progress.** LLM transport and native testing done:
+**Phase 3 in progress.** LLM transport, native testing, and visual styling done:
 - Bidirectional LLM transport via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) v0.8.0
 - 7 providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral
 - Default: Anthropic claude-haiku-4-5-20251001 (fast, cheap, good at tool calling)
@@ -27,8 +27,15 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Native e2e testing framework: `jview test <file.jsonl>` runs inline test messages with real AppKit rendering
 - 8 assertion types (component, dataModel, children, notExists, count, action, layout, style) + event simulation
 - ObjC view queries for layout (NSView frame) and style (font, color, opacity)
+- 75 test runner tests covering all assertion types, edge cases, simulation, multi-surface, and integration flows
+- Visual styling system: `StyleProps` on any component (backgroundColor, textColor, cornerRadius, width, height, fontSize, fontWeight, textAlign, opacity)
+- Surface-level styling: window backgroundColor and configurable padding on createSurface
+- `fillEqually` justify value for equal-width/height children in Row/Column
+- Single `applyStyle()` function in platform layer — called after every CreateView/UpdateView, no per-component logic
+- Button with custom backgroundColor → auto-switches to borderless mode so layer bg shows through
+- Calculator sample app styled to match macOS Calculator.app (dark bg, circular buttons, orange operators, pill-shaped 0)
 
-**108+ tests pass** across protocol/, engine/, transport/ with race detection. 12 fixtures screenshot-verified.
+**149 tests pass** across protocol/, engine/, transport/ with race detection. 13 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -45,7 +52,7 @@ protocol/                      JSONL parsing, message types, dynamic values
   childlist.go                 ChildList (static array or template)
   action.go                    EventAction, Action, FunctionCall
   parse.go                     Parser (JSONL line reader)
-  parse_test.go                15 parser tests including error paths
+  parse_test.go                17 parser tests including style and error paths
 
 engine/                        Session routing, surface management, data model, bindings
   session.go                   Routes messages to surfaces by surfaceId
@@ -62,7 +69,7 @@ engine/                        Session routing, surface management, data model, 
   validator_test.go            9 validator tests (all rules, custom messages, clearing)
   integration_test.go          Integration tests including slider, choicepicker, validation, templates
   testrunner.go                Native e2e test runner (real AppKit assertions, 8 assert types)
-  testrunner_test.go           16 test runner tests (pass/fail/simulate/action/layout/style)
+  testrunner_test.go           75 test runner tests (all assertion types, edge cases, simulation, integration)
   e2e_test.go                  E2E tests: hello, contact_form, function_calls, list, layout
   *_test.go                    Unit tests for datamodel, binding, tree, resolver
   testhelper_test.go           goroutineLeakCheck, assertCreated, assertUpdated, newTestSession
@@ -94,6 +101,7 @@ platform/darwin/               macOS CGo + ObjC implementation
   choicepicker.go/.h/.m        NSPopUpButton with option label/value pairs
   datetimeinput.go/.h/.m       NSDatePicker with ISO 8601 formatting
   list.go/.h/.m                Vertical NSStackView container (delegates to stackview)
+  style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment)
 
 transport/                     Message sources
   transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
@@ -174,6 +182,9 @@ testdata/                      JSONL fixtures (13 total)
 10. **NSBox (Card) hugging** — NSBox has high content-hugging priority by default. Lowering it alone doesn't help without explicit width constraints from the parent stack.
 11. **LLM tool call loop** — the LLM may return `finish_reason=tool_calls` multiple times in one turn (e.g. createSurface → updateDataModel → updateComponents). The transport loops until `finish_reason=stop`, then waits for a user action.
 12. **Go 1.25 required** — any-llm-go v0.8.0 requires Go 1.25+. System Go may be older; use `~/go/bin/go1.25.0` for builds.
+13. **Slider callback float conversion** — slider eventData arrives as a string but `surface.go` converts it to float64 via `fmt.Sscanf` before storing in DataModel. Test expectations must use numbers, not strings.
+14. **Test style vs layout fields** — TestStep has separate `Layout` and `Style` fields (each `map[string]interface{}`). The `assertStyle` function reads from `step.Style`, not `step.Layout`. These must not be conflated.
+15. **assertChildren/assertCount on nonexistent components** — returns a "not found" error, not a silent 0 or empty list. Tests that check count=0 must use an existing component.
 
 ## What To Work On Next
 
@@ -190,7 +201,7 @@ See `plan.md` for the full roadmap. LLM transport is done. The immediate next pr
 ```bash
 make build                           # Build binary to build/jview
 make test                            # Headless tests with -race
-make verify                          # Screenshot verification (12 fixtures)
+make verify                          # Screenshot verification (13 fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
 build/jview testdata/hello.jsonl     # File mode (static fixture)

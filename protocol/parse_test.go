@@ -238,6 +238,62 @@ func TestParseChildListStaticObject(t *testing.T) {
 	}
 }
 
+func TestParseComponentStyle(t *testing.T) {
+	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"btn1","type":"Button","props":{"label":"Go"},"style":{"backgroundColor":"#FF9F0A","textColor":"#FFFFFF","cornerRadius":8,"width":100,"height":52,"fontSize":20,"fontWeight":"bold","textAlign":"center","opacity":0.9}}]}`
+	p := NewParser(strings.NewReader(input))
+
+	msg, err := p.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc := msg.Body.(UpdateComponents)
+	s := uc.Components[0].Style
+	if s.BackgroundColor != "#FF9F0A" {
+		t.Errorf("backgroundColor = %q, want #FF9F0A", s.BackgroundColor)
+	}
+	if s.TextColor != "#FFFFFF" {
+		t.Errorf("textColor = %q, want #FFFFFF", s.TextColor)
+	}
+	if s.CornerRadius != 8 {
+		t.Errorf("cornerRadius = %v, want 8", s.CornerRadius)
+	}
+	if s.Width != 100 {
+		t.Errorf("width = %v, want 100", s.Width)
+	}
+	if s.Height != 52 {
+		t.Errorf("height = %v, want 52", s.Height)
+	}
+	if s.FontSize != 20 {
+		t.Errorf("fontSize = %v, want 20", s.FontSize)
+	}
+	if s.FontWeight != "bold" {
+		t.Errorf("fontWeight = %q, want bold", s.FontWeight)
+	}
+	if s.TextAlign != "center" {
+		t.Errorf("textAlign = %q, want center", s.TextAlign)
+	}
+	if s.Opacity != 0.9 {
+		t.Errorf("opacity = %v, want 0.9", s.Opacity)
+	}
+}
+
+func TestParseCreateSurfaceWithStyle(t *testing.T) {
+	input := `{"type":"createSurface","surfaceId":"main","title":"Test","backgroundColor":"#1C1C1E","padding":-1}`
+	p := NewParser(strings.NewReader(input))
+
+	msg, err := p.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := msg.Body.(CreateSurface)
+	if cs.BackgroundColor != "#1C1C1E" {
+		t.Errorf("backgroundColor = %q, want #1C1C1E", cs.BackgroundColor)
+	}
+	if cs.Padding != -1 {
+		t.Errorf("padding = %d, want -1", cs.Padding)
+	}
+}
+
 func TestParseChildListTemplate(t *testing.T) {
 	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"list1","type":"Column","children":{"forEach":"/items","templateId":"item_tmpl","itemVariable":"item"}}]}`
 	p := NewParser(strings.NewReader(input))

@@ -693,6 +693,56 @@ func TestOnActionPropagation(t *testing.T) {
 	}
 }
 
+func TestStylePassthrough(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T","backgroundColor":"#1C1C1E","padding":-1}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"btn","type":"Button","props":{"label":"Go"},"style":{"backgroundColor":"#FF9F0A","textColor":"#FFFFFF","cornerRadius":8,"height":52,"fontSize":20,"fontWeight":"bold","textAlign":"center","opacity":0.9}}]}`)
+
+	// Check window spec
+	if len(mock.Windows) != 1 {
+		t.Fatalf("windows = %d, want 1", len(mock.Windows))
+	}
+	if mock.Windows[0].BackgroundColor != "#1C1C1E" {
+		t.Errorf("window bg = %q, want #1C1C1E", mock.Windows[0].BackgroundColor)
+	}
+	if mock.Windows[0].Padding != -1 {
+		t.Errorf("window padding = %d, want -1", mock.Windows[0].Padding)
+	}
+
+	// Check component style passes through to RenderNode
+	node := mock.LastNode("s1", "btn")
+	if node == nil {
+		t.Fatal("btn node not found")
+	}
+	if node.Style.BackgroundColor != "#FF9F0A" {
+		t.Errorf("style.backgroundColor = %q, want #FF9F0A", node.Style.BackgroundColor)
+	}
+	if node.Style.TextColor != "#FFFFFF" {
+		t.Errorf("style.textColor = %q, want #FFFFFF", node.Style.TextColor)
+	}
+	if node.Style.CornerRadius != 8 {
+		t.Errorf("style.cornerRadius = %v, want 8", node.Style.CornerRadius)
+	}
+	if node.Style.Height != 52 {
+		t.Errorf("style.height = %v, want 52", node.Style.Height)
+	}
+	if node.Style.FontSize != 20 {
+		t.Errorf("style.fontSize = %v, want 20", node.Style.FontSize)
+	}
+	if node.Style.FontWeight != "bold" {
+		t.Errorf("style.fontWeight = %q, want bold", node.Style.FontWeight)
+	}
+	if node.Style.TextAlign != "center" {
+		t.Errorf("style.textAlign = %q, want center", node.Style.TextAlign)
+	}
+	if node.Style.Opacity != 0.9 {
+		t.Errorf("style.opacity = %v, want 0.9", node.Style.Opacity)
+	}
+}
+
 func TestSessionUnknownMessageType(t *testing.T) {
 	sess, _ := newTestSession()
 

@@ -25,13 +25,16 @@ type DarwinRenderer struct {
 	types map[renderer.ViewHandle]protocol.ComponentType
 	// surfaceID → componentID → eventType → CallbackID
 	callbacks map[string]map[string]map[string]renderer.CallbackID
+	// surfaceID → padding
+	surfacePadding map[string]int
 }
 
 func NewRenderer() *DarwinRenderer {
 	return &DarwinRenderer{
-		handles:   make(map[string]map[string]renderer.ViewHandle),
-		types:     make(map[renderer.ViewHandle]protocol.ComponentType),
-		callbacks: make(map[string]map[string]map[string]renderer.CallbackID),
+		handles:        make(map[string]map[string]renderer.ViewHandle),
+		types:          make(map[renderer.ViewHandle]protocol.ComponentType),
+		callbacks:      make(map[string]map[string]map[string]renderer.CallbackID),
+		surfacePadding: make(map[string]int),
 	}
 }
 
@@ -40,8 +43,14 @@ func (r *DarwinRenderer) CreateWindow(spec renderer.WindowSpec) {
 	defer C.free(unsafe.Pointer(cTitle))
 	cSID := C.CString(spec.SurfaceID)
 	defer C.free(unsafe.Pointer(cSID))
+	cBg := C.CString(spec.BackgroundColor)
+	defer C.free(unsafe.Pointer(cBg))
 
-	C.JVCreateWindow(cTitle, C.int(spec.Width), C.int(spec.Height), cSID)
+	C.JVCreateWindow(cTitle, C.int(spec.Width), C.int(spec.Height), cSID, cBg)
+
+	r.mu.Lock()
+	r.surfacePadding[spec.SurfaceID] = spec.Padding
+	r.mu.Unlock()
 }
 
 func (r *DarwinRenderer) DestroyWindow(surfaceID string) {
@@ -92,6 +101,8 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 		return 0
 	}
 
+	applyStyle(handle, node.Style)
+
 	r.mu.Lock()
 	if r.handles[surfaceID] == nil {
 		r.handles[surfaceID] = make(map[string]renderer.ViewHandle)
@@ -136,6 +147,8 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 	default:
 		log.Printf("darwin: unsupported update for component type %s", node.Type)
 	}
+
+	applyStyle(handle, node.Style)
 }
 
 func (r *DarwinRenderer) SetChildren(surfaceID string, parentHandle renderer.ViewHandle, childHandles []renderer.ViewHandle) {
@@ -197,7 +210,12 @@ func (r *DarwinRenderer) UnregisterCallback(id renderer.CallbackID) {
 func (r *DarwinRenderer) SetRootView(surfaceID string, handle renderer.ViewHandle) {
 	cSID := C.CString(surfaceID)
 	defer C.free(unsafe.Pointer(cSID))
-	C.JVSetWindowRootView(cSID, unsafe.Pointer(handle))
+
+	r.mu.Lock()
+	padding := r.surfacePadding[surfaceID]
+	r.mu.Unlock()
+
+	C.JVSetWindowRootView(cSID, unsafe.Pointer(handle), C.int(padding))
 }
 
 func (r *DarwinRenderer) GetComponentType(handle renderer.ViewHandle) protocol.ComponentType {

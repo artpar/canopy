@@ -143,6 +143,7 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 		p.Padding = cp.Padding
 	}
 
+	node.Style = comp.Style
 	return node
 }
 

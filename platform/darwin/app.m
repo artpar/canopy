@@ -81,7 +81,20 @@ void JVForceLayout(const char* surfaceID) {
     [window.contentView layoutSubtreeIfNeeded];
 }
 
-void* JVCreateWindow(const char* title, int width, int height, const char* surfaceID) {
+static NSColor* jvColorFromHex(NSString *hex) {
+    if ([hex length] < 7 || [hex characterAtIndex:0] != '#') return nil;
+    unsigned int r = 0, g = 0, b = 0;
+    NSScanner *scanner;
+    scanner = [NSScanner scannerWithString:[hex substringWithRange:NSMakeRange(1, 2)]];
+    [scanner scanHexInt:&r];
+    scanner = [NSScanner scannerWithString:[hex substringWithRange:NSMakeRange(3, 2)]];
+    [scanner scanHexInt:&g];
+    scanner = [NSScanner scannerWithString:[hex substringWithRange:NSMakeRange(5, 2)]];
+    [scanner scanHexInt:&b];
+    return [NSColor colorWithSRGBRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:1.0];
+}
+
+void* JVCreateWindow(const char* title, int width, int height, const char* surfaceID, const char* backgroundColor) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSString *windowTitle = [NSString stringWithUTF8String:title];
 
@@ -99,6 +112,15 @@ void* JVCreateWindow(const char* title, int width, int height, const char* surfa
     [window center];
     [window makeKeyAndOrderFront:nil];
 
+    // Apply background color if specified
+    NSString *bgStr = [NSString stringWithUTF8String:backgroundColor];
+    if ([bgStr length] > 0) {
+        NSColor *color = jvColorFromHex(bgStr);
+        if (color) {
+            window.backgroundColor = color;
+        }
+    }
+
     windowMap[sid] = window;
     return (__bridge void*)window;
 }
@@ -112,7 +134,7 @@ void JVDestroyWindow(const char* surfaceID) {
     }
 }
 
-void JVSetWindowRootView(const char* surfaceID, void* view) {
+void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSWindow *window = windowMap[sid];
     if (!window) return;
@@ -128,8 +150,9 @@ void JVSetWindowRootView(const char* surfaceID, void* view) {
 
     [contentView addSubview:nsView];
 
-    // Pin root view with 20pt insets; bottom stays loose so content sizes from top
-    CGFloat inset = 20.0;
+    // Use specified padding; default to 20 if not set (padding==0 means no value provided from protocol)
+    // To get edge-to-edge, set padding to -1 in protocol which maps to 0 here
+    CGFloat inset = (padding > 0) ? (CGFloat)padding : (padding < 0) ? 0.0 : 20.0;
     NSLayoutConstraint *bottom = [nsView.bottomAnchor constraintLessThanOrEqualToAnchor:contentView.bottomAnchor constant:-inset];
     [NSLayoutConstraint activateConstraints:@[
         [nsView.topAnchor constraintEqualToAnchor:contentView.topAnchor constant:inset],

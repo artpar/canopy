@@ -14,6 +14,7 @@ type RenderNode struct {
 	ComponentID string
 	Type        protocol.ComponentType
 	Props       ResolvedProps
+	Style       protocol.StyleProps
 	ChildIDs    []string
 	Callbacks   map[string]CallbackID // eventType → CallbackID
 }
@@ -127,8 +128,10 @@ const (
 
 // WindowSpec describes a new window to create.
 type WindowSpec struct {
-	SurfaceID string
-	Title     string
-	Width     int
-	Height    int
+	SurfaceID       string
+	Title           string
+	Width           int
+	Height          int
+	BackgroundColor string
+	Padding         int
 }

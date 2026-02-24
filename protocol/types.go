@@ -82,11 +82,13 @@ func (e *Envelope) UnmarshalJSON(data []byte) error {
 
 // CreateSurface tells the renderer to open a new surface (window).
 type CreateSurface struct {
-	Type      MessageType `json:"type"`
-	SurfaceID string      `json:"surfaceId"`
-	Title     string      `json:"title"`
-	Width     int         `json:"width,omitempty"`
-	Height    int         `json:"height,omitempty"`
+	Type            MessageType `json:"type"`
+	SurfaceID       string      `json:"surfaceId"`
+	Title           string      `json:"title"`
+	Width           int         `json:"width,omitempty"`
+	Height          int         `json:"height,omitempty"`
+	BackgroundColor string      `json:"backgroundColor,omitempty"`
+	Padding         int         `json:"padding,omitempty"`
 }
 
 // DeleteSurface removes a surface.

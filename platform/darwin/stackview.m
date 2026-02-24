@@ -25,6 +25,8 @@ static void applyDistribution(NSStackView *stack, NSString *justify) {
         stack.distribution = NSStackViewDistributionEqualSpacing;
     } else if ([justify isEqualToString:@"center"]) {
         stack.distribution = NSStackViewDistributionEqualSpacing;
+    } else if ([justify isEqualToString:@"fillEqually"]) {
+        stack.distribution = NSStackViewDistributionFillEqually;
     } else {
         stack.distribution = NSStackViewDistributionFill;
     }

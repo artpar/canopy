@@ -86,10 +86,12 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 	}
 
 	spec := renderer.WindowSpec{
-		SurfaceID: cs.SurfaceID,
-		Title:     cs.Title,
-		Width:     width,
-		Height:    height,
+		SurfaceID:       cs.SurfaceID,
+		Title:           cs.Title,
+		Width:           width,
+		Height:          height,
+		BackgroundColor: cs.BackgroundColor,
+		Padding:         cs.Padding,
 	}
 
 	s.dispatch.RunOnMain(func() {
