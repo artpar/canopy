@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"jview/protocol"
 	"math"
 	"strings"
 )
@@ -15,62 +16,74 @@ func NewEvaluator(dm *DataModel) *Evaluator {
 	return &Evaluator{dm: dm}
 }
 
+type evalFn func(e *Evaluator, args []interface{}) (interface{}, error)
+
+var dispatchMap map[string]evalFn
+var lazySet map[string]bool
+
+func init() {
+	lazySet = make(map[string]bool)
+	for _, f := range protocol.FunctionRegistry {
+		if f.Lazy {
+			lazySet[f.Name] = true
+		}
+	}
+
+	dispatchMap = map[string]evalFn{
+		"concat":      (*Evaluator).fnConcat,
+		"toString":    (*Evaluator).fnToString,
+		"toUpperCase": (*Evaluator).fnToUpperCase,
+		"toLowerCase": (*Evaluator).fnToLowerCase,
+		"trim":        (*Evaluator).fnTrim,
+		"substring":   (*Evaluator).fnSubstring,
+		"length":      (*Evaluator).fnLength,
+		"format":      (*Evaluator).fnFormat,
+		"contains":    (*Evaluator).fnContains,
+		"add":         (*Evaluator).fnAdd,
+		"subtract":    (*Evaluator).fnSubtract,
+		"multiply":    (*Evaluator).fnMultiply,
+		"divide":      (*Evaluator).fnDivide,
+		"calc":        (*Evaluator).fnCalc,
+		"toNumber":    (*Evaluator).fnToNumber,
+		"negate":      (*Evaluator).fnNegate,
+		"if":          (*Evaluator).fnIfLazy,
+		"equals":      (*Evaluator).fnEquals,
+		"greaterThan": (*Evaluator).fnGreaterThan,
+		"not":         (*Evaluator).fnNot,
+		"or":          (*Evaluator).fnOrLazy,
+		"and":         (*Evaluator).fnAndLazy,
+	}
+
+	// Validate: every registry entry has an impl, and vice versa
+	regNames := make(map[string]bool)
+	for _, f := range protocol.FunctionRegistry {
+		regNames[f.Name] = true
+		if _, ok := dispatchMap[f.Name]; !ok {
+			panic("evaluator: no impl for registered function " + f.Name)
+		}
+	}
+	for name := range dispatchMap {
+		if !regNames[name] {
+			panic("evaluator: impl for unregistered function " + name)
+		}
+	}
+}
+
 // Eval evaluates a function call, resolving args recursively.
 // Args can be: string, float64, bool literals, map with "path" key, or map with "functionCall" key.
 func (e *Evaluator) Eval(name string, args []interface{}) (interface{}, error) {
+	fn, ok := dispatchMap[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown function: %s", name)
+	}
+	if lazySet[name] {
+		return fn(e, args)
+	}
 	resolved, err := e.resolveArgs(args)
 	if err != nil {
 		return nil, err
 	}
-
-	switch name {
-	case "concat":
-		return e.fnConcat(resolved)
-	case "format":
-		return e.fnFormat(resolved)
-	case "toUpperCase":
-		return e.fnToUpperCase(resolved)
-	case "toLowerCase":
-		return e.fnToLowerCase(resolved)
-	case "trim":
-		return e.fnTrim(resolved)
-	case "substring":
-		return e.fnSubstring(resolved)
-	case "length":
-		return e.fnLength(resolved)
-	case "add":
-		return e.fnAdd(resolved)
-	case "subtract":
-		return e.fnSubtract(resolved)
-	case "multiply":
-		return e.fnMultiply(resolved)
-	case "divide":
-		return e.fnDivide(resolved)
-	case "equals":
-		return e.fnEquals(resolved)
-	case "greaterThan":
-		return e.fnGreaterThan(resolved)
-	case "not":
-		return e.fnNot(resolved)
-	case "if":
-		return e.fnIf(resolved)
-	case "or":
-		return e.fnOr(resolved)
-	case "and":
-		return e.fnAnd(resolved)
-	case "toNumber":
-		return e.fnToNumber(resolved)
-	case "toString":
-		return e.fnToString(resolved)
-	case "calc":
-		return e.fnCalc(resolved)
-	case "contains":
-		return e.fnContains(resolved)
-	case "negate":
-		return e.fnNegate(resolved)
-	default:
-		return nil, fmt.Errorf("unknown function: %s", name)
-	}
+	return fn(e, resolved)
 }
 
 // resolveArgs resolves each argument: literals pass through, path refs look up DataModel,
@@ -365,23 +378,33 @@ func (e *Evaluator) fnNot(args []interface{}) (interface{}, error) {
 	return !b, nil
 }
 
-func (e *Evaluator) fnIf(args []interface{}) (interface{}, error) {
-	if len(args) < 3 {
+// fnIfLazy resolves args lazily: only evaluates the chosen branch.
+func (e *Evaluator) fnIfLazy(rawArgs []interface{}) (interface{}, error) {
+	if len(rawArgs) < 3 {
 		return nil, fmt.Errorf("if requires 3 args (condition, trueVal, falseVal)")
 	}
-	cond, err := toBool(args[0])
+	condVal, err := e.resolveArg(rawArgs[0])
+	if err != nil {
+		return nil, err
+	}
+	cond, err := toBool(condVal)
 	if err != nil {
 		return nil, err
 	}
 	if cond {
-		return args[1], nil
+		return e.resolveArg(rawArgs[1])
 	}
-	return args[2], nil
+	return e.resolveArg(rawArgs[2])
 }
 
-func (e *Evaluator) fnOr(args []interface{}) (interface{}, error) {
-	for _, a := range args {
-		b, err := toBool(a)
+// fnOrLazy short-circuits: returns true on first truthy arg.
+func (e *Evaluator) fnOrLazy(rawArgs []interface{}) (interface{}, error) {
+	for _, a := range rawArgs {
+		val, err := e.resolveArg(a)
+		if err != nil {
+			return false, err
+		}
+		b, err := toBool(val)
 		if err != nil {
 			return false, err
 		}
@@ -392,12 +415,17 @@ func (e *Evaluator) fnOr(args []interface{}) (interface{}, error) {
 	return false, nil
 }
 
-func (e *Evaluator) fnAnd(args []interface{}) (interface{}, error) {
-	if len(args) == 0 {
+// fnAndLazy short-circuits: returns false on first falsy arg.
+func (e *Evaluator) fnAndLazy(rawArgs []interface{}) (interface{}, error) {
+	if len(rawArgs) == 0 {
 		return true, nil
 	}
-	for _, a := range args {
-		b, err := toBool(a)
+	for _, a := range rawArgs {
+		val, err := e.resolveArg(a)
+		if err != nil {
+			return false, err
+		}
+		b, err := toBool(val)
 		if err != nil {
 			return false, err
 		}

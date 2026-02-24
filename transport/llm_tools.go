@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"jview/protocol"
+	"sort"
 	"strings"
 
 	anyllm "github.com/mozilla-ai/any-llm-go"
@@ -205,6 +206,67 @@ func toolCallToMessage(tc anyllm.ToolCall) (*protocol.Message, []byte, error) {
 	return msg, line, nil
 }
 
+// categoryOrder defines the display order and heading for each function category.
+var categoryOrder = []struct {
+	key   string
+	label string
+}{
+	{"string", "String functions"},
+	{"math", "Math functions"},
+	{"logic", "Logic functions"},
+}
+
+// functionDocsForPrompt generates the AVAILABLE FUNCTIONS block from the registry.
+func functionDocsForPrompt() string {
+	// Group functions by category
+	byCategory := make(map[string][]protocol.FuncMeta)
+	for _, f := range protocol.FunctionRegistry {
+		byCategory[f.Category] = append(byCategory[f.Category], f)
+	}
+
+	var b strings.Builder
+	b.WriteString("AVAILABLE FUNCTIONS:\n")
+	for i, cat := range categoryOrder {
+		funcs := byCategory[cat.key]
+		if len(funcs) == 0 {
+			continue
+		}
+		b.WriteString(cat.label)
+		b.WriteString(":\n")
+		for _, f := range funcs {
+			fmt.Fprintf(&b, "- %s(%s) — %s\n", f.Name, f.Args, f.Desc)
+		}
+		if i < len(categoryOrder)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	// Warn about any unknown categories
+	known := make(map[string]bool)
+	for _, cat := range categoryOrder {
+		known[cat.key] = true
+	}
+	var unknown []string
+	for cat := range byCategory {
+		if !known[cat] {
+			unknown = append(unknown, cat)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		for _, cat := range unknown {
+			b.WriteString("\n")
+			b.WriteString(cat)
+			b.WriteString(" functions:\n")
+			for _, f := range byCategory[cat] {
+				fmt.Fprintf(&b, "- %s(%s) — %s\n", f.Name, f.Args, f.Desc)
+			}
+		}
+	}
+
+	return b.String()
+}
+
 // systemPrompt returns the system message that teaches the LLM about A2UI.
 func systemPrompt(userPrompt string) string {
 	return `You are a UI builder. You create native macOS user interfaces using the A2UI protocol via tool calls.
@@ -214,7 +276,7 @@ AVAILABLE COMPONENTS:
 - Row: Horizontal layout. Props: gap (int), padding (int), justify ("start"|"center"|"end"|"spaceBetween"|"spaceAround"|"fillEqually"), align ("start"|"center"|"end"|"stretch")
 - Column: Vertical layout. Props: gap (int), padding (int), justify, align (same values as Row)
 - Card: Titled container. Props: title (string), subtitle (string)
-- Button: Clickable button. Props: label (string), style ("primary"|"secondary"|"destructive"), onClick.action.event.name (string), onClick.action.event.dataRefs (array of JSON pointers), onClick.action.functionCall.call (string), onClick.action.functionCall.args (object)
+- Button: Clickable button. Props: label (string), style ("primary"|"secondary"|"destructive"), onClick (see CLIENT-SIDE ACTIONS below)
 - TextField: Text input. Props: placeholder (string), value (string), dataBinding (JSON pointer)
 - CheckBox: Toggle. Props: label (string), checked (bool), dataBinding (JSON pointer)
 - Slider: Range input. Props: min (number), max (number), step (number), sliderValue (number), dataBinding (JSON pointer)
@@ -224,6 +286,82 @@ AVAILABLE COMPONENTS:
 - List: Scrollable list container.
 - ChoicePicker: Dropdown/selection. Props: options (array of {value, label}), dataBinding (JSON pointer), mutuallyExclusive (bool)
 - DateTimeInput: Date/time picker. Props: enableDate (bool), enableTime (bool), dataBinding (JSON pointer)
+
+CLIENT-SIDE ACTIONS (Button onClick):
+Buttons can trigger client-side data model updates via functionCall. The onClick prop uses this EXACT structure:
+
+"onClick": {
+  "action": {
+    "functionCall": {
+      "call": "updateDataModel",
+      "args": {
+        "ops": [
+          {"op": "replace", "path": "/someKey", "value": "newValue"}
+        ]
+      }
+    }
+  }
+}
+
+The only supported call is "updateDataModel". Each op has:
+- "op": "replace" | "add" | "remove"
+- "path": JSON Pointer string (e.g. "/display", "/result")
+- "value": the new value (can be a literal, a path reference, or a functionCall — see DYNAMIC VALUES)
+
+For server-side actions (sending events back to the LLM), use this structure instead:
+"onClick": {
+  "action": {
+    "event": {
+      "name": "myAction",
+      "dataRefs": ["/path1", "/path2"]
+    }
+  }
+}
+
+DYNAMIC VALUES:
+Anywhere a "value" appears in an updateDataModel op, it can be one of:
+
+1. A literal: "hello", 42, true, false
+2. A path reference (reads current value from data model): {"path": "/display"}
+3. A function call: {"functionCall": {"name": "concat", "args": ["hello", " ", "world"]}}
+
+Function call args are POSITIONAL (an array), and each arg can itself be a literal, path ref, or nested function call.
+
+IMPORTANT: Do NOT invent syntax like {"$fn": ...}, {"$ref": ...}, or named parameters like {"condition": ..., "then": ..., "else": ...}. The ONLY valid object forms in a value are {"path": "..."} and {"functionCall": {"name": "...", "args": [...]}}.
+
+` + functionDocsForPrompt() + `
+
+EXAMPLE — Calculator digit button using dynamic values:
+This button appends "7" to display, or replaces "0" with "7":
+{
+  "componentId": "btn7", "type": "Button",
+  "props": {
+    "label": "7",
+    "onClick": {
+      "action": {
+        "functionCall": {
+          "call": "updateDataModel",
+          "args": {
+            "ops": [{
+              "op": "replace",
+              "path": "/display",
+              "value": {
+                "functionCall": {
+                  "name": "if",
+                  "args": [
+                    {"functionCall": {"name": "equals", "args": [{"path": "/display"}, "0"]}},
+                    "7",
+                    {"functionCall": {"name": "concat", "args": [{"path": "/display"}, "7"]}}
+                  ]
+                }
+              }
+            }]
+          }
+        }
+      }
+    }
+  }
+}
 
 VISUAL STYLING:
 Any component can have a "style" object alongside "props" with these properties:
