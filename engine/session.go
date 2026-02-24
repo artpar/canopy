@@ -16,6 +16,7 @@ type Session struct {
 	funcDefs map[string]*FuncDef
 	compDefs map[string]*protocol.DefineComponent
 	pm       *ProcessManager
+	cm       *ChannelManager
 
 	// OnAction is called when any surface triggers a server-bound event.
 	OnAction func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -39,6 +40,16 @@ func (s *Session) SetFFI(ffi *FFIRegistry) {
 // SetProcessManager attaches a process manager to this session.
 func (s *Session) SetProcessManager(pm *ProcessManager) {
 	s.pm = pm
+}
+
+// SetChannelManager attaches a channel manager to this session.
+func (s *Session) SetChannelManager(cm *ChannelManager) {
+	s.cm = cm
+}
+
+// ChannelManager returns the attached channel manager, or nil.
+func (s *Session) ChannelManager() *ChannelManager {
+	return s.cm
 }
 
 // HandleMessage routes a parsed A2UI message to the appropriate surface.
@@ -135,6 +146,56 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		}
 		if err := s.pm.SendTo(stp.ProcessID, innerMsg); err != nil {
 			logError("session", "", fmt.Sprintf("sendToProcess error: %v", err))
+		}
+
+	case protocol.MsgCreateChannel:
+		cc := msg.Body.(protocol.CreateChannel)
+		if s.cm == nil {
+			logWarn("session", "", "createChannel received but no ChannelManager configured")
+			return
+		}
+		if err := s.cm.Create(cc); err != nil {
+			logError("session", "", fmt.Sprintf("createChannel error: %v", err))
+		}
+
+	case protocol.MsgDeleteChannel:
+		dc := msg.Body.(protocol.DeleteChannel)
+		if s.cm == nil {
+			logWarn("session", "", "deleteChannel received but no ChannelManager configured")
+			return
+		}
+		if err := s.cm.Delete(dc.ChannelID); err != nil {
+			logError("session", "", fmt.Sprintf("deleteChannel error: %v", err))
+		}
+
+	case protocol.MsgPublish:
+		pub := msg.Body.(protocol.Publish)
+		if s.cm == nil {
+			logWarn("session", "", "publish received but no ChannelManager configured")
+			return
+		}
+		if err := s.cm.Publish(pub); err != nil {
+			logError("session", "", fmt.Sprintf("publish error: %v", err))
+		}
+
+	case protocol.MsgSubscribe:
+		sub := msg.Body.(protocol.Subscribe)
+		if s.cm == nil {
+			logWarn("session", "", "subscribe received but no ChannelManager configured")
+			return
+		}
+		if err := s.cm.Subscribe(sub); err != nil {
+			logError("session", "", fmt.Sprintf("subscribe error: %v", err))
+		}
+
+	case protocol.MsgUnsubscribe:
+		unsub := msg.Body.(protocol.Unsubscribe)
+		if s.cm == nil {
+			logWarn("session", "", "unsubscribe received but no ChannelManager configured")
+			return
+		}
+		if err := s.cm.Unsubscribe(unsub); err != nil {
+			logError("session", "", fmt.Sprintf("unsubscribe error: %v", err))
 		}
 
 	default:

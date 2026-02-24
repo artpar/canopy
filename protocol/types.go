@@ -20,6 +20,11 @@ const (
 	MsgCreateProcess    MessageType = "createProcess"
 	MsgStopProcess      MessageType = "stopProcess"
 	MsgSendToProcess    MessageType = "sendToProcess"
+	MsgCreateChannel    MessageType = "createChannel"
+	MsgDeleteChannel    MessageType = "deleteChannel"
+	MsgPublish          MessageType = "publish"
+	MsgSubscribe        MessageType = "subscribe"
+	MsgUnsubscribe      MessageType = "unsubscribe"
 )
 
 // TestMessage defines a test case with a sequence of assert/simulate steps.

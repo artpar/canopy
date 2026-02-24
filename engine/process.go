@@ -97,6 +97,11 @@ func (pm *ProcessManager) Stop(processID string) error {
 	pm.mu.Unlock()
 
 	pm.setStatus(processID, "stopped")
+
+	// Clean up channel subscriptions for this process
+	if cm := pm.sess.ChannelManager(); cm != nil {
+		cm.CleanupProcess(processID)
+	}
 	return nil
 }
 
@@ -181,6 +186,9 @@ func (p *Process) run(sess *Session, pm *ProcessManager) {
 				p.status = "stopped"
 				pm.mu.Unlock()
 				pm.setStatus(p.ID, "stopped")
+				if cm := sess.ChannelManager(); cm != nil {
+					cm.CleanupProcess(p.ID)
+				}
 				return
 			}
 			sess.HandleMessage(msg)

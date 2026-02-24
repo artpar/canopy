@@ -1022,6 +1022,91 @@ func TestE2ESysinfoTests(t *testing.T) {
 	runSampleAppTests(t, "sample_apps/sysinfo/prompt.jsonl")
 }
 
+func TestE2EChannelFixture(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	cm := NewChannelManager(sess)
+	sess.SetChannelManager(cm)
+
+	ft := transport.NewFileTransport(filepath.Join(fixtureDir(), "channel.jsonl"))
+	ft.Start()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for msg := range ft.Messages() {
+			sess.HandleMessage(msg)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
+	}
+
+	surf := sess.GetSurface("main")
+	if surf == nil {
+		t.Fatal("surface not created")
+	}
+
+	// Channel value should be in data model
+	val, ok := surf.DM().Get("/channels/events/value")
+	if !ok {
+		t.Fatal("channel value not set in data model")
+	}
+	if val != "Build complete!" {
+		t.Errorf("channel value = %v, want 'Build complete!'", val)
+	}
+
+	// Subscriber target path should be set
+	notif, ok := surf.DM().Get("/notification")
+	if !ok {
+		t.Fatal("/notification not set")
+	}
+	if notif != "Build complete!" {
+		t.Errorf("/notification = %v, want 'Build complete!'", notif)
+	}
+
+	// Status should be active
+	status, ok := surf.DM().Get("/channels/events/status")
+	if !ok {
+		t.Fatal("channel status not set")
+	}
+	if status != "active" {
+		t.Errorf("status = %v, want 'active'", status)
+	}
+}
+
+func TestE2EChannelTests(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+
+	results, err := RunTestFile(filepath.Join(fixtureDir(), "channel_test.jsonl"), mock, disp)
+	if err != nil {
+		t.Fatalf("RunTestFile: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatal("no tests found in channel_test.jsonl")
+	}
+
+	passed := 0
+	totalAssertions := 0
+	for _, r := range results {
+		totalAssertions += r.Assertions
+		if r.Passed {
+			passed++
+		} else {
+			t.Errorf("FAIL: %s: %s", r.Name, r.Error)
+		}
+	}
+
+	t.Logf("%d/%d tests passed, %d assertions total", passed, len(results), totalAssertions)
+}
+
 func TestE2ECalculatorV2Tests(t *testing.T) {
 	runSampleAppTests(t, "sample_apps/calculator/prompt.jsonl")
 }

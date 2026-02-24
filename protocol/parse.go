@@ -154,6 +154,41 @@ func ParseLine(line []byte) (*Message, error) {
 		}
 		msg.Body = stp
 
+	case MsgCreateChannel:
+		var cc CreateChannel
+		if err := json.Unmarshal(env.Payload, &cc); err != nil {
+			return nil, fmt.Errorf("parse createChannel: %w", err)
+		}
+		msg.Body = cc
+
+	case MsgDeleteChannel:
+		var dc DeleteChannel
+		if err := json.Unmarshal(env.Payload, &dc); err != nil {
+			return nil, fmt.Errorf("parse deleteChannel: %w", err)
+		}
+		msg.Body = dc
+
+	case MsgPublish:
+		var pub Publish
+		if err := json.Unmarshal(env.Payload, &pub); err != nil {
+			return nil, fmt.Errorf("parse publish: %w", err)
+		}
+		msg.Body = pub
+
+	case MsgSubscribe:
+		var sub Subscribe
+		if err := json.Unmarshal(env.Payload, &sub); err != nil {
+			return nil, fmt.Errorf("parse subscribe: %w", err)
+		}
+		msg.Body = sub
+
+	case MsgUnsubscribe:
+		var unsub Unsubscribe
+		if err := json.Unmarshal(env.Payload, &unsub); err != nil {
+			return nil, fmt.Errorf("parse unsubscribe: %w", err)
+		}
+		msg.Body = unsub
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

@@ -320,6 +320,81 @@ func a2uiTools() []anyllm.Tool {
 		{
 			Type: "function",
 			Function: anyllm.Function{
+				Name:        "a2ui_createChannel",
+				Description: "Create a named channel for inter-process communication. Published values are written to /channels/{channelId}/value in the data model. Broadcast mode delivers to all subscribers; queue mode delivers round-robin to one subscriber at a time.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"channelId": map[string]any{"type": "string", "description": "Unique channel identifier"},
+						"mode":      map[string]any{"type": "string", "enum": []string{"broadcast", "queue"}, "description": "Delivery mode (default: broadcast)"},
+					},
+					"required": []string{"channelId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_deleteChannel",
+				Description: "Delete a channel and all its subscriptions.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"channelId": map[string]any{"type": "string", "description": "Channel ID to delete"},
+					},
+					"required": []string{"channelId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_publish",
+				Description: "Publish a value to a channel. The value is written to /channels/{channelId}/value and delivered to all subscribers (broadcast) or one subscriber (queue).",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"channelId": map[string]any{"type": "string", "description": "Channel ID to publish to"},
+						"value":     map[string]any{"description": "Value to publish (any JSON type)"},
+					},
+					"required": []string{"channelId", "value"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_subscribe",
+				Description: "Subscribe to a channel. When a value is published, it is written to the targetPath in the data model of all surfaces. Components bound to that path auto-update.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"channelId":  map[string]any{"type": "string", "description": "Channel ID to subscribe to"},
+						"processId":  map[string]any{"type": "string", "description": "Process ID of the subscriber (optional, omit for session-level)"},
+						"targetPath": map[string]any{"type": "string", "description": "DataModel path to deliver values to (e.g. /notifications/latest)"},
+					},
+					"required": []string{"channelId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_unsubscribe",
+				Description: "Unsubscribe from a channel.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"channelId": map[string]any{"type": "string", "description": "Channel ID to unsubscribe from"},
+						"processId": map[string]any{"type": "string", "description": "Process ID to unsubscribe (optional)"},
+					},
+					"required": []string{"channelId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
 				Name:        "a2ui_getLogs",
 				Description: "Query application logs. Use this to inspect errors, debug binding issues, and understand what happened in the app. Returns matching log entries with level, component, surface, and message.",
 				Parameters: map[string]any{
@@ -663,6 +738,21 @@ Simulation:
   Events: change (TextField), click (Button), toggle (CheckBox), slide (Slider), select (ChoicePicker/Tabs), datechange (DateTimeInput)
 
 Tests execute in file order. Side effects persist across tests. Actions reset per test.
+
+CHANNELS (Inter-Process Communication):
+Create named channels for processes to communicate via publish/subscribe.
+
+1. a2ui_createChannel — create a channel with broadcast (all subscribers receive) or queue (round-robin to one subscriber) mode
+2. a2ui_subscribe — register to receive values; specify targetPath to auto-write published values to the data model
+3. a2ui_publish — send a value to a channel; value is written to /channels/{channelId}/value in the data model
+4. a2ui_unsubscribe — stop receiving values
+5. a2ui_deleteChannel — remove the channel and all subscriptions
+
+Published values are always written to /channels/{channelId}/value, so components can bind directly:
+  "dataBinding": "/channels/myChannel/value"
+
+Subscribers can also specify a targetPath to receive values at a custom data model path.
+When a process stops, its channel subscriptions are automatically cleaned up.
 
 USER REQUEST: ` + userPrompt
 }

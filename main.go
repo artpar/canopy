@@ -230,8 +230,12 @@ func main() {
 	})
 	sess.SetProcessManager(pm)
 
+	// Set up channel manager for inter-process communication
+	cm := engine.NewChannelManager(sess)
+	sess.SetChannelManager(cm)
+
 	// Start embedded MCP server on stdin/stdout
-	mcpServer := mcp.NewServer(sess, rend, disp, pm)
+	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithProcessManager(pm), mcp.WithChannelManager(cm))
 	toolNames := mcpServer.ToolNames()
 	jlog.Infof("main", "", "mcp: listening on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
 	go func() {

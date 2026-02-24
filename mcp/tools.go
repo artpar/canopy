@@ -28,6 +28,12 @@ func (s *Server) registerTools() {
 	s.registerCreateProcess()
 	s.registerStopProcess()
 	s.registerSendToProcess()
+	s.registerListChannels()
+	s.registerCreateChannel()
+	s.registerDeleteChannel()
+	s.registerPublish()
+	s.registerSubscribe()
+	s.registerUnsubscribe()
 }
 
 // --- Query tools ---
@@ -715,6 +721,210 @@ func (s *Server) registerSendToProcess() {
 			return errorResult("send to process error: " + err.Error())
 		}
 		return &ToolCallResult{Content: []ContentBlock{TextContent("message sent to process: " + p.ProcessID)}}
+	})
+}
+
+// --- Channel tools ---
+
+func (s *Server) registerListChannels() {
+	s.register("list_channels", "List all channels with mode, subscribers, and last value", json.RawMessage(`{
+		"type": "object",
+		"properties": {},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		ids := s.cm.IDs()
+		type subInfo struct {
+			ProcessID  string `json:"processId,omitempty"`
+			TargetPath string `json:"targetPath,omitempty"`
+		}
+		type channelInfo struct {
+			ID          string    `json:"id"`
+			Mode        string    `json:"mode"`
+			Subscribers []subInfo `json:"subscribers"`
+			LastValue   any       `json:"lastValue,omitempty"`
+		}
+		var result []channelInfo
+		for _, id := range ids {
+			ch := s.cm.GetChannel(id)
+			if ch == nil {
+				continue
+			}
+			subs := make([]subInfo, len(ch.Subscribers))
+			for i, sub := range ch.Subscribers {
+				subs[i] = subInfo{ProcessID: sub.ProcessID, TargetPath: sub.TargetPath}
+			}
+			result = append(result, channelInfo{
+				ID:          ch.ID,
+				Mode:        string(ch.Mode),
+				Subscribers: subs,
+				LastValue:   ch.LastValue,
+			})
+		}
+		cb, err := JSONContent(result)
+		if err != nil {
+			return errorResult(err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{cb}}
+	})
+}
+
+func (s *Server) registerCreateChannel() {
+	s.register("create_channel", "Create a named channel for inter-process communication", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"channel_id": {"type": "string", "description": "Unique channel identifier"},
+			"mode": {"type": "string", "enum": ["broadcast", "queue"], "description": "Delivery mode (default: broadcast)"}
+		},
+		"required": ["channel_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		var p struct {
+			ChannelID string `json:"channel_id"`
+			Mode      string `json:"mode"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		mode := p.Mode
+		if mode == "" {
+			mode = "broadcast"
+		}
+		msgJSON := fmt.Sprintf(`{"type":"createChannel","channelId":%s,"mode":%s}`,
+			mustJSON(p.ChannelID), mustJSON(mode))
+		if err := s.SendMessage(json.RawMessage(msgJSON)); err != nil {
+			return errorResult("create channel error: " + err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{TextContent("channel created: " + p.ChannelID)}}
+	})
+}
+
+func (s *Server) registerDeleteChannel() {
+	s.register("delete_channel", "Delete a channel and all its subscriptions", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"channel_id": {"type": "string", "description": "Channel ID to delete"}
+		},
+		"required": ["channel_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		var p struct {
+			ChannelID string `json:"channel_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		msgJSON := fmt.Sprintf(`{"type":"deleteChannel","channelId":%s}`, mustJSON(p.ChannelID))
+		if err := s.SendMessage(json.RawMessage(msgJSON)); err != nil {
+			return errorResult("delete channel error: " + err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{TextContent("channel deleted: " + p.ChannelID)}}
+	})
+}
+
+func (s *Server) registerPublish() {
+	s.register("publish", "Publish a value to a channel", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"channel_id": {"type": "string", "description": "Channel ID to publish to"},
+			"value": {"description": "Value to publish (any JSON type)"}
+		},
+		"required": ["channel_id", "value"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		var p struct {
+			ChannelID string          `json:"channel_id"`
+			Value     json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		msgJSON := fmt.Sprintf(`{"type":"publish","channelId":%s,"value":%s}`,
+			mustJSON(p.ChannelID), string(p.Value))
+		if err := s.SendMessage(json.RawMessage(msgJSON)); err != nil {
+			return errorResult("publish error: " + err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{TextContent("published to channel: " + p.ChannelID)}}
+	})
+}
+
+func (s *Server) registerSubscribe() {
+	s.register("subscribe", "Subscribe to a channel to receive published values", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"channel_id": {"type": "string", "description": "Channel ID to subscribe to"},
+			"process_id": {"type": "string", "description": "Process ID of the subscriber (optional)"},
+			"target_path": {"type": "string", "description": "DataModel path to deliver values to (e.g. /notifications/latest)"}
+		},
+		"required": ["channel_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		var p struct {
+			ChannelID  string `json:"channel_id"`
+			ProcessID  string `json:"process_id"`
+			TargetPath string `json:"target_path"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		parts := fmt.Sprintf(`"channelId":%s`, mustJSON(p.ChannelID))
+		if p.ProcessID != "" {
+			parts += fmt.Sprintf(`,"processId":%s`, mustJSON(p.ProcessID))
+		}
+		if p.TargetPath != "" {
+			parts += fmt.Sprintf(`,"targetPath":%s`, mustJSON(p.TargetPath))
+		}
+		msgJSON := fmt.Sprintf(`{"type":"subscribe",%s}`, parts)
+		if err := s.SendMessage(json.RawMessage(msgJSON)); err != nil {
+			return errorResult("subscribe error: " + err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{TextContent("subscribed to channel: " + p.ChannelID)}}
+	})
+}
+
+func (s *Server) registerUnsubscribe() {
+	s.register("unsubscribe", "Unsubscribe from a channel", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"channel_id": {"type": "string", "description": "Channel ID to unsubscribe from"},
+			"process_id": {"type": "string", "description": "Process ID to unsubscribe (optional)"}
+		},
+		"required": ["channel_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		if s.cm == nil {
+			return errorResult("channel manager not available")
+		}
+		var p struct {
+			ChannelID string `json:"channel_id"`
+			ProcessID string `json:"process_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		parts := fmt.Sprintf(`"channelId":%s`, mustJSON(p.ChannelID))
+		if p.ProcessID != "" {
+			parts += fmt.Sprintf(`,"processId":%s`, mustJSON(p.ProcessID))
+		}
+		msgJSON := fmt.Sprintf(`{"type":"unsubscribe",%s}`, parts)
+		if err := s.SendMessage(json.RawMessage(msgJSON)); err != nil {
+			return errorResult("unsubscribe error: " + err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{TextContent("unsubscribed from channel: " + p.ChannelID)}}
 	})
 }
 

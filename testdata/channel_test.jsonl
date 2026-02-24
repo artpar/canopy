@@ -1,0 +1,7 @@
+{"type":"createSurface","surfaceId":"main","title":"Channel Test","width":600,"height":400}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/notification","value":"(none)"}]}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"gap":16},"children":["heading","statusText","notifText"]},{"componentId":"heading","type":"Text","props":{"content":"Channel Test","variant":"h1"}},{"componentId":"statusText","type":"Text","props":{"content":{"path":"/channels/events/value"},"variant":"body"}},{"componentId":"notifText","type":"Text","props":{"content":{"path":"/notification"},"variant":"body"}}]}
+{"type":"createChannel","channelId":"events","mode":"broadcast"}
+{"type":"subscribe","channelId":"events","targetPath":"/notification"}
+{"type":"publish","channelId":"events","value":"Build complete!"}
+{"type":"test","surfaceId":"main","name":"channel publish delivers to data model and subscriber","steps":[{"assert":"dataModel","path":"/channels/events/value","value":"Build complete!"},{"assert":"dataModel","path":"/notification","value":"Build complete!"},{"assert":"component","componentId":"statusText","props":{"content":"Build complete!"}},{"assert":"component","componentId":"notifText","props":{"content":"Build complete!"}},{"assert":"component","componentId":"heading","props":{"content":"Channel Test","variant":"h1"}},{"assert":"children","componentId":"root","children":["heading","statusText","notifText"]},{"assert":"dataModel","path":"/channels/events/status","value":"active"}]}

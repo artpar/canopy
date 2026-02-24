@@ -42,6 +42,10 @@ func RunTestFile(path string, rend renderer.Renderer, disp renderer.Dispatcher) 
 func RunTests(r io.Reader, rend renderer.Renderer, disp renderer.Dispatcher) ([]TestResult, error) {
 	sess := NewSession(rend, disp)
 
+	// Attach channel manager so channel messages work in tests
+	cm := NewChannelManager(sess)
+	sess.SetChannelManager(cm)
+
 	// Collect actions fired during tests
 	var actions []CapturedAction
 	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {

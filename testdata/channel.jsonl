@@ -1,0 +1,6 @@
+{"type":"createSurface","surfaceId":"main","title":"Channel Demo","width":600,"height":400}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/notification","value":"(none)"}]}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"gap":16},"children":["heading","statusText","notifText"]},{"componentId":"heading","type":"Text","props":{"content":"Channel Demo","variant":"h1"}},{"componentId":"statusText","type":"Text","props":{"content":{"path":"/channels/events/value"},"variant":"body"}},{"componentId":"notifText","type":"Text","props":{"content":{"path":"/notification"},"variant":"body"}}]}
+{"type":"createChannel","channelId":"events","mode":"broadcast"}
+{"type":"subscribe","channelId":"events","targetPath":"/notification"}
+{"type":"publish","channelId":"events","value":"Build complete!"}
