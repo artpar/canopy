@@ -197,6 +197,17 @@ func (s *Surface) renderComponents(componentIDs []string) {
 	})
 }
 
+// resolveDataRefs reads each DataRefs path from the data model and returns a map.
+func (s *Surface) resolveDataRefs(action *protocol.Action) map[string]interface{} {
+	result := make(map[string]interface{}, len(action.DataRefs))
+	for _, path := range action.DataRefs {
+		if val, ok := s.dm.Get(path); ok {
+			result[path] = val
+		}
+	}
+	return result
+}
+
 func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.RenderNode) {
 	node.Callbacks = make(map[string]renderer.CallbackID)
 
@@ -214,7 +225,8 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			action := comp.Props.OnClick.Action
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "click", func(data string) {
 				if s.ActionHandler != nil {
-					s.ActionHandler(s.id, action, map[string]interface{}{"data": data})
+					resolved := s.resolveDataRefs(action)
+					s.ActionHandler(s.id, action, resolved)
 				} else {
 					fmt.Printf("action: %s %s (surface %s, component %s)\n",
 						action.Type, action.Name, s.id, comp.ComponentID)

@@ -16,4 +16,8 @@ type Transport interface {
 
 	// Stop terminates the transport.
 	Stop()
+
+	// SendAction sends a user action back to the source.
+	// For file transport this is a no-op. For LLM transport it triggers a new conversation turn.
+	SendAction(surfaceID string, action *protocol.Action, data map[string]interface{})
 }

@@ -169,36 +169,24 @@ Full roadmap tracked in planning MCP (plan: `jview Roadmap`). Summary:
 ### Phase 1: MVP — COMPLETE
 Protocol parsing, engine core, 7 component bridges (Text, Row, Column, Card, Button, TextField, CheckBox), file transport, Makefile verify pipeline.
 
-### Phase 2: Full Interactivity + Remaining Components
-Engine completeness and all remaining form/display components.
-
-| Task | Tag | Priority | Depends on |
-|------|-----|----------|------------|
-| FunctionCall evaluator (14 built-in functions) | engine | high | — |
-| Validation checks engine | engine | high | — |
-| Dynamic ChildList template expansion | engine | high | — |
-| Divider | component | medium | — |
-| Slider | component | medium | — |
-| Image (async URL) | component | medium | — |
-| Icon (SF Symbols) | component | low | — |
-| ChoicePicker (dropdown/multi) | component | medium | — |
-| DateTimeInput | component | medium | — |
-| List (scrollable, templated) | component | medium | template expansion |
+### Phase 2: Full Interactivity + Remaining Components — COMPLETE
+FunctionCall evaluator, validation, template expansion, 7 new components (Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List).
 
 ### Phase 3: Media + Live Transport + Polish
 Live agent connectivity and remaining A2UI components.
 
-| Task | Tag | Priority | Depends on |
-|------|-----|----------|------------|
-| SSE transport | transport | critical | — |
-| WebSocket transport | transport | high | — |
-| Action response pipeline | transport | high | — |
-| Tabs | component | high | — |
-| Modal | component | high | — |
-| Video (AVPlayerView) | component | medium | — |
-| AudioPlayer | component | low | — |
-| Theme → NSAppearance | infra | low | — |
-| Scroll view for overflow | infra | medium | — |
+| Task | Tag | Priority | Status |
+|------|-----|----------|--------|
+| LLM transport (any-llm-go) | transport | critical | **done** |
+| Action response pipeline | transport | high | **done** |
+| SSE transport | transport | medium | not started |
+| WebSocket transport | transport | medium | not started |
+| Tabs | component | high | not started |
+| Modal | component | high | not started |
+| Video (AVPlayerView) | component | medium | not started |
+| AudioPlayer | component | low | not started |
+| Theme → NSAppearance | infra | low | not started |
+| Scroll view for overflow | infra | medium | not started |
 
 ### Phase 4: Production Hardening
 Reliability, performance, packaging.

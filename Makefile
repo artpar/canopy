@@ -3,18 +3,19 @@ BUILD_DIR := build
 SNAP_DIR  := $(BUILD_DIR)/screenshots
 FIXTURES  := $(wildcard testdata/*.jsonl)
 SNAP_WAIT := 2
+GO        ?= $(shell command -v go1.25.0 2>/dev/null || echo go)
 
 .PHONY: build test verify verify-fixture check clean
 
 # ── Build ───────────────────────────────────────────
 build:
-	go build -o $(BUILD_DIR)/$(BINARY) .
+	$(GO) build -o $(BUILD_DIR)/$(BINARY) .
 
 # ── Test ────────────────────────────────────────────
 # Headless unit + integration tests via mock renderer.
 # No CGo, no AppKit, no display needed. Safe for CI.
 test:
-	go test ./protocol/ ./engine/ ./transport/ -v -count=1 -race
+	$(GO) test ./protocol/ ./engine/ ./transport/ -v -count=1 -race
 
 # ── Verify ──────────────────────────────────────────
 # Build, launch every fixture, capture screenshot, kill.

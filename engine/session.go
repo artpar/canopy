@@ -11,6 +11,9 @@ type Session struct {
 	surfaces map[string]*Surface
 	rend     renderer.Renderer
 	dispatch renderer.Dispatcher
+
+	// OnAction is called when any surface triggers a server action.
+	OnAction func(surfaceID string, action *protocol.Action, data map[string]interface{})
 }
 
 func NewSession(rend renderer.Renderer, dispatch renderer.Dispatcher) *Session {
@@ -66,6 +69,7 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 	}
 
 	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch)
+	surf.ActionHandler = s.OnAction
 	s.surfaces[cs.SurfaceID] = surf
 
 	width := cs.Width

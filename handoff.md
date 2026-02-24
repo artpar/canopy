@@ -1,23 +1,31 @@
 # Session Handoff
 
-Last updated after Phase 2 completion. This document gives a new session everything it needs to continue work on jview.
+Last updated after Phase 3 LLM transport completion. This document gives a new session everything it needs to continue work on jview.
 
 ## What Is jview
 
-A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go engine processes messages, CGo bridge talks to Objective-C, native Cocoa views appear on screen. No webview.
+A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go engine processes messages, CGo bridge talks to Objective-C, native Cocoa views appear on screen. No webview. Connects to LLMs to generate native UIs in real-time — user interactions flow back as conversation turns.
 
 ## Current State
 
 **Phase 1 complete.** Core rendering: Text, Row, Column, Card, Button, TextField, CheckBox with two-way data binding and callbacks.
 
 **Phase 2 complete.** Full interactivity and all remaining form/display components:
-- FunctionCall evaluator with 14 built-in functions (concat, format, toUpperCase, toLowerCase, trim, substring, length, add, subtract, multiply, divide, equals, greaterThan, not)
-- Validation engine with 5 rule types (required, minLength, maxLength, pattern, email) — errors display as red border + error label below TextField
-- Template expansion for dynamic child lists (forEach/templateId/itemVariable) with deep-copy cloning
+- FunctionCall evaluator with 14 built-in functions
+- Validation engine with 5 rule types
+- Template expansion for dynamic child lists
 - 7 new native component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
-- NSStackView stretch alignment fix (explicit leading/trailing constraints per child)
 
-**93 tests pass** across protocol/, engine/, transport/ with race detection. 12 fixtures screenshot-verified.
+**Phase 3 in progress.** LLM transport done:
+- Bidirectional LLM transport via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) v0.8.0
+- 7 providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral
+- Default: Anthropic claude-haiku-4-5-20251001 (fast, cheap, good at tool calling)
+- Two modes: "tools" (preferred, structured tool calls) and "raw" (JSONL in text stream)
+- 5 A2UI tools map 1:1 to protocol message types, parsed through standard protocol.NewParser
+- Action response: button `dataRefs` resolved from DataModel, sent back to LLM as user message → new turn
+- Conversation loop runs for the lifetime of the process — each user action triggers a new LLM turn
+
+**100+ tests pass** across protocol/, engine/, transport/ with race detection. 12 fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -82,10 +90,13 @@ platform/darwin/               macOS CGo + ObjC implementation
   list.go/.h/.m                Vertical NSStackView container (delegates to stackview)
 
 transport/                     Message sources
-  transport.go                 Transport interface
-  file.go                      FileTransport (reads JSONL from file)
+  transport.go                 Transport interface (Messages, Errors, Start, Stop, SendAction)
+  file.go                      FileTransport (reads JSONL from file, SendAction is no-op)
+  llm.go                       LLMTransport (bidirectional LLM conversation loop)
+  llm_tools.go                 5 A2UI tool definitions + toolCallToMessage converter + system prompt
   file_test.go                 5 channel lifecycle tests
-  contract_test.go             RunTransportContractTests (reusable suite)
+  llm_test.go                  Mock provider tests: tool call parsing, transport lifecycle, action turns
+  contract_test.go             RunTransportContractTests (reusable suite, includes SendActionDoesNotPanic)
   testhelper_test.go           goroutineLeakCheck, drain helpers
 
 testdata/                      JSONL fixtures (12 total)
@@ -118,10 +129,11 @@ testdata/                      JSONL fixtures (12 total)
 
 ### Adding a New Transport
 
-1. Implement `transport.Transport` interface (Messages, Errors, Start, Stop)
+1. Implement `transport.Transport` interface (Messages, Errors, Start, Stop, SendAction)
 2. Must pass `transport.RunTransportContractTests`
 3. Both channels must close when done (prevents goroutine leaks)
 4. Stop must be idempotent (use `sync.Once`)
+5. `SendAction` can be no-op for read-only transports (file, stdin)
 
 ### CGo Rules
 
@@ -151,24 +163,34 @@ testdata/                      JSONL fixtures (12 total)
 8. **NSStackView stretch alignment** — `NSLayoutAttributeWidth` does NOT stretch children to the stack's own width; it only equalizes sibling widths. For true stretch: use `NSLayoutAttributeLeading` alignment + explicitly pin each child's leading/trailing anchors to the stack in SetChildren. Store stretch flag via `objc_setAssociatedObject`.
 9. **Template expansion deep copy** — shallow-copying components shares DynamicString pointers. Rewriting paths on one clone corrupts others. Always use `deepCopyComponent()` which copies all pointer fields.
 10. **NSBox (Card) hugging** — NSBox has high content-hugging priority by default. Lowering it alone doesn't help without explicit width constraints from the parent stack.
+11. **LLM tool call loop** — the LLM may return `finish_reason=tool_calls` multiple times in one turn (e.g. createSurface → updateDataModel → updateComponents). The transport loops until `finish_reason=stop`, then waits for a user action.
+12. **Go 1.25 required** — any-llm-go v0.8.0 requires Go 1.25+. System Go may be older; use `~/go/bin/go1.25.0` for builds.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. Phase 2 is complete. The immediate next priorities are:
+See `plan.md` for the full roadmap. LLM transport is done. The immediate next priorities are:
 
-1. **SSE transport** (critical for Phase 3) — connects to live AI agents
-2. **WebSocket transport** — alternative live transport
-3. **Action response pipeline** — send user actions back to the server
-4. **Tabs component** — tabbed container for multi-view layouts
-5. **Modal component** — overlay dialogs
+1. **Tabs component** — tabbed container for multi-view layouts
+2. **Modal component** — overlay dialogs
+3. **SSE transport** — EventSource-style HTTP streaming for non-LLM agents
+4. **WebSocket transport** — bidirectional messaging
+5. **Video / AudioPlayer** — media components
 
 ## Commands
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race (93 tests)
+make test                            # Headless tests with -race
 make verify                          # Screenshot verification (12 fixtures)
 make check                           # Full gate (test + verify)
-build/jview testdata/hello.jsonl     # Run interactively
+build/jview testdata/hello.jsonl     # File mode (static fixture)
+build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
+build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
 make verify-fixture F=testdata/hello.jsonl  # Single fixture screenshot
 ```
+
+## Environment
+
+- **Go 1.25.0** required (for any-llm-go dependency). Install: `go install golang.org/dl/go1.25.0@latest && go1.25.0 download`
+- **ANTHROPIC_API_KEY** — set for default LLM mode. Other providers use their standard env vars (OPENAI_API_KEY, etc.)
+- Use `~/go/bin/go1.25.0` if system Go is older than 1.25

@@ -42,6 +42,8 @@ func (f *FileTransport) Stop() {
 	f.stopOnce.Do(func() { close(f.done) })
 }
 
+func (f *FileTransport) SendAction(surfaceID string, action *protocol.Action, data map[string]interface{}) {}
+
 func (f *FileTransport) read() {
 	defer close(f.messages)
 	defer close(f.errors)

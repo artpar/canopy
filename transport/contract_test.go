@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"jview/protocol"
 	"path/filepath"
 	"testing"
 	"time"
@@ -62,6 +63,19 @@ func RunTransportContractTests(t *testing.T, factory func() Transport) {
 				t.Fatal("Errors channel did not close")
 			}
 		}
+	})
+
+	t.Run("SendActionDoesNotPanic", func(t *testing.T) {
+		tr := factory()
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("SendAction panicked: %v", r)
+			}
+		}()
+		tr.SendAction("surface1", &protocol.Action{
+			Type: "serverAction",
+			Name: "test",
+		}, map[string]interface{}{"key": "value"})
 	})
 
 	t.Run("StopIsIdempotent", func(t *testing.T) {

@@ -622,6 +622,77 @@ func TestSessionDeleteNonexistent(t *testing.T) {
 	feedMessages(t, sess, `{"type":"deleteSurface","surfaceId":"nope"}`)
 }
 
+func TestResolveDataRefs(t *testing.T) {
+	sess, mock := newTestSession()
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/form/name","value":"Alice"},{"op":"add","path":"/form/email","value":"alice@example.com"}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"btn","type":"Button","props":{"label":"Submit","onClick":{"action":{"type":"serverAction","name":"submit","dataRefs":["/form/name","/form/email","/form/missing"]}}}}]}`)
+
+	// Verify button was created
+	if len(mock.Created) == 0 {
+		t.Fatal("no components created")
+	}
+
+	// Access the surface to test resolveDataRefs directly
+	surf := sess.surfaces["s1"]
+	if surf == nil {
+		t.Fatal("surface s1 not found")
+	}
+
+	result := surf.resolveDataRefs(&protocol.Action{
+		Type:     "serverAction",
+		Name:     "submit",
+		DataRefs: []string{"/form/name", "/form/email", "/form/missing"},
+	})
+
+	if result["/form/name"] != "Alice" {
+		t.Errorf("/form/name = %v, want Alice", result["/form/name"])
+	}
+	if result["/form/email"] != "alice@example.com" {
+		t.Errorf("/form/email = %v, want alice@example.com", result["/form/email"])
+	}
+	if _, exists := result["/form/missing"]; exists {
+		t.Error("/form/missing should not be in result")
+	}
+}
+
+func TestOnActionPropagation(t *testing.T) {
+	sess, mock := newTestSession()
+
+	var received struct {
+		surfaceID string
+		action    *protocol.Action
+		data      map[string]interface{}
+	}
+	sess.OnAction = func(surfaceID string, action *protocol.Action, data map[string]interface{}) {
+		received.surfaceID = surfaceID
+		received.action = action
+		received.data = data
+	}
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/count","value":42}]}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"btn","type":"Button","props":{"label":"Click","onClick":{"action":{"type":"serverAction","name":"increment","dataRefs":["/count"]}}}}]}`)
+
+	// Click the button
+	mock.InvokeCallback("s1", "btn", "click", "")
+
+	if received.surfaceID != "s1" {
+		t.Errorf("surfaceID = %q, want s1", received.surfaceID)
+	}
+	if received.action == nil {
+		t.Fatal("action not received")
+	}
+	if received.action.Name != "increment" {
+		t.Errorf("action.Name = %q, want increment", received.action.Name)
+	}
+	// Check that DataRefs were resolved
+	if received.data["/count"] != float64(42) {
+		t.Errorf("data[/count] = %v, want 42", received.data["/count"])
+	}
+}
+
 func TestSessionUnknownMessageType(t *testing.T) {
 	sess, _ := newTestSession()
 

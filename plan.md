@@ -17,42 +17,15 @@ Protocol parsing, engine core, 7 component bridges, file transport, data binding
 
 ---
 
-## Phase 2: Full Interactivity + Remaining Components
+## Phase 2: Full Interactivity + Remaining Components — COMPLETE
 
 Engine completeness and all remaining form/display components.
 
-### Engine Work
-
-| Task | Priority | Status | Description |
-|------|----------|--------|-------------|
-| FunctionCall evaluator | high | not started | 14 built-in functions: `concat`, `format`, `toUpperCase`, `toLowerCase`, `trim`, `substring`, `length`, `add`, `subtract`, `multiply`, `divide`, `equals`, `greaterThan`, `not`. Placeholder exists in `engine/evaluator.go`. |
-| Validation checks | high | not started | TextField validation rules: `required`, `minLength`, `maxLength`, `pattern`, `email`. Placeholder exists in `engine/validator.go`. Props field (`validations`) already parsed as `json.RawMessage`. |
-| ChildList template expansion | high | not started | `forEach` + `templateId` → dynamic children from data model arrays. `ChildTemplate` struct already parsed. Engine needs to clone template components with item variable substitution. |
-
-### New Components
-
-| Component | Priority | Depends on | Notes |
-|-----------|----------|------------|-------|
-| Divider | medium | — | Simple `NSSeparator` or thin NSBox. Trivial bridge. |
-| Slider | medium | — | NSSlider. Props already defined: `min`, `max`, `step`, `sliderValue`, `onSlide`. Needs data binding support. |
-| Image | medium | — | NSImageView with async URL loading. Props: `src`, `alt`, `width`, `height`. Need to handle network fetch on background thread. |
-| Icon | low | — | SF Symbols via `[NSImage imageWithSystemSymbolName:]`. Props: `name`, `size`. macOS 11+ only. |
-| ChoicePicker | medium | — | NSPopUpButton (single) or NSMatrix/collection (multi). Props: `options`, `selected`, `mutuallyExclusive`, `onSelect`. |
-| DateTimeInput | medium | — | NSDatePicker. Props: `enableDate`, `enableTime`, `dateValue`, `onDateChange`. |
-| List | medium | template expansion | Scrollable NSScrollView + NSStackView with templated children. Depends on ChildList template expansion engine work. |
-
-### Implementation Order
-
-1. FunctionCall evaluator — unblocks dynamic UI logic
-2. Validation checks — unblocks form completeness
-3. Divider — quick win, useful in all layouts
-4. Slider — extends interactive components
-5. ChildList template expansion — unblocks List
-6. Image — first async/network component
-7. ChoicePicker — completes form components
-8. DateTimeInput — completes form components
-9. List — scrollable templated lists
-10. Icon — low priority, macOS 11+ dependency
+**Delivered:**
+- FunctionCall evaluator with 14 built-in functions
+- Validation engine with 5 rule types
+- Template expansion for dynamic child lists
+- 7 new component bridges: Divider, Icon, Image, Slider, ChoicePicker, DateTimeInput, List
 
 ---
 
@@ -62,12 +35,13 @@ Live agent connectivity and remaining A2UI components.
 
 ### Transport
 
-| Task | Priority | Depends on | Description |
-|------|----------|------------|-------------|
-| SSE transport | critical | — | `EventSource`-style HTTP streaming. Most common agent transport. Must pass `RunTransportContractTests`. |
-| WebSocket transport | high | — | Bidirectional messaging. Must pass `RunTransportContractTests`. |
-| Action response pipeline | high | SSE or WS | When user clicks a Button, send action back to the agent. Requires bidirectional channel or HTTP POST alongside SSE. |
-| stdin transport | medium | — | Read JSONL from stdin pipe. Useful for `agent | jview`. Must pass `RunTransportContractTests`. |
+| Task | Priority | Status | Description |
+|------|----------|--------|-------------|
+| LLM transport | critical | **done** | Bidirectional LLM transport via any-llm-go. Tool calling + raw JSONL modes. 7 providers (Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral). Default: Anthropic claude-haiku-4-5-20251001. |
+| Action response pipeline | high | **done** | Button `dataRefs` resolved from DataModel, forwarded via `Transport.SendAction()`. LLM transport formats as user message → new turn. |
+| SSE transport | medium | not started | `EventSource`-style HTTP streaming. Must pass `RunTransportContractTests`. |
+| WebSocket transport | medium | not started | Bidirectional messaging. Must pass `RunTransportContractTests`. |
+| stdin transport | low | not started | Read JSONL from stdin pipe. Useful for `agent | jview`. Must pass `RunTransportContractTests`. |
 
 ### Components
 
@@ -126,3 +100,7 @@ Each phase follows the same pattern:
 | Channel closure as transport contract | Prevents goroutine leaks. Enforced by `RunTransportContractTests`. |
 | Callback unregister before re-register | Prevents stale closure capturing old binding paths. Old callback IDs cleaned up from registry. |
 | `sync.Once` for transport Stop | Idempotent stop prevents double-close panic on `done` channel. |
+| any-llm-go for LLM transport | Single SDK covers 9 providers with normalized API. Tool calling support. Channel-based streaming. Requires Go 1.25+. |
+| Tool calling over raw JSONL | Tool calls give structured arguments → reliable parsing. Raw mode as fallback for models without tool support. |
+| Non-streaming tool mode | Use `Completion()` not `CompletionStream()` for tool mode. Tool calls arrive atomically in non-streaming responses, avoiding partial argument assembly. |
+| Default to Anthropic Haiku | Fast, cheap, good at tool calling. Sensible default for interactive UI generation. |

@@ -273,7 +273,7 @@ Toggle with optional two-way data binding.
 | params | object | Static parameters |
 | dataRefs | string[] | Data model paths to include with the action |
 
-Currently actions are dispatched to the Surface's `ActionHandler` callback. The action response pipeline (sending results back to the agent) is Phase 3.
+When a button with `dataRefs` is clicked, the engine resolves each path from the surface's data model and includes the values in the action payload. In LLM transport mode, the action is formatted as a user message and triggers a new conversation turn, allowing the LLM to respond by updating the UI.
 
 ---
 
@@ -318,13 +318,6 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 | Type | Phase | Description |
 |------|-------|-------------|
-| Divider | 2 | Horizontal/vertical separator |
-| Slider | 2 | Numeric range input |
-| Image | 2 | Async URL image loading |
-| Icon | 2 | SF Symbols icon |
-| ChoicePicker | 2 | Dropdown/multi-select |
-| DateTimeInput | 2 | Date and time picker |
-| List | 2 | Scrollable templated list |
 | Tabs | 3 | Tabbed container |
 | Modal | 3 | Modal dialog overlay |
 | Video | 3 | AVPlayerView video playback |
