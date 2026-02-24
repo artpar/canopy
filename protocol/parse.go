@@ -86,6 +86,13 @@ func (p *Parser) Next() (*Message, error) {
 		}
 		msg.Body = st
 
+	case MsgTest:
+		var tm TestMessage
+		if err := json.Unmarshal(env.Payload, &tm); err != nil {
+			return nil, fmt.Errorf("parse test: %w", err)
+		}
+		msg.Body = tm
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

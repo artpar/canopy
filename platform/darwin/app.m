@@ -46,6 +46,41 @@ void JVAppRun(void) {
     [NSApp run];
 }
 
+void JVAppStop(void) {
+    [NSApp stop:nil];
+    // Post a dummy event to break out of the run loop
+    NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                        location:NSZeroPoint
+                                   modifierFlags:0
+                                       timestamp:0
+                                    windowNumber:0
+                                         context:nil
+                                         subtype:0
+                                           data1:0
+                                           data2:0];
+    [NSApp postEvent:event atStart:YES];
+}
+
+void JVAppRunUntilIdle(void) {
+    // Process all pending events until idle, then return.
+    // This lets Auto Layout compute frames before test assertions run.
+    while (true) {
+        NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                            untilDate:[NSDate distantPast]
+                                               inMode:NSDefaultRunLoopMode
+                                              dequeue:YES];
+        if (!event) break;
+        [NSApp sendEvent:event];
+    }
+}
+
+void JVForceLayout(const char* surfaceID) {
+    NSString *sid = [NSString stringWithUTF8String:surfaceID];
+    NSWindow *window = windowMap[sid];
+    if (!window) return;
+    [window.contentView layoutSubtreeIfNeeded];
+}
+
 void* JVCreateWindow(const char* title, int width, int height, const char* surfaceID) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSString *windowTitle = [NSString stringWithUTF8String:title];

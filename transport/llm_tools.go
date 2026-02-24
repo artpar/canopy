@@ -112,6 +112,43 @@ func a2uiTools() []anyllm.Tool {
 				},
 			},
 		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_test",
+				Description: "Define a test case with assertions and simulations to verify the UI. Tests run headlessly and validate component state, data model values, child relationships, actions, and layout.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"surfaceId": map[string]any{"type": "string"},
+						"name":      map[string]any{"type": "string", "description": "Test case name"},
+						"steps": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"assert":        map[string]any{"type": "string", "enum": []string{"component", "dataModel", "children", "notExists", "count", "action", "layout", "style"}},
+									"simulate":      map[string]any{"type": "string", "enum": []string{"event", "setLayout"}},
+									"componentId":   map[string]any{"type": "string"},
+									"componentType": map[string]any{"type": "string"},
+									"props":         map[string]any{"type": "object"},
+									"path":          map[string]any{"type": "string"},
+									"value":         map[string]any{},
+									"children":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+									"count":         map[string]any{"type": "integer"},
+									"name":          map[string]any{"type": "string"},
+									"data":          map[string]any{"type": "object"},
+									"layout":        map[string]any{"type": "object"},
+									"event":         map[string]any{"type": "string"},
+									"eventData":     map[string]any{"type": "string"},
+								},
+							},
+						},
+					},
+					"required": []string{"surfaceId", "name", "steps"},
+				},
+			},
+		},
 	}
 }
 
@@ -181,6 +218,26 @@ COMPONENT TREE RULES:
 - Containers (Row, Column, Card, List) use children.static (array of child componentIds)
 - Set parentId on children to point to their container
 - Data binding: set dataBinding to a JSON Pointer (e.g. "/form/name") and the component auto-syncs with the data model
+
+TESTING:
+After building a UI, write tests using a2ui_test to verify correctness. Tests run headlessly.
+
+Assertion types:
+- component: Subset match on resolved props. {"assert":"component","componentId":"id","props":{"content":"Hello","variant":"h1"}}
+  Optionally check type: {"assert":"component","componentId":"id","componentType":"Text"}
+- dataModel: Check data model value. {"assert":"dataModel","path":"/name","value":"Alice"}
+- children: Check child IDs in order. {"assert":"children","componentId":"parent","children":["c1","c2"]}
+- notExists: Verify component does not exist. {"assert":"notExists","componentId":"id"}
+- count: Check child count. {"assert":"count","componentId":"parent","count":3}
+- action: Check that an action was fired. {"assert":"action","name":"submitForm","data":{"/name":"Alice"}}
+- layout: Check computed layout (x, y, width, height). {"assert":"layout","componentId":"id","layout":{"width":200,"height":50}}
+- style: Check computed style (fontName, fontSize, bold, italic, textColor, bgColor, hidden, opacity). {"assert":"style","componentId":"id","layout":{"fontSize":13,"bold":true}}
+
+Simulation:
+- event: Trigger user interaction. {"simulate":"event","componentId":"field","event":"change","eventData":"Alice"}
+  Events: change (TextField), click (Button), toggle (CheckBox), slide (Slider), select (ChoicePicker), datechange (DateTimeInput)
+
+Tests execute in file order. Side effects persist across tests. Actions reset per test.
 
 USER REQUEST: ` + userPrompt
 }

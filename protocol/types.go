@@ -11,7 +11,53 @@ const (
 	MsgUpdateComponents MessageType = "updateComponents"
 	MsgUpdateDataModel  MessageType = "updateDataModel"
 	MsgSetTheme         MessageType = "setTheme"
+	MsgTest             MessageType = "test"
 )
+
+// TestMessage defines a test case with a sequence of assert/simulate steps.
+type TestMessage struct {
+	Type      MessageType `json:"type"`
+	SurfaceID string      `json:"surfaceId"`
+	Name      string      `json:"name"`
+	Steps     []TestStep  `json:"steps"`
+}
+
+// TestStep is a single assertion or simulation within a test.
+type TestStep struct {
+	// Discriminator: "component", "dataModel", "children", "notExists", "count", "action", "layout", "style"
+	Assert string `json:"assert,omitempty"`
+	// Discriminator: "event"
+	Simulate string `json:"simulate,omitempty"`
+
+	// Common
+	ComponentID string `json:"componentId,omitempty"`
+
+	// assert=component: subset match on resolved props
+	Props map[string]interface{} `json:"props,omitempty"`
+	// assert=component: check component type
+	ComponentType string `json:"componentType,omitempty"`
+
+	// assert=dataModel
+	Path  string      `json:"path,omitempty"`
+	Value interface{} `json:"value"`
+
+	// assert=children
+	Children []string `json:"children,omitempty"`
+
+	// assert=count
+	Count int `json:"count,omitempty"`
+
+	// assert=action
+	ActionName string                 `json:"name,omitempty"`
+	ActionData map[string]interface{} `json:"data,omitempty"`
+
+	// assert=layout: check computed layout properties
+	Layout map[string]interface{} `json:"layout,omitempty"`
+
+	// simulate=event
+	Event     string `json:"event,omitempty"`
+	EventData string `json:"eventData,omitempty"`
+}
 
 // Envelope wraps every A2UI JSONL line.
 type Envelope struct {

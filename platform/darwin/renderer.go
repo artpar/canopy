@@ -206,6 +206,21 @@ func (r *DarwinRenderer) GetComponentType(handle renderer.ViewHandle) protocol.C
 	return r.types[handle]
 }
 
+// InvokeCallback programmatically triggers a registered callback for testing.
+func (r *DarwinRenderer) InvokeCallback(surfaceID, componentID, eventType, data string) {
+	r.mu.Lock()
+	var cbID renderer.CallbackID
+	if s, ok := r.callbacks[surfaceID]; ok {
+		if c, ok := s[componentID]; ok {
+			cbID = c[eventType]
+		}
+	}
+	r.mu.Unlock()
+	if cbID != 0 {
+		globalRegistry.Invoke(uint64(cbID), data)
+	}
+}
+
 // removeView removes an NSView from its superview.
 func removeView(handle renderer.ViewHandle) {
 	// Implemented in ObjC — for now just a placeholder

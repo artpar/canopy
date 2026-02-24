@@ -22,6 +22,8 @@ type MockRenderer struct {
 	callbacks  map[string]map[string]map[string]CallbackID
 	callbackFn map[CallbackID]func(string)
 	nextCB     CallbackID
+	layouts    map[string]map[string]LayoutInfo
+	styles     map[string]map[string]StyleInfo
 }
 
 type CreatedView struct {
@@ -174,6 +176,82 @@ func (m *MockRenderer) GetCallbackID(surfaceID, componentID, eventType string) C
 		}
 	}
 	return 0
+}
+
+// QueryLayout returns stored layout info (set via SetLayout) for mock testing.
+func (m *MockRenderer) QueryLayout(surfaceID, componentID string) LayoutInfo {
+	info, _ := m.GetLayout(surfaceID, componentID)
+	return info
+}
+
+// QueryStyle returns stored style info for mock testing.
+func (m *MockRenderer) QueryStyle(surfaceID, componentID string) StyleInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.styles[surfaceID]; ok {
+		if info, ok := s[componentID]; ok {
+			return info
+		}
+	}
+	return StyleInfo{}
+}
+
+// SetStyle stores computed style info for a component (used by mock test framework).
+func (m *MockRenderer) SetStyle(surfaceID, componentID string, info StyleInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.styles == nil {
+		m.styles = make(map[string]map[string]StyleInfo)
+	}
+	if m.styles[surfaceID] == nil {
+		m.styles[surfaceID] = make(map[string]StyleInfo)
+	}
+	m.styles[surfaceID][componentID] = info
+}
+
+// SetLayout stores computed layout info for a component (used by test framework).
+func (m *MockRenderer) SetLayout(surfaceID, componentID string, info LayoutInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.layouts == nil {
+		m.layouts = make(map[string]map[string]LayoutInfo)
+	}
+	if m.layouts[surfaceID] == nil {
+		m.layouts[surfaceID] = make(map[string]LayoutInfo)
+	}
+	m.layouts[surfaceID][componentID] = info
+}
+
+// GetLayout returns layout info for a component, if set.
+func (m *MockRenderer) GetLayout(surfaceID, componentID string) (LayoutInfo, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.layouts[surfaceID]; ok {
+		info, ok := s[componentID]
+		return info, ok
+	}
+	return LayoutInfo{}, false
+}
+
+// LastNode returns the most recent RenderNode for a component (from Created or Updated).
+func (m *MockRenderer) LastNode(surfaceID, componentID string) *RenderNode {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Check Updated in reverse order first (most recent state)
+	for i := len(m.Updated) - 1; i >= 0; i-- {
+		u := m.Updated[i]
+		if u.SurfaceID == surfaceID && u.Node != nil && u.Node.ComponentID == componentID {
+			return u.Node
+		}
+	}
+	// Fall back to Created
+	for i := len(m.Created) - 1; i >= 0; i-- {
+		c := m.Created[i]
+		if c.SurfaceID == surfaceID && c.Node != nil && c.Node.ComponentID == componentID {
+			return c.Node
+		}
+	}
+	return nil
 }
 
 // MockDispatcher executes functions immediately (synchronous, for tests).

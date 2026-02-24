@@ -6,6 +6,7 @@ import (
 	"jview/engine"
 	"jview/platform/darwin"
 	"jview/protocol"
+	"jview/renderer"
 	"jview/transport"
 	"log"
 	"os"
@@ -24,6 +25,12 @@ import (
 func main() {
 	// macOS requires the main thread for AppKit
 	runtime.LockOSThread()
+
+	// Handle "jview test <file>" — uses real AppKit for e2e testing
+	if len(os.Args) >= 3 && os.Args[1] == "test" {
+		runTests(os.Args[2])
+		return
+	}
 
 	llmProvider := flag.String("llm", "anthropic", "LLM provider: anthropic, openai, gemini, ollama, deepseek, groq, mistral")
 	model := flag.String("model", "claude-haiku-4-5-20251001", "Model name (default: claude-haiku-4-5-20251001)")
@@ -208,5 +215,36 @@ func createProvider(name string, apiKey string) (anyllm.Provider, error) {
 		return mistral.New(opts...)
 	default:
 		return nil, fmt.Errorf("unknown provider %q (supported: anthropic, openai, gemini, ollama, deepseek, groq, mistral)", name)
+	}
+}
+
+func runTests(path string) {
+	darwin.AppInit()
+	// Use synchronous dispatcher — we're already on the main thread.
+	// Real darwin.Dispatcher uses dispatch_async which won't execute until the run loop runs.
+	disp := &renderer.MockDispatcher{}
+	rend := darwin.NewRenderer()
+
+	results, err := engine.RunTestFile(path, rend, disp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	passed, failed := 0, 0
+	for _, r := range results {
+		if r.Passed {
+			passed++
+			fmt.Printf("PASS  %s (%d assertions)\n", r.Name, r.Assertions)
+		} else {
+			failed++
+			fmt.Printf("FAIL  %s\n", r.Name)
+			fmt.Printf("      %s\n", r.Error)
+		}
+	}
+
+	fmt.Printf("\nResults: %d passed, %d failed, %d total\n", passed, failed, len(results))
+	if failed > 0 {
+		os.Exit(1)
 	}
 }

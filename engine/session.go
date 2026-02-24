@@ -57,6 +57,10 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		// Phase 3: theme support
 		log.Printf("session: setTheme not yet implemented")
 
+	case protocol.MsgTest:
+		// Test messages are handled by the test runner, not the session.
+		return
+
 	default:
 		log.Printf("session: unknown message type %s", msg.Type)
 	}

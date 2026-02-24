@@ -40,4 +40,13 @@ type Renderer interface {
 
 	// GetComponentType returns the component type for a handle.
 	GetComponentType(handle ViewHandle) protocol.ComponentType
+
+	// InvokeCallback programmatically triggers a registered callback for testing.
+	InvokeCallback(surfaceID, componentID, eventType, data string)
+
+	// QueryLayout returns computed frame (x, y, width, height) for a view.
+	QueryLayout(surfaceID string, componentID string) LayoutInfo
+
+	// QueryStyle returns computed style (font, color, etc.) for a view.
+	QueryStyle(surfaceID string, componentID string) StyleInfo
 }
