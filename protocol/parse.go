@@ -100,6 +100,13 @@ func (p *Parser) Next() (*Message, error) {
 		}
 		msg.Body = ll
 
+	case MsgLoadAssets:
+		var la LoadAssets
+		if err := json.Unmarshal(env.Payload, &la); err != nil {
+			return nil, fmt.Errorf("parse loadAssets: %w", err)
+		}
+		msg.Body = la
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

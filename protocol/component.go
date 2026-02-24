@@ -37,6 +37,7 @@ type StyleProps struct {
 	FontWeight      string  `json:"fontWeight,omitempty"` // bold, medium, light
 	TextAlign       string  `json:"textAlign,omitempty"`  // left, center, right
 	Opacity         float64 `json:"opacity,omitempty"`
+	FontFamily      string  `json:"fontFamily,omitempty"`
 }
 
 // Component is a single A2UI component definition.

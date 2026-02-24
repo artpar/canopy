@@ -13,6 +13,7 @@ const (
 	MsgSetTheme         MessageType = "setTheme"
 	MsgTest             MessageType = "test"
 	MsgLoadLibrary      MessageType = "loadLibrary"
+	MsgLoadAssets       MessageType = "loadAssets"
 )
 
 // TestMessage defines a test case with a sequence of assert/simulate steps.
@@ -132,6 +133,19 @@ type LoadLibrary struct {
 	Path      string            `json:"path"`
 	Prefix    string            `json:"prefix"`
 	Functions []LoadLibraryFunc `json:"functions"`
+}
+
+// LoadAssets declares assets (fonts, images, audio, video) by alias.
+type LoadAssets struct {
+	Type   MessageType  `json:"type"`
+	Assets []AssetEntry `json:"assets"`
+}
+
+// AssetEntry is a single asset declaration within a loadAssets message.
+type AssetEntry struct {
+	Alias string `json:"alias"`
+	Kind  string `json:"kind"` // "font", "image", "audio", "video"
+	Src   string `json:"src"`
 }
 
 // LoadLibraryFunc declares a single function to load from a native library.

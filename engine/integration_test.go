@@ -742,6 +742,99 @@ func TestStylePassthrough(t *testing.T) {
 	}
 }
 
+func TestLoadAssetsRegistersAndResolves(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"loadAssets","assets":[{"alias":"hero","kind":"image","src":"https://example.com/hero.png"},{"alias":"MyFont","kind":"font","src":"./fonts/myfont.ttf"}]}
+{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"img1","type":"Image","props":{"src":"asset:hero","alt":"Hero","width":200,"height":100}}]}`)
+
+	// Verify the mock renderer received LoadAssets
+	heroSpec, ok := mock.GetAsset("hero")
+	if !ok {
+		t.Fatal("asset 'hero' not loaded in renderer")
+	}
+	if heroSpec.Src != "https://example.com/hero.png" {
+		t.Errorf("hero src = %q, want https://example.com/hero.png", heroSpec.Src)
+	}
+
+	fontSpec, ok := mock.GetAsset("MyFont")
+	if !ok {
+		t.Fatal("asset 'MyFont' not loaded in renderer")
+	}
+	if fontSpec.Kind != "font" {
+		t.Errorf("MyFont kind = %q, want font", fontSpec.Kind)
+	}
+
+	// Verify the image component's src was resolved from "asset:hero" to the actual URL
+	node := mock.LastNode("s1", "img1")
+	if node == nil {
+		t.Fatal("img1 node not found")
+	}
+	if node.Props.Src != "https://example.com/hero.png" {
+		t.Errorf("img1 src = %q, want https://example.com/hero.png", node.Props.Src)
+	}
+}
+
+func TestAssetRefUnknownAlias(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"img1","type":"Image","props":{"src":"asset:nonexistent","alt":"Missing"}}]}`)
+
+	// Unknown asset ref should pass through unchanged
+	node := mock.LastNode("s1", "img1")
+	if node == nil {
+		t.Fatal("img1 node not found")
+	}
+	if node.Props.Src != "asset:nonexistent" {
+		t.Errorf("img1 src = %q, want asset:nonexistent (passthrough)", node.Props.Src)
+	}
+}
+
+func TestFontFamilyStylePassthrough(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"t1","type":"Text","props":{"content":"Hi"},"style":{"fontFamily":"Comic Sans MS","fontSize":20}}]}`)
+
+	node := mock.LastNode("s1", "t1")
+	if node == nil {
+		t.Fatal("t1 node not found")
+	}
+	if node.Style.FontFamily != "Comic Sans MS" {
+		t.Errorf("fontFamily = %q, want Comic Sans MS", node.Style.FontFamily)
+	}
+	if node.Style.FontSize != 20 {
+		t.Errorf("fontSize = %v, want 20", node.Style.FontSize)
+	}
+}
+
+func TestLoadAssetsBeforeSurfaceCreate(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	// loadAssets comes before createSurface — assets should propagate to later surfaces
+	feedMessages(t, sess, `{"type":"loadAssets","assets":[{"alias":"bg","kind":"image","src":"/tmp/bg.png"}]}
+{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"img1","type":"Image","props":{"src":"asset:bg"}}]}`)
+
+	node := mock.LastNode("s1", "img1")
+	if node == nil {
+		t.Fatal("img1 node not found")
+	}
+	if node.Props.Src != "/tmp/bg.png" {
+		t.Errorf("img1 src = %q, want /tmp/bg.png", node.Props.Src)
+	}
+}
+
 func TestSessionUnknownMessageType(t *testing.T) {
 	sess, _ := newTestSession()
 

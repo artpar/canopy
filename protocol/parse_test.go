@@ -332,6 +332,47 @@ func TestParseLoadLibrary(t *testing.T) {
 	}
 }
 
+func TestParseLoadAssets(t *testing.T) {
+	input := `{"type":"loadAssets","assets":[{"alias":"BrandFont","kind":"font","src":"./fonts/brand.ttf"},{"alias":"hero","kind":"image","src":"https://example.com/hero.png"}]}`
+	p := NewParser(strings.NewReader(input))
+
+	msg, err := p.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Type != MsgLoadAssets {
+		t.Fatalf("expected loadAssets, got %s", msg.Type)
+	}
+	la := msg.Body.(LoadAssets)
+	if len(la.Assets) != 2 {
+		t.Fatalf("got %d assets, want 2", len(la.Assets))
+	}
+	if la.Assets[0].Alias != "BrandFont" || la.Assets[0].Kind != "font" || la.Assets[0].Src != "./fonts/brand.ttf" {
+		t.Errorf("asset 0 = %+v", la.Assets[0])
+	}
+	if la.Assets[1].Alias != "hero" || la.Assets[1].Kind != "image" || la.Assets[1].Src != "https://example.com/hero.png" {
+		t.Errorf("asset 1 = %+v", la.Assets[1])
+	}
+}
+
+func TestParseFontFamilyStyle(t *testing.T) {
+	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"t1","type":"Text","props":{"content":"Hi"},"style":{"fontFamily":"Comic Sans MS","fontSize":18}}]}`
+	p := NewParser(strings.NewReader(input))
+
+	msg, err := p.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc := msg.Body.(UpdateComponents)
+	s := uc.Components[0].Style
+	if s.FontFamily != "Comic Sans MS" {
+		t.Errorf("fontFamily = %q, want Comic Sans MS", s.FontFamily)
+	}
+	if s.FontSize != 18 {
+		t.Errorf("fontSize = %v, want 18", s.FontSize)
+	}
+}
+
 func TestParseChildListTemplate(t *testing.T) {
 	input := `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"list1","type":"Column","children":{"forEach":"/items","templateId":"item_tmpl","itemVariable":"item"}}]}`
 	p := NewParser(strings.NewReader(input))

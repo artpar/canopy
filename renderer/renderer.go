@@ -49,4 +49,7 @@ type Renderer interface {
 
 	// QueryStyle returns computed style (font, color, etc.) for a view.
 	QueryStyle(surfaceID string, componentID string) StyleInfo
+
+	// LoadAssets registers fonts, preloads images, and caches asset metadata.
+	LoadAssets(assets []AssetSpec)
 }

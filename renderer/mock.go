@@ -24,6 +24,7 @@ type MockRenderer struct {
 	nextCB     CallbackID
 	layouts    map[string]map[string]LayoutInfo
 	styles     map[string]map[string]StyleInfo
+	assets     map[string]AssetSpec
 }
 
 type CreatedView struct {
@@ -252,6 +253,26 @@ func (m *MockRenderer) LastNode(surfaceID, componentID string) *RenderNode {
 		}
 	}
 	return nil
+}
+
+// LoadAssets records loaded assets for test assertions.
+func (m *MockRenderer) LoadAssets(assets []AssetSpec) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, a := range assets {
+		if m.assets == nil {
+			m.assets = make(map[string]AssetSpec)
+		}
+		m.assets[a.Alias] = a
+	}
+}
+
+// GetAsset returns a loaded asset by alias, if any.
+func (m *MockRenderer) GetAsset(alias string) (AssetSpec, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.assets[alias]
+	return a, ok
 }
 
 // MockDispatcher executes functions immediately (synchronous, for tests).

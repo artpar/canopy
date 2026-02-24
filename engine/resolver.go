@@ -6,6 +6,7 @@ import (
 	"jview/protocol"
 	"jview/renderer"
 	"log"
+	"strings"
 )
 
 // Resolver evaluates dynamic values against a data model and tracks bindings.
@@ -13,6 +14,7 @@ type Resolver struct {
 	dm        *DataModel
 	tracker   *BindingTracker
 	evaluator *Evaluator
+	assets    *AssetRegistry
 }
 
 func NewResolver(dm *DataModel, tracker *BindingTracker, evaluator *Evaluator) *Resolver {
@@ -151,6 +153,7 @@ func (r *Resolver) resolveString(componentID string, dv *protocol.DynamicString)
 	if dv == nil {
 		return ""
 	}
+	var result string
 	if dv.IsFunc && dv.FunctionCall != nil {
 		r.registerFuncBindings(componentID, dv.FunctionCall.Args)
 		val, err := r.evaluator.Eval(dv.FunctionCall.Name, dv.FunctionCall.Args)
@@ -158,17 +161,31 @@ func (r *Resolver) resolveString(componentID string, dv *protocol.DynamicString)
 			log.Printf("evaluator error: %v", err)
 			return ""
 		}
-		return toString(val)
-	}
-	if dv.IsPath {
+		result = toString(val)
+	} else if dv.IsPath {
 		r.tracker.Register(dv.Path, componentID)
 		val, ok := r.dm.Get(dv.Path)
 		if !ok {
 			return ""
 		}
-		return fmt.Sprintf("%v", val)
+		result = fmt.Sprintf("%v", val)
+	} else {
+		result = dv.Literal
 	}
-	return dv.Literal
+	return r.resolveAssetRef(result)
+}
+
+// resolveAssetRef replaces "asset:<alias>" references with the registered src.
+func (r *Resolver) resolveAssetRef(val string) string {
+	if r.assets == nil {
+		return val
+	}
+	if alias, ok := strings.CutPrefix(val, "asset:"); ok {
+		if src := r.assets.Resolve(alias); src != "" {
+			return src
+		}
+	}
+	return val
 }
 
 func (r *Resolver) resolveNumber(componentID string, dv *protocol.DynamicNumber) float64 {

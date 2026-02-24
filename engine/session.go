@@ -12,6 +12,7 @@ type Session struct {
 	rend     renderer.Renderer
 	dispatch renderer.Dispatcher
 	ffi      *FFIRegistry
+	assets   *AssetRegistry
 
 	// OnAction is called when any surface triggers a server-bound event.
 	OnAction func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -59,6 +60,10 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		}
 		surf.HandleUpdateDataModel(udm)
 
+	case protocol.MsgLoadAssets:
+		la := msg.Body.(protocol.LoadAssets)
+		s.handleLoadAssets(la)
+
 	case protocol.MsgLoadLibrary:
 		ll := msg.Body.(protocol.LoadLibrary)
 		s.handleLoadLibrary(ll)
@@ -82,7 +87,7 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 		return
 	}
 
-	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch, s.ffi)
+	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch, s.ffi, s.assets)
 	surf.ActionHandler = s.OnAction
 	s.surfaces[cs.SurfaceID] = surf
 
@@ -146,4 +151,29 @@ func (s *Session) handleLoadLibrary(ll protocol.LoadLibrary) {
 	for _, surf := range s.surfaces {
 		surf.SetFFI(s.ffi)
 	}
+}
+
+func (s *Session) handleLoadAssets(la protocol.LoadAssets) {
+	if s.assets == nil {
+		s.assets = NewAssetRegistry()
+	}
+
+	specs := make([]renderer.AssetSpec, len(la.Assets))
+	for i, a := range la.Assets {
+		s.assets.Register(a.Alias, a.Kind, a.Src)
+		specs[i] = renderer.AssetSpec{
+			Alias: a.Alias,
+			Kind:  a.Kind,
+			Src:   a.Src,
+		}
+	}
+
+	// Propagate to all existing surfaces
+	for _, surf := range s.surfaces {
+		surf.SetAssets(s.assets)
+	}
+
+	s.dispatch.RunOnMain(func() {
+		s.rend.LoadAssets(specs)
+	})
 }

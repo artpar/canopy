@@ -27,6 +27,8 @@ func applyStyle(handle renderer.ViewHandle, style protocol.StyleProps) {
 	defer C.free(unsafe.Pointer(cFw))
 	cTa := C.CString(style.TextAlign)
 	defer C.free(unsafe.Pointer(cTa))
+	cFf := C.CString(style.FontFamily)
+	defer C.free(unsafe.Pointer(cFf))
 
 	C.JVApplyStyle(
 		unsafe.Pointer(handle),
@@ -37,5 +39,6 @@ func applyStyle(handle renderer.ViewHandle, style protocol.StyleProps) {
 		C.double(style.FontSize),
 		cFw, cTa,
 		C.double(style.Opacity),
+		cFf,
 	)
 }

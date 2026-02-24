@@ -18,6 +18,7 @@ type Surface struct {
 	rend      renderer.Renderer
 	dispatch  renderer.Dispatcher
 	ffi       *FFIRegistry
+	assets    *AssetRegistry
 
 	// activeCallbacks tracks registered callbacks: componentID → eventType → CallbackID
 	activeCallbacks map[string]map[string]renderer.CallbackID
@@ -29,21 +30,24 @@ type Surface struct {
 	ActionHandler func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
 }
 
-func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher, ffi *FFIRegistry) *Surface {
+func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher, ffi *FFIRegistry, assets *AssetRegistry) *Surface {
 	dm := NewDataModel()
 	tracker := NewBindingTracker()
 	evaluator := NewEvaluator(dm)
 	evaluator.FFI = ffi
+	resolver := NewResolver(dm, tracker, evaluator)
+	resolver.assets = assets
 	return &Surface{
 		id:               id,
 		tree:             NewTree(),
 		dm:               dm,
 		tracker:          tracker,
-		resolver:         NewResolver(dm, tracker, evaluator),
+		resolver:         resolver,
 		validator:        NewValidator(),
 		rend:             rend,
 		dispatch:         dispatch,
 		ffi:              ffi,
+		assets:           assets,
 		activeCallbacks:  make(map[string]map[string]renderer.CallbackID),
 		validationErrors: make(map[string][]string),
 	}
@@ -53,6 +57,12 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher,
 func (s *Surface) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi
 	s.resolver.evaluator.FFI = ffi
+}
+
+// SetAssets updates the asset registry for this surface and its resolver.
+func (s *Surface) SetAssets(assets *AssetRegistry) {
+	s.assets = assets
+	s.resolver.assets = assets
 }
 
 // HandleUpdateComponents processes a batch of component definitions.

@@ -239,6 +239,11 @@ func (r *DarwinRenderer) InvokeCallback(surfaceID, componentID, eventType, data 
 	}
 }
 
+// LoadAssets registers fonts and preloads images via the native asset system.
+func (r *DarwinRenderer) LoadAssets(assets []renderer.AssetSpec) {
+	loadAssets(assets)
+}
+
 // removeView removes an NSView from its superview.
 func removeView(handle renderer.ViewHandle) {
 	// Implemented in ObjC — for now just a placeholder

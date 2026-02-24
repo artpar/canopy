@@ -33,13 +33,15 @@ static NSTextAlignment textAlignFromString(NSString *align) {
 
 void JVApplyStyle(void* handle, const char* bg, const char* tc,
     double cornerRadius, double width, double height,
-    double fontSize, const char* fontWeight, const char* textAlign, double opacity) {
+    double fontSize, const char* fontWeight, const char* textAlign, double opacity,
+    const char* fontFamily) {
 
     NSView *view = (__bridge NSView*)handle;
     NSString *bgStr = [NSString stringWithUTF8String:bg];
     NSString *tcStr = [NSString stringWithUTF8String:tc];
     NSString *fwStr = [NSString stringWithUTF8String:fontWeight];
     NSString *taStr = [NSString stringWithUTF8String:textAlign];
+    NSString *ffStr = fontFamily ? [NSString stringWithUTF8String:fontFamily] : @"";
 
     // Background color via layer
     if ([bgStr length] > 0) {
@@ -90,19 +92,30 @@ void JVApplyStyle(void* handle, const char* bg, const char* tc,
             if (color) tf.textColor = color;
         }
 
-        // Font size and weight
-        if (fontSize > 0 || [fwStr length] > 0) {
+        // Font size, weight, and family
+        if (fontSize > 0 || [fwStr length] > 0 || [ffStr length] > 0) {
             CGFloat size = fontSize > 0 ? fontSize : tf.font.pointSize;
-            NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
-            // Preserve bold from variant if fontWeight not set
-            if ([fwStr length] == 0) {
-                NSFontDescriptor *desc = [tf.font fontDescriptor];
-                NSFontDescriptorSymbolicTraits traits = [desc symbolicTraits];
-                if (traits & NSFontDescriptorTraitBold) {
-                    weight = NSFontWeightBold;
+            if ([ffStr length] > 0) {
+                NSFont *customFont = [NSFont fontWithName:ffStr size:size];
+                if (customFont) {
+                    tf.font = customFont;
+                } else {
+                    // Fall back to system font
+                    NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
+                    tf.font = [NSFont systemFontOfSize:size weight:weight];
                 }
+            } else {
+                NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
+                // Preserve bold from variant if fontWeight not set
+                if ([fwStr length] == 0) {
+                    NSFontDescriptor *desc = [tf.font fontDescriptor];
+                    NSFontDescriptorSymbolicTraits traits = [desc symbolicTraits];
+                    if (traits & NSFontDescriptorTraitBold) {
+                        weight = NSFontWeightBold;
+                    }
+                }
+                tf.font = [NSFont systemFontOfSize:size weight:weight];
             }
-            tf.font = [NSFont systemFontOfSize:size weight:weight];
         }
 
         // Text alignment
@@ -121,11 +134,21 @@ void JVApplyStyle(void* handle, const char* bg, const char* tc,
             if (color) btn.contentTintColor = color;
         }
 
-        // Font size and weight on button
-        if (fontSize > 0 || [fwStr length] > 0) {
+        // Font size, weight, and family on button
+        if (fontSize > 0 || [fwStr length] > 0 || [ffStr length] > 0) {
             CGFloat size = fontSize > 0 ? fontSize : btn.font.pointSize;
-            NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
-            btn.font = [NSFont systemFontOfSize:size weight:weight];
+            if ([ffStr length] > 0) {
+                NSFont *customFont = [NSFont fontWithName:ffStr size:size];
+                if (customFont) {
+                    btn.font = customFont;
+                } else {
+                    NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
+                    btn.font = [NSFont systemFontOfSize:size weight:weight];
+                }
+            } else {
+                NSFontWeight weight = [fwStr length] > 0 ? fontWeightFromString(fwStr) : NSFontWeightRegular;
+                btn.font = [NSFont systemFontOfSize:size weight:weight];
+            }
         }
     }
 }

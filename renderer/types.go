@@ -87,6 +87,13 @@ type OptionItem struct {
 	Value string `json:"value,omitempty"`
 }
 
+// AssetSpec describes a single asset to be loaded by the platform renderer.
+type AssetSpec struct {
+	Alias string
+	Kind  string // "font", "image", "audio", "video"
+	Src   string
+}
+
 // LayoutInfo holds computed layout properties for a view, used by the test framework.
 type LayoutInfo struct {
 	X      float64 `json:"x,omitempty"`
