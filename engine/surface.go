@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"jview/protocol"
 	"jview/renderer"
-	"log"
 )
 
 // Surface manages a single A2UI surface: its component tree, data model, and bindings.
@@ -146,6 +145,22 @@ func (s *Surface) cleanupComponents(removedIDs []string) {
 	})
 }
 
+// CleanupAll unregisters all callbacks and bindings for every component in the tree.
+// Called before surface deletion to prevent stale callback invocations.
+func (s *Surface) CleanupAll() {
+	allIDs := s.tree.All()
+	for _, id := range allIDs {
+		if events, exists := s.activeCallbacks[id]; exists {
+			for _, cbID := range events {
+				s.rend.UnregisterCallback(cbID)
+			}
+			delete(s.activeCallbacks, id)
+		}
+		s.tracker.Unregister(id)
+		delete(s.validationErrors, id)
+	}
+}
+
 // HandleUpdateDataModel applies data model operations and re-renders affected components.
 func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 	var allChanged []string
@@ -158,11 +173,11 @@ func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 		case "remove":
 			changed, err = s.dm.Delete(op.Path)
 		default:
-			log.Printf("surface %s: unknown data op %q", s.id, op.Op)
+			logWarn("datamodel", s.id, fmt.Sprintf("unknown data op %q", op.Op))
 			continue
 		}
 		if err != nil {
-			log.Printf("surface %s: data op error: %v", s.id, err)
+			logWarn("datamodel", s.id, fmt.Sprintf("data op error: %v", err))
 			continue
 		}
 		allChanged = append(allChanged, changed...)
@@ -230,7 +245,10 @@ func (s *Surface) renderComponents(componentIDs []string) {
 		for _, w := range ordered {
 			handle := s.rend.GetHandle(s.id, w.node.ComponentID)
 			if handle == 0 {
-				s.rend.CreateView(s.id, w.node)
+				h := s.rend.CreateView(s.id, w.node)
+				if h == 0 {
+					logWarn("render", s.id, fmt.Sprintf("CreateView returned 0 for %s (type %s)", w.node.ComponentID, w.node.Type))
+				}
 			} else {
 				s.rend.UpdateView(s.id, handle, w.node)
 			}
@@ -277,6 +295,10 @@ func (s *Surface) renderComponents(componentIDs []string) {
 			if wrapperHandle == 0 {
 				wrapperHandle = s.rend.CreateView(s.id, wrapperNode)
 			}
+			if wrapperHandle == 0 {
+				logWarn("render", s.id, "CreateView returned 0 for __root_wrapper__")
+				return
+			}
 			var rootHandles []renderer.ViewHandle
 			for _, rid := range roots {
 				h := s.rend.GetHandle(s.id, rid)
@@ -309,7 +331,7 @@ func (s *Surface) executeFunctionCall(fc *protocol.ActionFuncCall) {
 	case "setTheme":
 		s.executeSetTheme(fc.Args)
 	default:
-		log.Printf("surface %s: unknown functionCall: %s", s.id, fc.Call)
+		logWarn("functioncall", s.id, fmt.Sprintf("unknown functionCall: %s", fc.Call))
 	}
 }
 
@@ -319,17 +341,17 @@ func (s *Surface) executeFunctionCall(fc *protocol.ActionFuncCall) {
 func (s *Surface) executeUpdateDataModel(args interface{}) {
 	argsMap, ok := args.(map[string]interface{})
 	if !ok {
-		log.Printf("surface %s: updateDataModel args not a map", s.id)
+		logWarn("functioncall", s.id, "updateDataModel args not a map")
 		return
 	}
 	opsRaw, ok := argsMap["ops"]
 	if !ok {
-		log.Printf("surface %s: updateDataModel missing ops", s.id)
+		logWarn("functioncall", s.id, "updateDataModel missing ops")
 		return
 	}
 	ops, ok := opsRaw.([]interface{})
 	if !ok {
-		log.Printf("surface %s: updateDataModel ops not an array", s.id)
+		logWarn("functioncall", s.id, "updateDataModel ops not an array")
 		return
 	}
 
@@ -353,19 +375,19 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 		case "add", "replace":
 			value, err := evaluator.resolveArg(opMap["value"])
 			if err != nil {
-				log.Printf("surface %s: resolve value error: %v", s.id, err)
+				logWarn("functioncall", s.id, fmt.Sprintf("resolve value error: %v", err))
 				continue
 			}
 			changed, err := s.dm.Set(path, value)
 			if err != nil {
-				log.Printf("surface %s: data op error: %v", s.id, err)
+				logWarn("datamodel", s.id, fmt.Sprintf("data op error: %v", err))
 				continue
 			}
 			allChanged = append(allChanged, changed...)
 		case "remove":
 			changed, err := s.dm.Delete(path)
 			if err != nil {
-				log.Printf("surface %s: data op error: %v", s.id, err)
+				logWarn("datamodel", s.id, fmt.Sprintf("data op error: %v", err))
 				continue
 			}
 			allChanged = append(allChanged, changed...)
@@ -386,12 +408,12 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 func (s *Surface) executeSetTheme(args interface{}) {
 	argsMap, ok := args.(map[string]interface{})
 	if !ok {
-		log.Printf("surface %s: setTheme args not a map", s.id)
+		logWarn("functioncall", s.id, "setTheme args not a map")
 		return
 	}
 	theme, ok := argsMap["theme"].(string)
 	if !ok || theme == "" {
-		log.Printf("surface %s: setTheme missing or invalid theme", s.id)
+		logWarn("functioncall", s.id, "setTheme missing or invalid theme")
 		return
 	}
 	s.dispatch.RunOnMain(func() {
@@ -436,7 +458,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "change", func(value string) {
 				changed, err := s.dm.Set(binding, value)
 				if err != nil {
-					log.Printf("surface %s: binding set error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("binding set error: %v", err))
 					return
 				}
 				// Run validation
@@ -465,7 +487,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 				boolVal := value == "true" || value == "1"
 				changed, err := s.dm.Set(binding, boolVal)
 				if err != nil {
-					log.Printf("surface %s: binding set error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("binding set error: %v", err))
 					return
 				}
 				affected := s.tracker.Affected(changed)
@@ -492,7 +514,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 				fmt.Sscanf(value, "%f", &fVal)
 				changed, err := s.dm.Set(binding, fVal)
 				if err != nil {
-					log.Printf("surface %s: slider binding error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("slider binding error: %v", err))
 					return
 				}
 				affected := s.tracker.Affected(changed)
@@ -517,7 +539,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "select", func(value string) {
 				changed, err := s.dm.Set(binding, value)
 				if err != nil {
-					log.Printf("surface %s: picker binding error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("picker binding error: %v", err))
 					return
 				}
 				affected := s.tracker.Affected(changed)
@@ -542,7 +564,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "datechange", func(value string) {
 				changed, err := s.dm.Set(binding, value)
 				if err != nil {
-					log.Printf("surface %s: date binding error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("date binding error: %v", err))
 					return
 				}
 				affected := s.tracker.Affected(changed)
@@ -567,7 +589,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "select", func(value string) {
 				changed, err := s.dm.Set(binding, value)
 				if err != nil {
-					log.Printf("surface %s: tabs binding error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("tabs binding error: %v", err))
 					return
 				}
 				affected := s.tracker.Affected(changed)
@@ -628,7 +650,7 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			if binding != "" {
 				changed, err := s.dm.Set(binding, false)
 				if err != nil {
-					log.Printf("surface %s: modal binding error: %v", s.id, err)
+					logWarn("binding", s.id, fmt.Sprintf("modal binding error: %v", err))
 				} else {
 					allChanged = append(allChanged, changed...)
 				}
@@ -682,7 +704,7 @@ func (s *Surface) expandComponentInstances(comps []protocol.Component) []protoco
 
 		def, ok := s.compDefs[comp.UseComponent]
 		if !ok {
-			log.Printf("surface %s: unknown component definition %q", s.id, comp.UseComponent)
+			logWarn("component", s.id, fmt.Sprintf("unknown component definition %q", comp.UseComponent))
 			result = append(result, comp)
 			continue
 		}
@@ -697,7 +719,7 @@ func (s *Surface) expandOneComponentInstance(inst protocol.Component, def *proto
 	// Parse raw JSON components into maps
 	trees, err := jsonToMaps(def.Components)
 	if err != nil {
-		log.Printf("surface %s: parse component definition %q: %v", s.id, def.Name, err)
+		logWarn("component", s.id, fmt.Sprintf("parse component definition %q: %v", def.Name, err))
 		return []protocol.Component{inst}
 	}
 
@@ -774,12 +796,12 @@ func (s *Surface) expandOneComponentInstance(inst protocol.Component, def *proto
 	for _, tree := range trees {
 		data, err := json.Marshal(tree)
 		if err != nil {
-			log.Printf("surface %s: marshal expanded component: %v", s.id, err)
+			logWarn("component", s.id, fmt.Sprintf("marshal expanded component: %v", err))
 			continue
 		}
 		var comp protocol.Component
 		if err := json.Unmarshal(data, &comp); err != nil {
-			log.Printf("surface %s: unmarshal expanded component: %v", s.id, err)
+			logWarn("component", s.id, fmt.Sprintf("unmarshal expanded component: %v", err))
 			continue
 		}
 		result = append(result, comp)

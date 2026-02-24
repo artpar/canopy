@@ -1,9 +1,9 @@
 package engine
 
 import (
+	"fmt"
 	"jview/protocol"
 	"jview/renderer"
-	"log"
 )
 
 // Session manages all surfaces and routes incoming messages.
@@ -50,7 +50,7 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		uc := msg.Body.(protocol.UpdateComponents)
 		surf, ok := s.surfaces[uc.SurfaceID]
 		if !ok {
-			log.Printf("session: unknown surface %s for updateComponents", uc.SurfaceID)
+			logWarn("session", uc.SurfaceID, "unknown surface for updateComponents")
 			return
 		}
 		surf.HandleUpdateComponents(uc)
@@ -59,7 +59,7 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		udm := msg.Body.(protocol.UpdateDataModel)
 		surf, ok := s.surfaces[udm.SurfaceID]
 		if !ok {
-			log.Printf("session: unknown surface %s for updateDataModel", udm.SurfaceID)
+			logWarn("session", udm.SurfaceID, "unknown surface for updateDataModel")
 			return
 		}
 		surf.HandleUpdateDataModel(udm)
@@ -95,13 +95,13 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		return
 
 	default:
-		log.Printf("session: unknown message type %s", msg.Type)
+		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}
 }
 
 func (s *Session) createSurface(cs protocol.CreateSurface) {
 	if _, exists := s.surfaces[cs.SurfaceID]; exists {
-		log.Printf("session: surface %s already exists", cs.SurfaceID)
+		logWarn("session", cs.SurfaceID, "surface already exists")
 		return
 	}
 
@@ -135,9 +135,11 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 }
 
 func (s *Session) deleteSurface(surfaceID string) {
-	if _, ok := s.surfaces[surfaceID]; !ok {
+	surf, ok := s.surfaces[surfaceID]
+	if !ok {
 		return
 	}
+	surf.CleanupAll()
 	delete(s.surfaces, surfaceID)
 	s.dispatch.RunOnMain(func() {
 		s.rend.DestroyWindow(surfaceID)
@@ -163,7 +165,7 @@ func (s *Session) handleLoadLibrary(ll protocol.LoadLibrary) {
 	}
 
 	if err := s.ffi.LoadLibrary(ll.Path, ll.Prefix, funcs); err != nil {
-		log.Printf("session: loadLibrary error: %v", err)
+		logError("session", "", fmt.Sprintf("loadLibrary error: %v", err))
 		return
 	}
 
@@ -175,7 +177,7 @@ func (s *Session) handleLoadLibrary(ll protocol.LoadLibrary) {
 
 func (s *Session) handleDefineFunction(df protocol.DefineFunction) {
 	if _, exists := s.funcDefs[df.Name]; exists {
-		log.Printf("session: redefining function %s", df.Name)
+		logWarn("session", "", fmt.Sprintf("redefining function %s", df.Name))
 	}
 	def := &FuncDef{
 		Name:   df.Name,
@@ -191,7 +193,7 @@ func (s *Session) handleDefineFunction(df protocol.DefineFunction) {
 
 func (s *Session) handleDefineComponent(dc protocol.DefineComponent) {
 	if _, exists := s.compDefs[dc.Name]; exists {
-		log.Printf("session: redefining component %s", dc.Name)
+		logWarn("session", "", fmt.Sprintf("redefining component %s", dc.Name))
 	}
 	s.compDefs[dc.Name] = &dc
 	// Propagate to all existing surfaces

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"jview/protocol"
 	"jview/renderer"
-	"log"
 	"strings"
 )
 
@@ -184,7 +183,7 @@ func (r *Resolver) resolveString(componentID string, dv *protocol.DynamicString)
 		r.registerFuncBindings(componentID, dv.FunctionCall.Args)
 		val, err := r.evaluator.Eval(dv.FunctionCall.Name, dv.FunctionCall.Args)
 		if err != nil {
-			log.Printf("evaluator error: %v", err)
+			logWarn("resolver", componentID, fmt.Sprintf("evaluator error in %s: %v", dv.FunctionCall.Name, err))
 			return ""
 		}
 		result = toString(val)
@@ -222,7 +221,7 @@ func (r *Resolver) resolveNumber(componentID string, dv *protocol.DynamicNumber)
 		r.registerFuncBindings(componentID, dv.FunctionCall.Args)
 		val, err := r.evaluator.Eval(dv.FunctionCall.Name, dv.FunctionCall.Args)
 		if err != nil {
-			log.Printf("evaluator error: %v", err)
+			logWarn("resolver", componentID, fmt.Sprintf("evaluator error in %s: %v", dv.FunctionCall.Name, err))
 			return 0
 		}
 		f, _ := toFloat(val)
@@ -250,7 +249,7 @@ func (r *Resolver) resolveBool(componentID string, dv *protocol.DynamicBoolean) 
 		r.registerFuncBindings(componentID, dv.FunctionCall.Args)
 		val, err := r.evaluator.Eval(dv.FunctionCall.Name, dv.FunctionCall.Args)
 		if err != nil {
-			log.Printf("evaluator error: %v", err)
+			logWarn("resolver", componentID, fmt.Sprintf("evaluator error in %s: %v", dv.FunctionCall.Name, err))
 			return false
 		}
 		b, _ := toBool(val)

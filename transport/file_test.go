@@ -89,7 +89,7 @@ msgsDone:
 func TestFileTransportMalformedJSON(t *testing.T) {
 	defer goroutineLeakCheck(t)()
 
-	// Create a temp file with bad JSON
+	// Create a temp file with bad JSON — transport now skips bad lines
 	tmp, err := os.CreateTemp("", "jview-test-*.jsonl")
 	if err != nil {
 		t.Fatal(err)
@@ -101,13 +101,50 @@ func TestFileTransportMalformedJSON(t *testing.T) {
 	ft := NewFileTransport(tmp.Name())
 	ft.Start()
 
-	// Messages closes (possibly with 0 messages since first line fails)
-	drainWithTimeout(t, ft.Messages(), 5*time.Second)
+	// Messages closes with 0 messages since only line is bad
+	msgs := drainWithTimeout(t, ft.Messages(), 5*time.Second)
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages from all-bad file, got %d", len(msgs))
+	}
 
-	// Errors channel must close with at least one error
+	// Errors channel must close with no errors (bad lines are logged and skipped)
 	errs := drainErrorsWithTimeout(t, ft.Errors(), time.Second)
-	if len(errs) == 0 {
-		t.Fatal("expected parse error for malformed JSON")
+	if len(errs) != 0 {
+		t.Errorf("expected 0 errors (bad lines are skipped), got %d: %v", len(errs), errs)
+	}
+}
+
+func TestFileTransportMalformedMidFile(t *testing.T) {
+	defer goroutineLeakCheck(t)()
+
+	// Create a file with valid JSONL, a bad line, then more valid JSONL
+	tmp, err := os.CreateTemp("", "jview-test-*.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.WriteString(`{"type":"createSurface","surfaceId":"s1","title":"First","width":400,"height":300}` + "\n")
+	tmp.WriteString("this is garbage\n")
+	tmp.WriteString(`{"type":"createSurface","surfaceId":"s2","title":"Second","width":400,"height":300}` + "\n")
+	tmp.Close()
+
+	ft := NewFileTransport(tmp.Name())
+	ft.Start()
+
+	msgs := drainWithTimeout(t, ft.Messages(), 5*time.Second)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 valid messages (bad line skipped), got %d", len(msgs))
+	}
+	if msgs[0].Type != protocol.MsgCreateSurface {
+		t.Errorf("msg[0].Type = %q, want createSurface", msgs[0].Type)
+	}
+	if msgs[1].Type != protocol.MsgCreateSurface {
+		t.Errorf("msg[1].Type = %q, want createSurface", msgs[1].Type)
+	}
+
+	errs := drainErrorsWithTimeout(t, ft.Errors(), time.Second)
+	if len(errs) != 0 {
+		t.Errorf("expected 0 errors, got %d: %v", len(errs), errs)
 	}
 }
 
