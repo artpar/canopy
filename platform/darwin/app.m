@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #include "app.h"
 
 // Map from surfaceID → NSWindow
@@ -122,6 +123,42 @@ void* JVCreateWindow(const char* title, int width, int height, const char* surfa
     }
 
     windowMap[sid] = window;
+
+    // Add loading spinner + label, centered in window.
+    // Automatically removed when JVSetWindowRootView clears all subviews.
+    NSView *spinnerContainer = [[NSView alloc] init];
+    spinnerContainer.translatesAutoresizingMaskIntoConstraints = NO;
+
+    NSProgressIndicator *spinner = [[NSProgressIndicator alloc] init];
+    spinner.style = NSProgressIndicatorStyleSpinning;
+    spinner.controlSize = NSControlSizeRegular;
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    [spinner startAnimation:nil];
+
+    NSTextField *loadingLabel = [NSTextField labelWithString:@"Loading..."];
+    loadingLabel.textColor = [NSColor secondaryLabelColor];
+    loadingLabel.font = [NSFont systemFontOfSize:14];
+    loadingLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [spinnerContainer addSubview:spinner];
+    [spinnerContainer addSubview:loadingLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [spinner.centerXAnchor constraintEqualToAnchor:spinnerContainer.centerXAnchor],
+        [spinner.topAnchor constraintEqualToAnchor:spinnerContainer.topAnchor],
+        [loadingLabel.centerXAnchor constraintEqualToAnchor:spinnerContainer.centerXAnchor],
+        [loadingLabel.topAnchor constraintEqualToAnchor:spinner.bottomAnchor constant:12],
+        [loadingLabel.bottomAnchor constraintEqualToAnchor:spinnerContainer.bottomAnchor],
+    ]];
+
+    NSView *contentView = window.contentView;
+    [contentView addSubview:spinnerContainer];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [spinnerContainer.centerXAnchor constraintEqualToAnchor:contentView.centerXAnchor],
+        [spinnerContainer.centerYAnchor constraintEqualToAnchor:contentView.centerYAnchor],
+    ]];
+
     return (__bridge void*)window;
 }
 
