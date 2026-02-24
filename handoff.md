@@ -185,6 +185,7 @@ make verify                          # Screenshot verification (12 fixtures)
 make check                           # Full gate (test + verify)
 build/jview testdata/hello.jsonl     # File mode (static fixture)
 build/jview --prompt "Build a todo app"  # LLM mode (default: anthropic/haiku)
+build/jview --prompt-file prompt.txt    # LLM mode with prompt from file
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
 make verify-fixture F=testdata/hello.jsonl  # Single fixture screenshot
 ```

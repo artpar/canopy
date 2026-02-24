@@ -30,7 +30,17 @@ func main() {
 	prompt := flag.String("prompt", "", "Prompt describing the UI to build")
 	mode := flag.String("mode", "tools", "LLM mode: tools (default) or raw")
 	apiKey := flag.String("api-key", "", "API key (overrides environment variable)")
+	promptFile := flag.String("prompt-file", "", "Read prompt from file (overrides --prompt)")
 	flag.Parse()
+
+	if *promptFile != "" {
+		data, err := os.ReadFile(*promptFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading prompt file: %v\n", err)
+			os.Exit(1)
+		}
+		*prompt = string(data)
+	}
 
 	// Initialize platform
 	darwin.AppInit()
@@ -69,7 +79,8 @@ func main() {
 	} else {
 		fmt.Fprintf(os.Stderr, "usage: jview <file.jsonl>\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt \"Build a todo app\"\n")
-		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt \"Build a counter\"\n")
+		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt\n")
+		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt-file prompt.txt\n")
 		os.Exit(1)
 	}
 

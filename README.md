@@ -23,9 +23,12 @@ make build
 # LLM mode (default: anthropic / claude-haiku-4-5-20251001)
 ANTHROPIC_API_KEY=... build/jview --prompt "Build a todo app"
 
+# Prompt from file (for longer prompts)
+build/jview --prompt-file prompt.txt
+
 # With a different provider/model
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
-build/jview --llm ollama --model llama3 --prompt "Build a form" --mode raw
+build/jview --llm ollama --model llama3 --prompt-file app-spec.txt --mode raw
 
 # File mode (static JSONL fixtures)
 build/jview testdata/hello.jsonl
@@ -93,7 +96,11 @@ Components can bind to the data model using JSON Pointers. When a user types in 
 ### LLM-generated UI
 
 ```bash
+# Inline prompt
 build/jview --prompt "Build a simple counter with increment and decrement buttons"
+
+# Or from a file
+build/jview --prompt-file my-app-spec.txt
 ```
 
 The LLM creates a window, initializes the data model, and renders components — all via tool calls.
