@@ -6,8 +6,6 @@ extern void GoCallbackInvoke(uint64_t callbackID, const char* data);
 
 static const void *kRTEDelegateKey = &kRTEDelegateKey;
 static const void *kRTETextViewKey = &kRTETextViewKey;
-static const void *kRTEEditingKey = &kRTEEditingKey;
-static const void *kRTETimerKey = &kRTETimerKey;
 
 // --- Markdown → NSAttributedString ---
 
@@ -217,7 +215,6 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 
 @interface JVRichTextDelegate : NSObject <NSTextViewDelegate>
 @property (nonatomic, assign) uint64_t callbackID;
-@property (nonatomic, assign) BOOL isEditing;
 @property (nonatomic, assign) BOOL suppressCallback;
 @property (nonatomic, weak) NSTextView *textView;
 @end
@@ -226,29 +223,10 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 
 - (void)textDidChange:(NSNotification *)notification {
     if (self.suppressCallback) return;
-    self.isEditing = YES;
 
-    // Debounce: cancel previous timer and start new one
-    NSScrollView *scrollView = (NSScrollView*)self.textView.enclosingScrollView;
-    if (scrollView) {
-        NSTimer *oldTimer = objc_getAssociatedObject(scrollView.superview ?: scrollView, kRTETimerKey);
-        [oldTimer invalidate];
-    }
-
-    __weak JVRichTextDelegate *weakSelf = self;
-    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:NO block:^(NSTimer *t) {
-        JVRichTextDelegate *strongSelf = weakSelf;
-        if (!strongSelf || !strongSelf.textView) return;
-        strongSelf.isEditing = NO;
-
-        NSString *markdown = attributedStringToMarkdown(strongSelf.textView.textStorage);
-        const char *val = [markdown UTF8String];
-        GoCallbackInvoke(strongSelf.callbackID, val);
-    }];
-
-    if (scrollView) {
-        objc_setAssociatedObject(scrollView.superview ?: scrollView, kRTETimerKey, timer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    NSString *markdown = attributedStringToMarkdown(self.textView.textStorage);
+    const char *val = [markdown UTF8String];
+    GoCallbackInvoke(self.callbackID, val);
 }
 
 @end
@@ -339,9 +317,6 @@ void JVUpdateRichTextEditor(void* handle, const char* content, bool editable) {
     if (!textView) return;
 
     textView.editable = editable;
-
-    // Skip update if user is actively editing (prevents cursor jump)
-    if (delegate && delegate.isEditing) return;
 
     NSString *markdown = [NSString stringWithUTF8String:content];
     NSAttributedString *attrStr = markdownToAttributedString(markdown);

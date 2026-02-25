@@ -15,10 +15,6 @@ import (
 )
 
 func applyStyle(handle renderer.ViewHandle, style protocol.StyleProps) {
-	if style == (protocol.StyleProps{}) {
-		return
-	}
-
 	cBg := C.CString(style.BackgroundColor)
 	defer C.free(unsafe.Pointer(cBg))
 	cTc := C.CString(style.TextColor)
