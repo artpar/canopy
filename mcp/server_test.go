@@ -59,8 +59,8 @@ func TestToolsList(t *testing.T) {
 	var result ToolsListResult
 	json.Unmarshal(resp.Result, &result)
 
-	if len(result.Tools) != 14 {
-		t.Errorf("tools count = %d, want 14", len(result.Tools))
+	if len(result.Tools) != 26 {
+		t.Errorf("tools count = %d, want 26", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  tool: %s", tool.Name)
 		}
@@ -69,9 +69,13 @@ func TestToolsList(t *testing.T) {
 	expected := map[string]bool{
 		"list_surfaces": true, "get_tree": true, "get_component": true,
 		"get_data_model": true, "get_layout": true, "get_style": true,
-		"take_screenshot": true, "click": true, "fill": true,
+		"take_screenshot": true, "perform_action": true, "click": true, "fill": true,
 		"toggle": true, "interact": true, "set_data_model": true,
-		"wait_for": true, "send_message": true,
+		"wait_for": true, "send_message": true, "get_logs": true,
+		"list_processes": true, "create_process": true, "stop_process": true,
+		"send_to_process": true, "list_channels": true, "create_channel": true,
+		"delete_channel": true, "publish": true, "subscribe": true,
+		"unsubscribe": true,
 	}
 	for _, tool := range result.Tools {
 		if !expected[tool.Name] {
@@ -335,8 +339,8 @@ func TestEndToEndJSONRPC(t *testing.T) {
 	json.Unmarshal([]byte(lines[1]), &toolsResp)
 	var toolsResult ToolsListResult
 	json.Unmarshal(toolsResp.Result, &toolsResult)
-	if len(toolsResult.Tools) != 14 {
-		t.Errorf("tools count = %d, want 14", len(toolsResult.Tools))
+	if len(toolsResult.Tools) != 26 {
+		t.Errorf("tools count = %d, want 26", len(toolsResult.Tools))
 	}
 
 	// Check ping response

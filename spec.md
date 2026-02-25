@@ -1056,15 +1056,16 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 The MCP server starts automatically on stdin/stdout in all modes using JSON-RPC 2.0. When running `jview file.jsonl`, the MCP server is available alongside the normal UI. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
-25 tools are available:
+26 tools are available:
 
 | Category | Tools |
 |----------|-------|
 | Query | `list_surfaces`, `get_tree`, `get_component`, `get_data_model`, `get_layout`, `get_style` |
 | Interaction | `click`, `fill`, `toggle`, `interact` |
+| Actions | `perform_action` (send AppKit selector through responder chain, e.g. `selectAll:`, `toggleBoldface:`) |
 | Data | `set_data_model`, `wait_for` |
 | Transport | `send_message` (send A2UI JSONL messages to create/update surfaces) |
-| Capture | `take_screenshot` (PNG, base64-encoded) |
+| Capture | `take_screenshot` (PNG — saves to disk with `filePath`, or returns base64) |
 | Logging | `get_logs` |
 | Processes | `list_processes`, `create_process`, `stop_process`, `send_to_process` |
 | Channels | `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe` |

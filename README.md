@@ -193,7 +193,7 @@ Named channels enable inter-process communication with broadcast and queue seman
 
 ### Embedded MCP Server
 
-The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 25 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), take screenshots, send A2UI messages, manage processes, and manage channels. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
+The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 26 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), perform AppKit responder chain actions (selectAll:, toggleBoldface:, etc.), take screenshots (to disk or base64), send A2UI messages, manage processes, and manage channels. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
 ```bash
 # Normal mode (MCP available alongside UI)

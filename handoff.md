@@ -54,7 +54,7 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - Error recovery: `logRecover(component, surfaceID, context)` helper with stack traces. Panic recovery in Session.HandleMessage, per-component render (IIFE wrapping), executeFunctionCall, and transport goroutines.
 - Process model: `createProcess`, `stopProcess`, `sendToProcess` protocol messages. `ProcessManager` in `engine/process.go` with `TransportFactory` injected from main.go. Three transport types: file, interval (`transport/interval.go`), LLM. Process status written to `/processes/{id}/status` via HandleUpdateDataModel (triggers binding re-render). `ProcessTransport` interface in engine/ avoids circular imports.
 - HandleUpdateDataModel now evaluates functionCalls in op values (matching executeUpdateDataModel). Enables interval processes to send dynamic computed updates.
-- Always-on MCP: server starts on stdin/stdout in all modes (jlog outputs to stderr). 19 tools including `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`.
+- Always-on MCP: server starts on stdin/stdout in all modes (jlog outputs to stderr). 26 tools including `list_processes`, `create_process`, `stop_process`, `send_to_process`, `get_logs`, `perform_action`.
 - LLM tools: `a2ui_createProcess`, `a2ui_stopProcess` in `transport/llm_tools.go`.
 - Live monitor sample app in `sample_apps/live_monitor/` exercising process lifecycle, data binding, and functionCall-based dynamic updates.
 
@@ -201,7 +201,7 @@ mcp/                           Embedded MCP server (JSON-RPC 2.0 on stdin/stdout
   protocol.go                  MCP types (Request, Response, Tool, etc.)
   transport.go                 Stdio transport (line-delimited JSON-RPC)
   server.go                    Server routing + tool registration
-  tools.go                     25 tool handlers (query, interact, data, transport, capture, logging, processes, channels)
+  tools.go                     26 tool handlers (query, interact, data, transport, capture, actions, logging, processes, channels)
   dispatch.go                  dispatchSync generic helper for main-thread queries
   server_test.go               MCP server tests
 

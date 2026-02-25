@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"jview/jlog"
+	"os"
 	"time"
 )
 
@@ -16,6 +17,7 @@ func (s *Server) registerTools() {
 	s.registerGetLayout()
 	s.registerGetStyle()
 	s.registerTakeScreenshot()
+	s.registerPerformAction()
 	s.registerClick()
 	s.registerFill()
 	s.registerToggle()
@@ -267,16 +269,18 @@ func (s *Server) registerGetStyle() {
 }
 
 func (s *Server) registerTakeScreenshot() {
-	s.register("take_screenshot", "Capture window as PNG (base64 encoded)", json.RawMessage(`{
+	s.register("take_screenshot", "Capture window as PNG. If filePath is given, saves to disk; otherwise returns base64.", json.RawMessage(`{
 		"type": "object",
 		"properties": {
-			"surface_id": {"type": "string", "description": "Surface ID"}
+			"surface_id": {"type": "string", "description": "Surface ID"},
+			"filePath": {"type": "string", "description": "Optional file path to save the PNG to disk"}
 		},
 		"required": ["surface_id"],
 		"additionalProperties": false
 	}`), func(args json.RawMessage) *ToolCallResult {
 		var p struct {
 			SurfaceID string `json:"surface_id"`
+			FilePath  string `json:"filePath"`
 		}
 		if err := json.Unmarshal(args, &p); err != nil {
 			return errorResult("invalid params: " + err.Error())
@@ -291,8 +295,38 @@ func (s *Server) registerTakeScreenshot() {
 		if pngData == nil {
 			return errorResult("screenshot capture failed for surface: " + p.SurfaceID)
 		}
+		if p.FilePath != "" {
+			if err := os.WriteFile(p.FilePath, pngData, 0644); err != nil {
+				return errorResult("failed to write screenshot: " + err.Error())
+			}
+			return &ToolCallResult{Content: []ContentBlock{TextContent("saved: " + p.FilePath)}}
+		}
 		b64 := base64.StdEncoding.EncodeToString(pngData)
 		return &ToolCallResult{Content: []ContentBlock{ImageContent(b64, "image/png")}}
+	})
+}
+
+func (s *Server) registerPerformAction() {
+	s.register("perform_action", "Send an AppKit selector through the responder chain (e.g. selectAll:, toggleBoldface:, copy:, paste:)", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"selector": {"type": "string", "description": "ObjC selector name (e.g. selectAll:, toggleBoldface:, copy:)"}
+		},
+		"required": ["selector"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		var p struct {
+			Selector string `json:"selector"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.PerformAction(p.Selector)
+			return struct{}{}
+		})
+		dispatchSync(s.disp, func() struct{} { return struct{}{} })
+		return &ToolCallResult{Content: []ContentBlock{TextContent("performed: " + p.Selector)}}
 	})
 }
 
