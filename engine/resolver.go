@@ -206,6 +206,13 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 	}
 
 	node.Style = comp.Style
+	// Dynamic style overrides
+	if cp.BackgroundColor != nil {
+		node.Style.BackgroundColor = r.resolveString(comp.ComponentID, cp.BackgroundColor)
+	}
+	if cp.TextColor != nil {
+		node.Style.TextColor = r.resolveString(comp.ComponentID, cp.TextColor)
+	}
 	return node
 }
 

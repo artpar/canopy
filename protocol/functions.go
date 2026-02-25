@@ -19,6 +19,7 @@ var FunctionRegistry = []FuncMeta{
 	{Name: "toLowerCase", Args: "s", Desc: "lowercase", Category: "string"},
 	{Name: "trim", Args: "s", Desc: "strip whitespace", Category: "string"},
 	{Name: "substring", Args: "s, start, end?", Desc: "extract substring", Category: "string"},
+	{Name: "substringAfter", Args: "s, delimiter", Desc: "return part after first delimiter occurrence", Category: "string"},
 	{Name: "length", Args: "s", Desc: "string length", Category: "string"},
 	{Name: "format", Args: "template, arg0, arg1, ...", Desc: "replace {0}, {1}, etc. in template", Category: "string"},
 	{Name: "contains", Args: "s, sub", Desc: "true if s contains sub", Category: "string"},
@@ -45,6 +46,7 @@ var FunctionRegistry = []FuncMeta{
 	{Name: "removeLast", Args: "array", Desc: "remove last element from array", Category: "array"},
 	{Name: "slice", Args: "array, start, end?", Desc: "extract sub-array from start to end (exclusive)", Category: "array"},
 	{Name: "filter", Args: "array, key, value", Desc: "return items where item[key] == value", Category: "array"},
+	{Name: "filterContains", Args: "array, key, substring", Desc: "return items where item[key] contains substring (case-insensitive)", Category: "array"},
 	{Name: "find", Args: "array, key, value", Desc: "return first item where item[key] == value", Category: "array"},
 
 	// Object functions

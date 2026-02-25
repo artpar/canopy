@@ -32,8 +32,20 @@ type Surface struct {
 	// compDefs holds user-defined component templates
 	compDefs map[string]*protocol.DefineComponent
 
+	// forEachMetas stores original component + template tree for forEach re-expansion
+	forEachMetas map[string]*forEachMeta
+
+	// reexpanding prevents recursive re-expansion in renderComponents
+	reexpanding bool
+
 	// ActionHandler is called when a component triggers a server-bound event.
 	ActionHandler func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
+}
+
+// forEachMeta stores the original component and template tree for forEach re-expansion.
+type forEachMeta struct {
+	component    protocol.Component
+	templateTree []protocol.Component
 }
 
 func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher, ffi *FFIRegistry, assets *AssetRegistry) *Surface {
@@ -58,6 +70,7 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher,
 		validationErrors: make(map[string][]string),
 		funcDefs:         make(map[string]*FuncDef),
 		compDefs:         make(map[string]*protocol.DefineComponent),
+		forEachMetas:     make(map[string]*forEachMeta),
 	}
 }
 
@@ -266,6 +279,34 @@ func (s *Surface) buildMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemS
 
 // renderComponents resolves and dispatches render operations for the given component IDs.
 func (s *Surface) renderComponents(componentIDs []string) {
+	// Re-expand forEach parents whose data source changed.
+	// Skip during re-expansion to prevent recursion.
+	if !s.reexpanding {
+		var forEachIDs []string
+		var otherIDs []string
+		for _, id := range componentIDs {
+			if _, ok := s.forEachMetas[id]; ok {
+				forEachIDs = append(forEachIDs, id)
+			} else {
+				otherIDs = append(otherIDs, id)
+			}
+		}
+		if len(forEachIDs) > 0 {
+			s.reexpanding = true
+			for _, id := range forEachIDs {
+				meta := s.forEachMetas[id]
+				comps := []protocol.Component{meta.component}
+				comps = append(comps, meta.templateTree...)
+				s.HandleUpdateComponents(protocol.UpdateComponents{Components: comps})
+			}
+			s.reexpanding = false
+			if len(otherIDs) == 0 {
+				return
+			}
+			componentIDs = otherIDs
+		}
+	}
+
 	type renderWork struct {
 		node *renderer.RenderNode
 		comp *protocol.Component
@@ -836,6 +877,29 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 		node.Callbacks["dismiss"] = cbID
 		s.trackCallback(comp.ComponentID, "dismiss", cbID)
 	}
+
+	// General onClick support for any component type (if not already handled above)
+	if _, hasClick := node.Callbacks["click"]; !hasClick {
+		if comp.Props.OnClick != nil && comp.Props.OnClick.Action != nil {
+			action := comp.Props.OnClick.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "click", func(data string) {
+				if action.StandardAction != "" {
+					s.dispatch.RunOnMain(func() {
+						s.rend.PerformAction(action.StandardAction)
+					})
+				} else if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["click"] = cbID
+			s.trackCallback(comp.ComponentID, "click", cbID)
+		}
+	}
 }
 
 func (s *Surface) trackCallback(componentID, eventType string, cbID renderer.CallbackID) {
@@ -1031,26 +1095,58 @@ func (s *Surface) expandTemplates(comps []protocol.Component) []protocol.Compone
 			usedAsTemplate[tc.ComponentID] = true
 		}
 
-		// Look up the forEach array in the data model
-		val, found := s.dm.Get(tmpl.ForEach)
-		if !found {
-			result = append(result, comp)
-			continue
-		}
-		items, ok := val.([]interface{})
-		if !ok {
-			result = append(result, comp)
-			continue
+		// Resolve the forEach data source and base path
+		var items []interface{}
+		var basePath string
+		if tmpl.ForEachFunc != nil {
+			evaluator := NewEvaluator(s.dm)
+			evaluator.FFI = s.ffi
+			evaluator.customFuncs = s.funcDefs
+			val, err := evaluator.Eval(tmpl.ForEachFunc.Name, tmpl.ForEachFunc.Args)
+			if err != nil {
+				logWarn("template", s.id, fmt.Sprintf("forEach func error for %s: %v", comp.ComponentID, err))
+				result = append(result, comp)
+				continue
+			}
+			var ok bool
+			items, ok = val.([]interface{})
+			if !ok {
+				result = append(result, comp)
+				continue
+			}
+			basePath = "/_computed/" + comp.ComponentID
+			s.dm.Set(basePath, items)
+			// Register bindings for all paths referenced in function call args
+			for _, path := range PathsInArgs(tmpl.ForEachFunc.Args) {
+				s.tracker.Register(path, comp.ComponentID)
+			}
+		} else {
+			val, found := s.dm.Get(tmpl.ForEach)
+			if !found {
+				result = append(result, comp)
+				continue
+			}
+			var ok bool
+			items, ok = val.([]interface{})
+			if !ok {
+				result = append(result, comp)
+				continue
+			}
+			basePath = tmpl.ForEach
+			s.tracker.Register(tmpl.ForEach, comp.ComponentID)
 		}
 
-		// Register binding on the forEach path to this parent component
-		s.tracker.Register(tmpl.ForEach, comp.ComponentID)
+		// Save state for re-expansion on data changes
+		s.forEachMetas[comp.ComponentID] = &forEachMeta{
+			component:    comps[i], // original component with Template children
+			templateTree: templateTree,
+		}
 
 		// Generate children
 		var childIDs []string
 		parentPrefix := comp.ComponentID
 		for idx := range items {
-			itemPath := fmt.Sprintf("%s/%d", tmpl.ForEach, idx)
+			itemPath := fmt.Sprintf("%s/%d", basePath, idx)
 
 			// Clone the entire template subtree for this index
 			// IDs are namespaced by parent to avoid collisions when
@@ -1149,18 +1245,36 @@ func (s *Surface) collectTemplateTree(rootID string, compMap map[string]*protoco
 func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPath string) {
 	prefix := "/" + itemVar
 	rewriteString := func(ds *protocol.DynamicString) {
-		if ds != nil && ds.IsPath {
+		if ds == nil {
+			return
+		}
+		if ds.IsPath {
 			ds.Path = rewritePath(ds.Path, prefix, itemPath)
+		}
+		if ds.IsFunc && ds.FunctionCall != nil {
+			rewriteActionArgs(ds.FunctionCall.Args, prefix, itemPath)
 		}
 	}
 	rewriteNumber := func(dn *protocol.DynamicNumber) {
-		if dn != nil && dn.IsPath {
+		if dn == nil {
+			return
+		}
+		if dn.IsPath {
 			dn.Path = rewritePath(dn.Path, prefix, itemPath)
+		}
+		if dn.IsFunc && dn.FunctionCall != nil {
+			rewriteActionArgs(dn.FunctionCall.Args, prefix, itemPath)
 		}
 	}
 	rewriteBool := func(db *protocol.DynamicBoolean) {
-		if db != nil && db.IsPath {
+		if db == nil {
+			return
+		}
+		if db.IsPath {
 			db.Path = rewritePath(db.Path, prefix, itemPath)
+		}
+		if db.IsFunc && db.FunctionCall != nil {
+			rewriteActionArgs(db.FunctionCall.Args, prefix, itemPath)
 		}
 	}
 
@@ -1198,6 +1312,8 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	rewriteString(p.OutlineData)
 	rewriteString(p.SelectedID)
 	rewriteString(p.RichContent)
+	rewriteString(p.BackgroundColor)
+	rewriteString(p.TextColor)
 
 	// Rewrite data binding
 	if p.DataBinding != "" {
@@ -1235,143 +1351,46 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	clone := c
 	p := &clone.Props
 
-	// Deep copy all DynamicString pointers
-	if p.Content != nil {
-		v := *p.Content
-		p.Content = &v
-	}
-	if p.Title != nil {
-		v := *p.Title
-		p.Title = &v
-	}
-	if p.Subtitle != nil {
-		v := *p.Subtitle
-		p.Subtitle = &v
-	}
-	if p.Label != nil {
-		v := *p.Label
-		p.Label = &v
-	}
-	if p.Placeholder != nil {
-		v := *p.Placeholder
-		p.Placeholder = &v
-	}
-	if p.Value != nil {
-		v := *p.Value
-		p.Value = &v
-	}
-	if p.Src != nil {
-		v := *p.Src
-		p.Src = &v
-	}
-	if p.Alt != nil {
-		v := *p.Alt
-		p.Alt = &v
-	}
-	if p.Name != nil {
-		v := *p.Name
-		p.Name = &v
-	}
-	if p.DateValue != nil {
-		v := *p.DateValue
-		p.DateValue = &v
-	}
-	if p.ActiveTab != nil {
-		v := *p.ActiveTab
-		p.ActiveTab = &v
-	}
+	// Deep copy all DynamicString pointers (including FunctionCall args trees)
+	p.Content = deepCopyDynString(p.Content)
+	p.Title = deepCopyDynString(p.Title)
+	p.Subtitle = deepCopyDynString(p.Subtitle)
+	p.Label = deepCopyDynString(p.Label)
+	p.Placeholder = deepCopyDynString(p.Placeholder)
+	p.Value = deepCopyDynString(p.Value)
+	p.Src = deepCopyDynString(p.Src)
+	p.Alt = deepCopyDynString(p.Alt)
+	p.Name = deepCopyDynString(p.Name)
+	p.DateValue = deepCopyDynString(p.DateValue)
+	p.ActiveTab = deepCopyDynString(p.ActiveTab)
+	p.OutlineData = deepCopyDynString(p.OutlineData)
+	p.SelectedID = deepCopyDynString(p.SelectedID)
+	p.RichContent = deepCopyDynString(p.RichContent)
+	p.BackgroundColor = deepCopyDynString(p.BackgroundColor)
+	p.TextColor = deepCopyDynString(p.TextColor)
 
 	// Deep copy DynamicNumber pointers
-	if p.Min != nil {
-		v := *p.Min
-		p.Min = &v
-	}
-	if p.Max != nil {
-		v := *p.Max
-		p.Max = &v
-	}
-	if p.Step != nil {
-		v := *p.Step
-		p.Step = &v
-	}
-	if p.SliderValue != nil {
-		v := *p.SliderValue
-		p.SliderValue = &v
-	}
+	p.Min = deepCopyDynNumber(p.Min)
+	p.Max = deepCopyDynNumber(p.Max)
+	p.Step = deepCopyDynNumber(p.Step)
+	p.SliderValue = deepCopyDynNumber(p.SliderValue)
 
 	// Deep copy DynamicBoolean pointers
-	if p.Disabled != nil {
-		v := *p.Disabled
-		p.Disabled = &v
-	}
-	if p.Checked != nil {
-		v := *p.Checked
-		p.Checked = &v
-	}
-	if p.ReadOnly != nil {
-		v := *p.ReadOnly
-		p.ReadOnly = &v
-	}
-	if p.Collapsible != nil {
-		v := *p.Collapsible
-		p.Collapsible = &v
-	}
-	if p.Collapsed != nil {
-		v := *p.Collapsed
-		p.Collapsed = &v
-	}
-	if p.EnableDate != nil {
-		v := *p.EnableDate
-		p.EnableDate = &v
-	}
-	if p.EnableTime != nil {
-		v := *p.EnableTime
-		p.EnableTime = &v
-	}
-	if p.MutuallyExclusive != nil {
-		v := *p.MutuallyExclusive
-		p.MutuallyExclusive = &v
-	}
-	if p.Visible != nil {
-		v := *p.Visible
-		p.Visible = &v
-	}
-	if p.Autoplay != nil {
-		v := *p.Autoplay
-		p.Autoplay = &v
-	}
-	if p.Loop != nil {
-		v := *p.Loop
-		p.Loop = &v
-	}
-	if p.Controls != nil {
-		v := *p.Controls
-		p.Controls = &v
-	}
-	if p.Muted != nil {
-		v := *p.Muted
-		p.Muted = &v
-	}
-	if p.Vertical != nil {
-		v := *p.Vertical
-		p.Vertical = &v
-	}
-	if p.OutlineData != nil {
-		v := *p.OutlineData
-		p.OutlineData = &v
-	}
-	if p.SelectedID != nil {
-		v := *p.SelectedID
-		p.SelectedID = &v
-	}
-	if p.RichContent != nil {
-		v := *p.RichContent
-		p.RichContent = &v
-	}
-	if p.Editable != nil {
-		v := *p.Editable
-		p.Editable = &v
-	}
+	p.Disabled = deepCopyDynBool(p.Disabled)
+	p.Checked = deepCopyDynBool(p.Checked)
+	p.ReadOnly = deepCopyDynBool(p.ReadOnly)
+	p.Collapsible = deepCopyDynBool(p.Collapsible)
+	p.Collapsed = deepCopyDynBool(p.Collapsed)
+	p.EnableDate = deepCopyDynBool(p.EnableDate)
+	p.EnableTime = deepCopyDynBool(p.EnableTime)
+	p.MutuallyExclusive = deepCopyDynBool(p.MutuallyExclusive)
+	p.Visible = deepCopyDynBool(p.Visible)
+	p.Autoplay = deepCopyDynBool(p.Autoplay)
+	p.Loop = deepCopyDynBool(p.Loop)
+	p.Controls = deepCopyDynBool(p.Controls)
+	p.Muted = deepCopyDynBool(p.Muted)
+	p.Vertical = deepCopyDynBool(p.Vertical)
+	p.Editable = deepCopyDynBool(p.Editable)
 
 	// Deep copy event actions (contain mutable Args trees)
 	p.OnClick = deepCopyEventAction(p.OnClick)
@@ -1424,6 +1443,60 @@ func deepCopyEventAction(ea *protocol.EventAction) *protocol.EventAction {
 		clone.Action = &a
 	}
 	return &clone
+}
+
+// deepCopyFuncCallArgs deep-copies a FunctionCall's []interface{} args tree.
+func deepCopyFuncCallArgs(args []interface{}) []interface{} {
+	if args == nil {
+		return nil
+	}
+	out := make([]interface{}, len(args))
+	for i, a := range args {
+		out[i] = deepCopyInterface(a)
+	}
+	return out
+}
+
+// deepCopyDynString deep-copies a DynamicString including its FunctionCall args tree.
+func deepCopyDynString(ds *protocol.DynamicString) *protocol.DynamicString {
+	if ds == nil {
+		return nil
+	}
+	v := *ds
+	if v.FunctionCall != nil {
+		fc := *v.FunctionCall
+		fc.Args = deepCopyFuncCallArgs(fc.Args)
+		v.FunctionCall = &fc
+	}
+	return &v
+}
+
+// deepCopyDynNumber deep-copies a DynamicNumber including its FunctionCall args tree.
+func deepCopyDynNumber(dn *protocol.DynamicNumber) *protocol.DynamicNumber {
+	if dn == nil {
+		return nil
+	}
+	v := *dn
+	if v.FunctionCall != nil {
+		fc := *v.FunctionCall
+		fc.Args = deepCopyFuncCallArgs(fc.Args)
+		v.FunctionCall = &fc
+	}
+	return &v
+}
+
+// deepCopyDynBool deep-copies a DynamicBoolean including its FunctionCall args tree.
+func deepCopyDynBool(db *protocol.DynamicBoolean) *protocol.DynamicBoolean {
+	if db == nil {
+		return nil
+	}
+	v := *db
+	if v.FunctionCall != nil {
+		fc := *v.FunctionCall
+		fc.Args = deepCopyFuncCallArgs(fc.Args)
+		v.FunctionCall = &fc
+	}
+	return &v
 }
 
 // deepCopyInterface deep-copies a JSON-like interface{} tree (maps and slices).

@@ -59,6 +59,8 @@ void JVApplyStyle(void* handle, const char* bg, const char* tc,
 
             view.layer.backgroundColor = [color CGColor];
         }
+    } else if (view.wantsLayer && view.layer.backgroundColor != NULL) {
+        view.layer.backgroundColor = NULL;
     }
 
     // Corner radius
@@ -91,6 +93,8 @@ void JVApplyStyle(void* handle, const char* bg, const char* tc,
         if ([tcStr length] > 0) {
             NSColor *color = colorFromHex(tcStr);
             if (color) tf.textColor = color;
+        } else {
+            tf.textColor = [NSColor labelColor];
         }
 
         // Font size, weight, and family

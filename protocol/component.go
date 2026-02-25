@@ -159,4 +159,8 @@ type Props struct {
 	RichContent *DynamicString  `json:"richContent,omitempty"`  // markdown content
 	Editable    *DynamicBoolean `json:"editable,omitempty"`     // default true
 	OnRichChange *EventAction   `json:"onRichChange,omitempty"` // fired on content change
+
+	// Dynamic style overrides (resolved at render time, override static style values)
+	BackgroundColor *DynamicString `json:"backgroundColor,omitempty"`
+	TextColor       *DynamicString `json:"textColor,omitempty"`
 }

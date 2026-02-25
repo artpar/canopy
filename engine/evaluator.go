@@ -64,9 +64,11 @@ func init() {
 		"append":      (*Evaluator).fnAppend,
 		"removeLast":  (*Evaluator).fnRemoveLast,
 		"slice":       (*Evaluator).fnSlice,
-		"filter":      (*Evaluator).fnFilter,
-		"find":        (*Evaluator).fnFind,
-		"getField":    (*Evaluator).fnGetField,
+		"filter":           (*Evaluator).fnFilter,
+		"filterContains":   (*Evaluator).fnFilterContains,
+		"find":             (*Evaluator).fnFind,
+		"getField":         (*Evaluator).fnGetField,
+		"substringAfter":   (*Evaluator).fnSubstringAfter,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa
@@ -328,6 +330,19 @@ func (e *Evaluator) fnSubstring(args []any) (any, error) {
 		return s[si:ei], nil
 	}
 	return s[si:], nil
+}
+
+func (e *Evaluator) fnSubstringAfter(args []any) (any, error) {
+	if len(args) < 2 {
+		return "", fmt.Errorf("substringAfter requires 2 args (string, delimiter)")
+	}
+	s := toString(args[0])
+	delim := toString(args[1])
+	idx := strings.Index(s, delim)
+	if idx < 0 {
+		return s, nil
+	}
+	return s[idx+len(delim):], nil
 }
 
 func (e *Evaluator) fnLength(args []any) (any, error) {
@@ -636,6 +651,38 @@ func (e *Evaluator) fnFilter(args []any) (any, error) {
 			continue
 		}
 		if toString(m[key]) == value {
+			result = append(result, item)
+		}
+	}
+	if result == nil {
+		return []any{}, nil
+	}
+	return result, nil
+}
+
+func (e *Evaluator) fnFilterContains(args []any) (any, error) {
+	if len(args) < 3 {
+		return []any{}, fmt.Errorf("filterContains requires 3 args (array, key, substring)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	key := toString(args[1])
+	sub := strings.ToLower(toString(args[2]))
+	if sub == "" {
+		// Empty substring matches all
+		result := make([]any, len(arr))
+		copy(result, arr)
+		return result, nil
+	}
+	var result []any
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.Contains(strings.ToLower(toString(m[key])), sub) {
 			result = append(result, item)
 		}
 	}

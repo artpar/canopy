@@ -127,6 +127,13 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 
 	applyStyle(handle, node.Style)
 
+	// Attach click gesture for non-button components with click callbacks
+	if node.Type != protocol.CompButton {
+		if cbID, ok := node.Callbacks["click"]; ok && cbID != 0 {
+			attachClickGesture(handle, uint64(cbID))
+		}
+	}
+
 	r.mu.Lock()
 	if r.handles[surfaceID] == nil {
 		r.handles[surfaceID] = make(map[string]renderer.ViewHandle)
