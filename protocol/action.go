@@ -5,10 +5,12 @@ type EventAction struct {
 	Action *Action `json:"action,omitempty"`
 }
 
-// Action describes an interaction outcome — either a server-bound event or a client-side function call.
+// Action describes an interaction outcome — either a server-bound event, a client-side function call,
+// or a standard AppKit action routed through the responder chain.
 type Action struct {
-	Event        *EventDef       `json:"event,omitempty"`
-	FunctionCall *ActionFuncCall `json:"functionCall,omitempty"`
+	Event          *EventDef       `json:"event,omitempty"`
+	FunctionCall   *ActionFuncCall `json:"functionCall,omitempty"`
+	StandardAction string          `json:"standardAction,omitempty"`
 }
 
 // EventDef is a server-bound event with optional data references.

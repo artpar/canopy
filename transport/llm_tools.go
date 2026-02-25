@@ -585,6 +585,14 @@ The only supported call is "updateDataModel". Each op has:
 - "path": JSON Pointer string (e.g. "/display", "/result")
 - "value": the new value (can be a literal, a path reference, or a functionCall — see DYNAMIC VALUES)
 
+For standard AppKit actions (routed through responder chain, e.g. formatting in text editors):
+"onClick": {
+  "action": {
+    "standardAction": "toggleBoldface:"
+  }
+}
+Common selectors: toggleBoldface:, toggleItalics:, underline:, undo:, redo:, copy:, paste:, cut:, selectAll:
+
 For server-side actions (sending events back to the LLM), use this structure instead:
 "onClick": {
   "action": {

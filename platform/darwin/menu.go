@@ -56,3 +56,9 @@ func updateMenu(surfaceID string, items []renderer.MenuItemSpec) {
 
 	C.JVUpdateMenu(cSID, cJSON)
 }
+
+func performAction(selector string) {
+	cSel := C.CString(selector)
+	defer C.free(unsafe.Pointer(cSel))
+	C.JVPerformAction(cSel)
+}

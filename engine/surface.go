@@ -516,7 +516,11 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 		if comp.Props.OnClick != nil && comp.Props.OnClick.Action != nil {
 			action := comp.Props.OnClick.Action
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "click", func(data string) {
-				if action.Event != nil {
+				if action.StandardAction != "" {
+					s.dispatch.RunOnMain(func() {
+						s.rend.PerformAction(action.StandardAction)
+					})
+				} else if action.Event != nil {
 					resolved := s.resolveDataRefs(action.Event)
 					if s.ActionHandler != nil {
 						s.ActionHandler(s.id, action.Event, resolved)

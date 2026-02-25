@@ -342,6 +342,9 @@ func (m *MockRenderer) CaptureWindow(surfaceID string) ([]byte, error) {
 // UpdateMenu is a no-op for the mock renderer.
 func (m *MockRenderer) UpdateMenu(surfaceID string, items []MenuItemSpec) {}
 
+// PerformAction is a no-op for the mock renderer.
+func (m *MockRenderer) PerformAction(selector string) {}
+
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}
 

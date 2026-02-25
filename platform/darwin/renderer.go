@@ -326,6 +326,11 @@ func (r *DarwinRenderer) UpdateMenu(surfaceID string, items []renderer.MenuItemS
 	updateMenu(surfaceID, items)
 }
 
+// PerformAction sends an AppKit selector through the responder chain.
+func (r *DarwinRenderer) PerformAction(selector string) {
+	performAction(selector)
+}
+
 // removeView removes an NSView from its superview.
 func removeView(handle renderer.ViewHandle) {
 	C.JVRemoveView(unsafe.Pointer(handle))

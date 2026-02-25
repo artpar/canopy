@@ -113,3 +113,9 @@ void JVUpdateMenu(const char* surfaceID, const char* itemsJSON) {
     // Retain targets on the menu bar to prevent dealloc
     objc_setAssociatedObject(mainMenu, kMenuTargetKey, targets, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
+
+void JVPerformAction(const char* selector) {
+    NSString *selStr = [NSString stringWithUTF8String:selector];
+    SEL sel = NSSelectorFromString(selStr);
+    [NSApp sendAction:sel to:nil from:nil];
+}

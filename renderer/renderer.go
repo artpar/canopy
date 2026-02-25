@@ -62,4 +62,7 @@ type Renderer interface {
 
 	// UpdateMenu sets the menu bar for a surface's window.
 	UpdateMenu(surfaceID string, items []MenuItemSpec)
+
+	// PerformAction sends an AppKit selector through the responder chain.
+	PerformAction(selector string)
 }
