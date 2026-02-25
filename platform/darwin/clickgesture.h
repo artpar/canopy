@@ -4,5 +4,6 @@
 #include <stdint.h>
 
 void JVAttachClickGesture(void* handle, uint64_t callbackID);
+void JVUpdateClickGestureCallbackID(void* handle, uint64_t callbackID);
 
 #endif

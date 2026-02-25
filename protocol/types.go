@@ -26,6 +26,7 @@ const (
 	MsgSubscribe        MessageType = "subscribe"
 	MsgUnsubscribe      MessageType = "unsubscribe"
 	MsgUpdateMenu       MessageType = "updateMenu"
+	MsgUpdateToolbar    MessageType = "updateToolbar"
 )
 
 // TestMessage defines a test case with a sequence of assert/simulate steps.
@@ -196,6 +197,26 @@ type UpdateMenu struct {
 	Type      MessageType `json:"type"`
 	SurfaceID string      `json:"surfaceId"`
 	Items     []MenuItem  `json:"items"`
+}
+
+// UpdateToolbar defines a toolbar for a surface's window.
+type UpdateToolbar struct {
+	Type      MessageType       `json:"type"`
+	SurfaceID string            `json:"surfaceId"`
+	Items     []ToolbarItemSpec `json:"items"`
+}
+
+// ToolbarItemSpec describes a single toolbar item.
+type ToolbarItemSpec struct {
+	ID             string       `json:"id,omitempty"`
+	Icon           string       `json:"icon,omitempty"`           // SF Symbol name
+	Label          string       `json:"label,omitempty"`          // tooltip / text
+	StandardAction string       `json:"standardAction,omitempty"` // AppKit selector
+	Action         *EventAction `json:"action,omitempty"`         // custom action (onClick)
+	Separator      bool         `json:"separator,omitempty"`      // thin divider
+	Flexible       bool         `json:"flexible,omitempty"`       // flexible space
+	SearchField    bool         `json:"searchField,omitempty"`    // NSSearchToolbarItem
+	DataBinding    string       `json:"dataBinding,omitempty"`    // for search field
 }
 
 // MenuItem is a single menu or menu item.

@@ -240,7 +240,9 @@ void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
     objc_setAssociatedObject(scrollView, kOutlineDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(scrollView, kOutlineInnerKey, outlineView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    // Reload and expand all
+    // Suppress selection callbacks during entire data load + select sequence
+    delegate.suppressSelection = YES;
+
     [outlineView reloadData];
     [outlineView expandItem:nil expandChildren:YES];
 
@@ -251,12 +253,12 @@ void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
         if (item) {
             NSInteger row = [outlineView rowForItem:item];
             if (row >= 0) {
-                delegate.suppressSelection = YES;
                 [outlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
-                delegate.suppressSelection = NO;
             }
         }
     }
+
+    delegate.suppressSelection = NO;
 
     return (__bridge_retained void*)scrollView;
 }
@@ -277,7 +279,9 @@ void JVUpdateOutlineView(void* handle, const char* dataJSON, const char* selecte
         }
     }
 
-    // Reload data
+    // Suppress selection callbacks during entire reload + select sequence
+    if (delegate) delegate.suppressSelection = YES;
+
     [dataSource parseJSON:[NSString stringWithUTF8String:dataJSON]];
     [outlineView reloadData];
 
@@ -291,10 +295,10 @@ void JVUpdateOutlineView(void* handle, const char* dataJSON, const char* selecte
         if (item) {
             NSInteger row = [outlineView rowForItem:item];
             if (row >= 0) {
-                delegate.suppressSelection = YES;
                 [outlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
-                delegate.suppressSelection = NO;
             }
         }
     }
+
+    if (delegate) delegate.suppressSelection = NO;
 }

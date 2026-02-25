@@ -218,12 +218,14 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 @interface JVRichTextDelegate : NSObject <NSTextViewDelegate>
 @property (nonatomic, assign) uint64_t callbackID;
 @property (nonatomic, assign) BOOL isEditing;
+@property (nonatomic, assign) BOOL suppressCallback;
 @property (nonatomic, weak) NSTextView *textView;
 @end
 
 @implementation JVRichTextDelegate
 
 - (void)textDidChange:(NSNotification *)notification {
+    if (self.suppressCallback) return;
     self.isEditing = YES;
 
     // Debounce: cancel previous timer and start new one
@@ -313,5 +315,7 @@ void JVUpdateRichTextEditor(void* handle, const char* content, bool editable) {
 
     NSString *markdown = [NSString stringWithUTF8String:content];
     NSAttributedString *attrStr = markdownToAttributedString(markdown);
+    delegate.suppressCallback = YES;
     [textView.textStorage setAttributedString:attrStr];
+    delegate.suppressCallback = NO;
 }

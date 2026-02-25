@@ -196,6 +196,13 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 	}
 
 	applyStyle(handle, node.Style)
+
+	// Update click gesture callback ID for non-button components
+	if node.Type != protocol.CompButton {
+		if cbID, ok := node.Callbacks["click"]; ok && cbID != 0 {
+			updateClickGestureCallbackID(handle, uint64(cbID))
+		}
+	}
 }
 
 func (r *DarwinRenderer) SetChildren(surfaceID string, parentHandle renderer.ViewHandle, childHandles []renderer.ViewHandle) {
@@ -336,6 +343,11 @@ func (r *DarwinRenderer) UpdateMenu(surfaceID string, items []renderer.MenuItemS
 // PerformAction sends an AppKit selector through the responder chain.
 func (r *DarwinRenderer) PerformAction(selector string) {
 	performAction(selector)
+}
+
+// UpdateToolbar sets the toolbar for a surface's window.
+func (r *DarwinRenderer) UpdateToolbar(surfaceID string, items []renderer.ToolbarItemSpec) {
+	updateToolbar(surfaceID, items)
 }
 
 // removeView removes an NSView from its superview.

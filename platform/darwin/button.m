@@ -64,3 +64,11 @@ void JVUpdateButton(void* handle, const char* label, const char* style, bool dis
     button.title = [NSString stringWithUTF8String:label];
     button.enabled = !disabled;
 }
+
+void JVUpdateButtonCallbackID(void* handle, uint64_t callbackID) {
+    NSButton *button = (__bridge NSButton*)handle;
+    JVButtonTarget *target = objc_getAssociatedObject(button, kCallbackIDKey);
+    if (target) {
+        target.callbackID = callbackID;
+    }
+}

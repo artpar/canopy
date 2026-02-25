@@ -33,3 +33,14 @@ void JVAttachClickGesture(void* handle, uint64_t callbackID) {
     // Prevent target from being deallocated
     objc_setAssociatedObject(view, kClickGestureTargetKey, target, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
+
+void JVUpdateClickGestureCallbackID(void* handle, uint64_t callbackID) {
+    NSView *view = (__bridge NSView*)handle;
+    JVClickGestureTarget *target = objc_getAssociatedObject(view, kClickGestureTargetKey);
+    if (target) {
+        target.callbackID = callbackID;
+    } else {
+        // No existing gesture — attach a new one
+        JVAttachClickGesture(handle, callbackID);
+    }
+}

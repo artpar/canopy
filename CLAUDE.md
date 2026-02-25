@@ -88,13 +88,45 @@ Runs with real `darwin.Renderer` on the main thread using synchronous `MockDispa
 2. Add a Go test in `engine/testrunner_test.go` that calls `RunTestFile` with the fixture
 3. Run `build/jview test testdata/<name>_test.jsonl` to verify with real AppKit
 
-#### Layer 4: Interactive Testing (manual, for binding/callback work)
+#### Layer 4: MCP Interactive Testing (automated, via Claude Code)
+
+jview embeds an MCP server on stdin/stdout. `.mcp.json` configures Claude Code to launch jview as an MCP server, making 26 tools available as `mcp__jview__*` deferred tools.
+
+**Prerequisites:** `make build` must succeed before session start. The `.mcp.json` runs `make build -s` automatically as a fallback.
+
+**Available MCP tools (use via ToolSearch "jview"):**
+- `click(surface_id, component_id)` — invoke a component's click callback
+- `fill(surface_id, component_id, value)` — type text into a TextField/SearchField
+- `toggle(surface_id, component_id)` — toggle a CheckBox
+- `interact(surface_id, component_id, event_type, data)` — generic interaction
+- `get_tree(surface_id)` — get full component tree
+- `get_component(surface_id, component_id)` — get single component props
+- `get_data_model(surface_id, path)` — read data model at JSON pointer path
+- `set_data_model(surface_id, ops)` — write to data model
+- `get_layout(surface_id, component_id)` — get NSView frame (x, y, width, height)
+- `get_style(surface_id, component_id)` — get font, colors, opacity
+- `take_screenshot(surface_id)` — capture window as PNG
+- `send_message(surface_id, message)` — inject JSONL message
+- `get_logs(level, component, pattern, limit)` — query log ring buffer
+- `list_surfaces` — list all active surfaces
+- `perform_action(selector)` — send AppKit selector through responder chain
+- Process/channel tools: `list_processes`, `create_process`, `stop_process`, `send_to_process`, `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe`
+
+**How to use:**
+1. Use `ToolSearch` with query `"jview"` to load the jview MCP tools
+2. Use `mcp__jview__click` etc. to interact with the running app
+3. Use `mcp__jview__get_data_model` to verify state after interactions
+4. Use `mcp__jview__take_screenshot` to visually verify layout
+
+**When to do this:** after changing callback flow, data binding, or adding interactive components. Preferred over manual testing because it's reproducible and can verify both visual output and data model state.
+
+#### Layer 5: Manual Interactive Testing (fallback)
 ```
 build/jview testdata/contact_form.jsonl
 ```
 Window stays open. Type in fields, click buttons, toggle checkboxes. Quit with Cmd+Q.
 
-**When to do this:** after changing callback flow, data binding, or adding interactive components.
+**When to do this:** when MCP tools are unavailable or you need to test keyboard input, drag, or other gestures not covered by MCP tools.
 
 ### Fixture Discipline
 
@@ -182,6 +214,7 @@ Native Cocoa widgets           ← visible on screen
 3. Component bridge reads from `node.Callbacks` during `CreateView`
 4. ObjC target calls `GoCallbackInvoke(callbackID, data)` → globalRegistry → Go func
 5. Two-way binding: callback writes to DataModel → BindingTracker finds affected components → re-render (skip self)
+6. **UpdateView syncs callback IDs**: forEach re-expansion re-registers callbacks with new IDs. `UpdateView` must update ObjC targets (gesture recognizers, button targets) with the new ID, otherwise they reference stale IDs that silently no-op. See `JVUpdateClickGestureCallbackID` and `JVUpdateButtonCallbackID`.
 
 ## Adding a New Component
 

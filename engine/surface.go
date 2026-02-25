@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"jview/jlog"
 	"jview/protocol"
 	"jview/renderer"
 )
@@ -225,6 +226,73 @@ func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 	}
 }
 
+// HandleUpdateToolbar registers callbacks for toolbar items and dispatches
+// the toolbar update to the renderer.
+func (s *Surface) HandleUpdateToolbar(msg protocol.UpdateToolbar) {
+	// Unregister old toolbar callbacks
+	if old, exists := s.activeCallbacks["__toolbar__"]; exists {
+		for _, cbID := range old {
+			s.rend.UnregisterCallback(cbID)
+		}
+		delete(s.activeCallbacks, "__toolbar__")
+	}
+
+	specs := make([]renderer.ToolbarItemSpec, len(msg.Items))
+	for i, item := range msg.Items {
+		spec := renderer.ToolbarItemSpec{
+			ID:             item.ID,
+			Icon:           item.Icon,
+			Label:          item.Label,
+			StandardAction: item.StandardAction,
+			Separator:      item.Separator,
+			Flexible:       item.Flexible,
+			SearchField:    item.SearchField,
+		}
+		if item.Action != nil && item.Action.Action != nil {
+			action := item.Action.Action
+			itemID := item.ID
+			cbID := s.rend.RegisterCallback(s.id, "__toolbar_"+item.ID, "click", func(data string) {
+				jlog.Infof("toolbar", s.id, "toolbar click: %s", itemID)
+				if action.StandardAction != "" {
+					s.dispatch.RunOnMain(func() {
+						s.rend.PerformAction(action.StandardAction)
+					})
+				} else if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			spec.CallbackID = cbID
+			s.trackCallback("__toolbar__", item.ID, cbID)
+		}
+		if item.SearchField && item.DataBinding != "" {
+			binding := item.DataBinding
+			cbID := s.rend.RegisterCallback(s.id, "__toolbar_search_"+item.ID, "change", func(value string) {
+				changed, err := s.dm.Set(binding, value)
+				if err != nil {
+					logWarn("binding", s.id, fmt.Sprintf("toolbar search binding error: %v", err))
+					return
+				}
+				affected := s.tracker.Affected(changed)
+				if len(affected) > 0 {
+					s.renderComponents(affected)
+				}
+			})
+			spec.SearchCallbackID = cbID
+			s.trackCallback("__toolbar__", "search_"+item.ID, cbID)
+		}
+		specs[i] = spec
+	}
+
+	s.dispatch.RunOnMain(func() {
+		s.rend.UpdateToolbar(s.id, specs)
+	})
+}
+
 // HandleUpdateMenu registers callbacks for menu items with actions and dispatches
 // the menu update to the renderer.
 func (s *Surface) HandleUpdateMenu(msg protocol.UpdateMenu) {
@@ -279,6 +347,7 @@ func (s *Surface) buildMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemS
 
 // renderComponents resolves and dispatches render operations for the given component IDs.
 func (s *Surface) renderComponents(componentIDs []string) {
+	jlog.Infof("render", s.id, "renderComponents: %v", componentIDs)
 	// Re-expand forEach parents whose data source changed.
 	// Skip during re-expansion to prevent recursion.
 	if !s.reexpanding {
@@ -444,6 +513,7 @@ func (s *Surface) resolveDataRefs(event *protocol.EventDef) map[string]interface
 // executeFunctionCall handles client-side function calls from button actions.
 func (s *Surface) executeFunctionCall(fc *protocol.ActionFuncCall) {
 	defer logRecover("functioncall", s.id, fc.Call)
+	jlog.Infof("functioncall", s.id, "executeFunctionCall: %s", fc.Call)
 
 	switch fc.Call {
 	case "updateDataModel":
@@ -480,14 +550,16 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 	evaluator.customFuncs = s.funcDefs
 	var allChanged []string
 
-	for _, opRaw := range ops {
+	for i, opRaw := range ops {
 		opMap, ok := opRaw.(map[string]interface{})
 		if !ok {
+			jlog.Warnf("functioncall", s.id, "op[%d] not a map", i)
 			continue
 		}
 		opType, _ := opMap["op"].(string)
 		path, _ := opMap["path"].(string)
 		if opType == "" || path == "" {
+			jlog.Warnf("functioncall", s.id, "op[%d] missing op=%q path=%q", i, opType, path)
 			continue
 		}
 
@@ -495,12 +567,13 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 		case "add", "replace":
 			value, err := evaluator.resolveArg(opMap["value"])
 			if err != nil {
-				logWarn("functioncall", s.id, fmt.Sprintf("resolve value error: %v", err))
+				logWarn("functioncall", s.id, fmt.Sprintf("op[%d] resolve value error for %s: %v", i, path, err))
 				continue
 			}
+			jlog.Infof("functioncall", s.id, "op[%d] %s %s = %T", i, opType, path, value)
 			changed, err := s.dm.Set(path, value)
 			if err != nil {
-				logWarn("datamodel", s.id, fmt.Sprintf("data op error: %v", err))
+				logWarn("datamodel", s.id, fmt.Sprintf("op[%d] data op error for %s: %v", i, path, err))
 				continue
 			}
 			allChanged = append(allChanged, changed...)
@@ -882,7 +955,9 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 	if _, hasClick := node.Callbacks["click"]; !hasClick {
 		if comp.Props.OnClick != nil && comp.Props.OnClick.Action != nil {
 			action := comp.Props.OnClick.Action
+			compIDForLog := comp.ComponentID
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "click", func(data string) {
+				jlog.Infof("click", s.id, "onClick: %s", compIDForLog)
 				if action.StandardAction != "" {
 					s.dispatch.RunOnMain(func() {
 						s.rend.PerformAction(action.StandardAction)

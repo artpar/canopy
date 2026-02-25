@@ -20,6 +20,7 @@ var FunctionRegistry = []FuncMeta{
 	{Name: "trim", Args: "s", Desc: "strip whitespace", Category: "string"},
 	{Name: "substring", Args: "s, start, end?", Desc: "extract substring", Category: "string"},
 	{Name: "substringAfter", Args: "s, delimiter", Desc: "return part after first delimiter occurrence", Category: "string"},
+	{Name: "replace", Args: "s, old, new", Desc: "replace all occurrences of old with new", Category: "string"},
 	{Name: "length", Args: "s", Desc: "string length", Category: "string"},
 	{Name: "format", Args: "template, arg0, arg1, ...", Desc: "replace {0}, {1}, etc. in template", Category: "string"},
 	{Name: "contains", Args: "s, sub", Desc: "true if s contains sub", Category: "string"},
@@ -49,6 +50,16 @@ var FunctionRegistry = []FuncMeta{
 	{Name: "filterContains", Args: "array, key, substring", Desc: "return items where item[key] contains substring (case-insensitive)", Category: "array"},
 	{Name: "find", Args: "array, key, value", Desc: "return first item where item[key] == value", Category: "array"},
 
+	{Name: "sort", Args: "array, key, descending?", Desc: "sort array of objects by key; descending is optional boolean (default false)", Category: "array"},
+	{Name: "remove", Args: "array, key, value", Desc: "return items where item[key] != value (inverse of filter)", Category: "array"},
+
 	// Object functions
 	{Name: "getField", Args: "object, fieldName", Desc: "extract a field from an object", Category: "object"},
+	{Name: "updateItem", Args: "array, idKey, idValue, field, value", Desc: "return array with item matching idKey==idValue having field set to value", Category: "object"},
+
+	// Logic functions (additional)
+	{Name: "lessThan", Args: "a, b", Desc: "numeric comparison (a < b)", Category: "logic"},
+
+	// Date functions
+	{Name: "formatDateRelative", Args: "isoDate", Desc: "format ISO date as relative string (Today at 2:30 PM, Yesterday, Feb 24, etc.)", Category: "string"},
 }

@@ -196,6 +196,13 @@ func ParseLine(line []byte) (*Message, error) {
 		}
 		msg.Body = um
 
+	case MsgUpdateToolbar:
+		var ut UpdateToolbar
+		if err := json.Unmarshal(env.Payload, &ut); err != nil {
+			return nil, fmt.Errorf("parse updateToolbar: %w", err)
+		}
+		msg.Body = ut
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

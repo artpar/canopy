@@ -65,4 +65,7 @@ type Renderer interface {
 
 	// PerformAction sends an AppKit selector through the responder chain.
 	PerformAction(selector string)
+
+	// UpdateToolbar sets the toolbar for a surface's window.
+	UpdateToolbar(surfaceID string, items []ToolbarItemSpec)
 }

@@ -345,6 +345,9 @@ func (m *MockRenderer) UpdateMenu(surfaceID string, items []MenuItemSpec) {}
 // PerformAction is a no-op for the mock renderer.
 func (m *MockRenderer) PerformAction(selector string) {}
 
+// UpdateToolbar is a no-op for the mock renderer.
+func (m *MockRenderer) UpdateToolbar(surfaceID string, items []ToolbarItemSpec) {}
+
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}
 

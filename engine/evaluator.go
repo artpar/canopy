@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"jview/protocol"
 	"math"
+	"sort"
 	"strings"
+	"time"
 )
 
 // FuncDef stores a user-defined function registered via defineFunction.
@@ -68,7 +70,13 @@ func init() {
 		"filterContains":   (*Evaluator).fnFilterContains,
 		"find":             (*Evaluator).fnFind,
 		"getField":         (*Evaluator).fnGetField,
-		"substringAfter":   (*Evaluator).fnSubstringAfter,
+		"substringAfter":      (*Evaluator).fnSubstringAfter,
+		"replace":             (*Evaluator).fnReplace,
+		"sort":                (*Evaluator).fnSort,
+		"remove":              (*Evaluator).fnRemove,
+		"updateItem":          (*Evaluator).fnUpdateItem,
+		"lessThan":            (*Evaluator).fnLessThan,
+		"formatDateRelative":  (*Evaluator).fnFormatDateRelative,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa
@@ -714,6 +722,16 @@ func (e *Evaluator) fnFind(args []any) (any, error) {
 	return nil, nil
 }
 
+func (e *Evaluator) fnReplace(args []any) (any, error) {
+	if len(args) < 3 {
+		return "", fmt.Errorf("replace requires 3 args (string, old, new)")
+	}
+	s := toString(args[0])
+	old := toString(args[1])
+	newStr := toString(args[2])
+	return strings.ReplaceAll(s, old, newStr), nil
+}
+
 func (e *Evaluator) fnGetField(args []any) (any, error) {
 	if len(args) < 2 {
 		return nil, fmt.Errorf("getField requires 2 args (object, fieldName)")
@@ -724,4 +742,148 @@ func (e *Evaluator) fnGetField(args []any) (any, error) {
 	}
 	field := toString(args[1])
 	return obj[field], nil
+}
+
+func (e *Evaluator) fnSort(args []any) (any, error) {
+	if len(args) < 2 {
+		return []any{}, fmt.Errorf("sort requires at least 2 args (array, key)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	key := toString(args[1])
+	descending := false
+	if len(args) >= 3 {
+		b, err := toBool(args[2])
+		if err == nil {
+			descending = b
+		}
+	}
+	result := make([]any, len(arr))
+	copy(result, arr)
+	sort.SliceStable(result, func(i, j int) bool {
+		mi, _ := result[i].(map[string]any)
+		mj, _ := result[j].(map[string]any)
+		if mi == nil || mj == nil {
+			return false
+		}
+		vi := toString(mi[key])
+		vj := toString(mj[key])
+		if descending {
+			return vi > vj
+		}
+		return vi < vj
+	})
+	return result, nil
+}
+
+func (e *Evaluator) fnRemove(args []any) (any, error) {
+	if len(args) < 3 {
+		return []any{}, fmt.Errorf("remove requires 3 args (array, key, value)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	key := toString(args[1])
+	value := toString(args[2])
+	var result []any
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			result = append(result, item)
+			continue
+		}
+		if toString(m[key]) != value {
+			result = append(result, item)
+		}
+	}
+	if result == nil {
+		return []any{}, nil
+	}
+	return result, nil
+}
+
+func (e *Evaluator) fnUpdateItem(args []any) (any, error) {
+	if len(args) < 5 {
+		return []any{}, fmt.Errorf("updateItem requires 5 args (array, idKey, idValue, field, value)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	idKey := toString(args[1])
+	idValue := toString(args[2])
+	field := toString(args[3])
+	newValue := args[4]
+
+	result := make([]any, len(arr))
+	for i, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			result[i] = item
+			continue
+		}
+		if toString(m[idKey]) == idValue {
+			clone := make(map[string]any, len(m))
+			for k, v := range m {
+				clone[k] = v
+			}
+			clone[field] = newValue
+			result[i] = clone
+		} else {
+			result[i] = item
+		}
+	}
+	return result, nil
+}
+
+func (e *Evaluator) fnLessThan(args []any) (any, error) {
+	if len(args) < 2 {
+		return false, fmt.Errorf("lessThan requires 2 args")
+	}
+	a, err := toFloat(args[0])
+	if err != nil {
+		return false, err
+	}
+	b, err := toFloat(args[1])
+	if err != nil {
+		return false, err
+	}
+	return a < b, nil
+}
+
+func (e *Evaluator) fnFormatDateRelative(args []any) (any, error) {
+	if len(args) < 1 {
+		return "", fmt.Errorf("formatDateRelative requires 1 arg (isoDate)")
+	}
+	dateStr := toString(args[0])
+	if dateStr == "" {
+		return "", nil
+	}
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		// Try without timezone
+		t, err = time.Parse("2006-01-02T15:04:05", dateStr)
+		if err != nil {
+			return dateStr, nil
+		}
+	}
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	yesterday := today.AddDate(0, 0, -1)
+	tLocal := t.In(now.Location())
+	tDay := time.Date(tLocal.Year(), tLocal.Month(), tLocal.Day(), 0, 0, 0, 0, now.Location())
+
+	if tDay.Equal(today) {
+		return "Today at " + tLocal.Format("3:04 PM"), nil
+	}
+	if tDay.Equal(yesterday) {
+		return "Yesterday", nil
+	}
+	if tLocal.Year() == now.Year() {
+		return tLocal.Format("Jan 2"), nil
+	}
+	return tLocal.Format("1/2/06"), nil
 }

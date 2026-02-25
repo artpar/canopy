@@ -207,6 +207,15 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		}
 		surf.HandleUpdateMenu(um)
 
+	case protocol.MsgUpdateToolbar:
+		ut := msg.Body.(protocol.UpdateToolbar)
+		surf, ok := s.surfaces[ut.SurfaceID]
+		if !ok {
+			logWarn("session", ut.SurfaceID, "unknown surface for updateToolbar")
+			return
+		}
+		surf.HandleUpdateToolbar(ut)
+
 	default:
 		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}

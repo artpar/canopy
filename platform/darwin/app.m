@@ -210,10 +210,15 @@ void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     if (!window) return;
 
     NSView *nsView = (__bridge NSView*)view;
+    NSView *contentView = window.contentView;
+
+    // If this view is already the window's root, skip re-attachment
+    // Re-adding breaks NSSplitView and other views with no intrinsic size
+    if (nsView.superview == contentView) return;
+
     nsView.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Remove existing subviews
-    NSView *contentView = window.contentView;
+    // Remove existing subviews (loading spinner, previous root, etc.)
     for (NSView *sub in [contentView.subviews copy]) {
         [sub removeFromSuperview];
     }

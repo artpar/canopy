@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jview": {
+      "command": "bash",
+      "args": ["-c", "make build -s 2>/dev/null; exec build/jview sample_apps/notes/prompt.jsonl"],
+      "cwd": "/Users/artpar/workspace/code/jview"
+    }
+  }
+}

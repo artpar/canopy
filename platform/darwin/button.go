@@ -35,4 +35,8 @@ func updateButtonView(handle renderer.ViewHandle, node *renderer.RenderNode) {
 	defer C.free(unsafe.Pointer(cStyle))
 
 	C.JVUpdateButton(unsafe.Pointer(handle), cLabel, cStyle, C.bool(node.Props.Disabled))
+
+	if cbID, ok := node.Callbacks["click"]; ok && cbID != 0 {
+		C.JVUpdateButtonCallbackID(unsafe.Pointer(handle), C.uint64_t(cbID))
+	}
 }

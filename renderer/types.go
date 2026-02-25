@@ -175,6 +175,19 @@ type MenuItemSpec struct {
 	Children       []MenuItemSpec
 }
 
+// ToolbarItemSpec describes a single toolbar item for the native toolbar.
+type ToolbarItemSpec struct {
+	ID             string
+	Icon           string // SF Symbol name
+	Label          string
+	StandardAction string
+	CallbackID     CallbackID
+	Separator      bool
+	Flexible       bool
+	SearchField    bool
+	SearchCallbackID CallbackID // for search field change events
+}
+
 // WindowSpec describes a new window to create.
 type WindowSpec struct {
 	SurfaceID       string
