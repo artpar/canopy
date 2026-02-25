@@ -198,6 +198,15 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 			logError("session", "", fmt.Sprintf("unsubscribe error: %v", err))
 		}
 
+	case protocol.MsgUpdateMenu:
+		um := msg.Body.(protocol.UpdateMenu)
+		surf, ok := s.surfaces[um.SurfaceID]
+		if !ok {
+			logWarn("session", um.SurfaceID, "unknown surface for updateMenu")
+			return
+		}
+		surf.HandleUpdateMenu(um)
+
 	default:
 		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}

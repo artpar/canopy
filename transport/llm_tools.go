@@ -136,6 +136,39 @@ func a2uiTools() []anyllm.Tool {
 		{
 			Type: "function",
 			Function: anyllm.Function{
+				Name:        "a2ui_updateMenu",
+				Description: "Set the native menu bar for a surface's window. Menu items can use standardAction (AppKit selector routed through responder chain, e.g. \"copy:\" for Cmd+C) or action (custom callback, same as button onClick). This is required for keyboard shortcuts like Cmd+C/V/X/Z to work in text editors.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"surfaceId": map[string]any{"type": "string"},
+						"items": map[string]any{
+							"type":        "array",
+							"description": "Top-level menu items (each becomes a menu bar entry with children as dropdown items)",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"id":             map[string]any{"type": "string", "description": "Unique menu item identifier"},
+									"label":          map[string]any{"type": "string", "description": "Display text"},
+									"keyEquivalent":  map[string]any{"type": "string", "description": "Keyboard shortcut letter (e.g. \"c\" for Cmd+C, \"Z\" uppercase for Cmd+Shift+Z)"},
+									"separator":      map[string]any{"type": "boolean", "description": "True for a separator line"},
+									"standardAction": map[string]any{"type": "string", "description": "AppKit selector string (e.g. \"copy:\", \"paste:\", \"undo:\", \"selectAll:\"). Routes through responder chain."},
+									"action":         map[string]any{"type": "object", "description": "Custom action (same structure as button onClick)"},
+									"children": map[string]any{
+										"type":  "array",
+										"items": map[string]any{"type": "object"},
+									},
+								},
+							},
+						},
+					},
+					"required": []string{"surfaceId", "items"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
 				Name:        "a2ui_test",
 				Description: "Define a test case with assertions and simulations to verify the UI. Tests run headlessly and validate component state, data model values, child relationships, actions, and layout.",
 				Parameters: map[string]any{
@@ -709,7 +742,8 @@ WORKFLOW:
 4. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding)
 5. Call a2ui_updateDataModel to set initial data (if needed)
 6. Call a2ui_updateComponents to create the component tree (can use useComponent for defined templates)
-7. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.
+7. Call a2ui_updateMenu to set up an Edit menu with standard actions (Undo/Redo/Cut/Copy/Paste/Select All) — this is REQUIRED for keyboard shortcuts to work in text fields and editors
+8. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.
 
 COMPONENT TREE RULES:
 - Every component needs a unique componentId

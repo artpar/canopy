@@ -321,6 +321,11 @@ func (r *DarwinRenderer) LoadAssets(assets []renderer.AssetSpec) {
 	loadAssets(assets)
 }
 
+// UpdateMenu sets the menu bar for a surface's window.
+func (r *DarwinRenderer) UpdateMenu(surfaceID string, items []renderer.MenuItemSpec) {
+	updateMenu(surfaceID, items)
+}
+
 // removeView removes an NSView from its superview.
 func removeView(handle renderer.ViewHandle) {
 	C.JVRemoveView(unsafe.Pointer(handle))

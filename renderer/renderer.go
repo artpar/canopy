@@ -59,4 +59,7 @@ type Renderer interface {
 
 	// CaptureWindow captures the window content as a PNG image.
 	CaptureWindow(surfaceID string) ([]byte, error)
+
+	// UpdateMenu sets the menu bar for a surface's window.
+	UpdateMenu(surfaceID string, items []MenuItemSpec)
 }

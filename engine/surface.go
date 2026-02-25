@@ -212,6 +212,58 @@ func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 	}
 }
 
+// HandleUpdateMenu registers callbacks for menu items with actions and dispatches
+// the menu update to the renderer.
+func (s *Surface) HandleUpdateMenu(msg protocol.UpdateMenu) {
+	// Unregister old menu callbacks
+	if old, exists := s.activeCallbacks["__menu__"]; exists {
+		for _, cbID := range old {
+			s.rend.UnregisterCallback(cbID)
+		}
+		delete(s.activeCallbacks, "__menu__")
+	}
+
+	items := s.buildMenuSpecs(msg.Items)
+
+	s.dispatch.RunOnMain(func() {
+		s.rend.UpdateMenu(s.id, items)
+	})
+}
+
+// buildMenuSpecs recursively walks MenuItem tree, registering callbacks for action items.
+func (s *Surface) buildMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemSpec {
+	specs := make([]renderer.MenuItemSpec, len(items))
+	for i, item := range items {
+		spec := renderer.MenuItemSpec{
+			ID:             item.ID,
+			Label:          item.Label,
+			KeyEquivalent:  item.KeyEquivalent,
+			Separator:      item.Separator,
+			StandardAction: item.StandardAction,
+		}
+		if item.Action != nil && item.Action.Action != nil {
+			action := item.Action.Action
+			cbID := s.rend.RegisterCallback(s.id, "__menu_"+item.ID, "click", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			spec.CallbackID = cbID
+			s.trackCallback("__menu__", item.ID, cbID)
+		}
+		if len(item.Children) > 0 {
+			spec.Children = s.buildMenuSpecs(item.Children)
+		}
+		specs[i] = spec
+	}
+	return specs
+}
+
 // renderComponents resolves and dispatches render operations for the given component IDs.
 func (s *Surface) renderComponents(componentIDs []string) {
 	type renderWork struct {

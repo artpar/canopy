@@ -339,6 +339,9 @@ func (m *MockRenderer) CaptureWindow(surfaceID string) ([]byte, error) {
 	return nil, nil
 }
 
+// UpdateMenu is a no-op for the mock renderer.
+func (m *MockRenderer) UpdateMenu(surfaceID string, items []MenuItemSpec) {}
+
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}
 

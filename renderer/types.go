@@ -164,6 +164,17 @@ const (
 	OpCreateWindow
 )
 
+// MenuItemSpec describes a menu item for the native menu bar.
+type MenuItemSpec struct {
+	ID             string
+	Label          string
+	KeyEquivalent  string
+	Separator      bool
+	StandardAction string
+	CallbackID     CallbackID
+	Children       []MenuItemSpec
+}
+
 // WindowSpec describes a new window to create.
 type WindowSpec struct {
 	SurfaceID       string

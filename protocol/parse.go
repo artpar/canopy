@@ -189,6 +189,13 @@ func ParseLine(line []byte) (*Message, error) {
 		}
 		msg.Body = unsub
 
+	case MsgUpdateMenu:
+		var um UpdateMenu
+		if err := json.Unmarshal(env.Payload, &um); err != nil {
+			return nil, fmt.Errorf("parse updateMenu: %w", err)
+		}
+		msg.Body = um
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

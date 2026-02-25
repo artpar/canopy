@@ -25,6 +25,7 @@ const (
 	MsgPublish          MessageType = "publish"
 	MsgSubscribe        MessageType = "subscribe"
 	MsgUnsubscribe      MessageType = "unsubscribe"
+	MsgUpdateMenu       MessageType = "updateMenu"
 )
 
 // TestMessage defines a test case with a sequence of assert/simulate steps.
@@ -188,4 +189,22 @@ type DefineComponent struct {
 type Include struct {
 	Type MessageType `json:"type"`
 	Path string      `json:"path"`
+}
+
+// UpdateMenu defines a menu bar for a surface's window.
+type UpdateMenu struct {
+	Type      MessageType `json:"type"`
+	SurfaceID string      `json:"surfaceId"`
+	Items     []MenuItem  `json:"items"`
+}
+
+// MenuItem is a single menu or menu item.
+type MenuItem struct {
+	ID             string       `json:"id,omitempty"`
+	Label          string       `json:"label,omitempty"`
+	KeyEquivalent  string       `json:"keyEquivalent,omitempty"`
+	Separator      bool         `json:"separator,omitempty"`
+	StandardAction string       `json:"standardAction,omitempty"`
+	Action         *EventAction `json:"action,omitempty"`
+	Children       []MenuItem   `json:"children,omitempty"`
 }
