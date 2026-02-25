@@ -254,15 +254,23 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 // --- C API ---
 
 void* JVCreateRichTextEditor(const char* content, bool editable, uint64_t callbackID) {
-    NSTextView *textView = [[NSTextView alloc] init];
+    NSTextView *textView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 400, 300)];
     textView.richText = YES;
     textView.allowsUndo = YES;
     textView.usesFontPanel = NO;
     textView.editable = editable;
     textView.selectable = YES;
     textView.textContainerInset = NSMakeSize(16, 16);
-    textView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     textView.font = systemFontRegular(14);
+
+    // Standard NSTextView-in-NSScrollView configuration
+    textView.minSize = NSMakeSize(0, 0);
+    textView.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    textView.verticallyResizable = YES;
+    textView.horizontallyResizable = NO;
+    textView.autoresizingMask = NSViewWidthSizable;
+    textView.textContainer.containerSize = NSMakeSize(400, FLT_MAX);
+    textView.textContainer.widthTracksTextView = YES;
 
     // Set initial content
     NSString *markdown = [NSString stringWithUTF8String:content];

@@ -106,6 +106,10 @@ Two modes:
 | Modal | Floating dialog panel |
 | Video | AVPlayerView video playback |
 | AudioPlayer | Compact audio controls (play/pause, scrubber, time) |
+| SplitView | Resizable multi-pane layout (NSSplitView) |
+| OutlineView | Hierarchical tree sidebar with SF Symbol icons |
+| SearchField | Native search input with cancel button |
+| RichTextEditor | Rich text with markdown storage |
 
 ### Reusable Abstractions
 
@@ -252,8 +256,8 @@ Four layers:
 All tests run with `-race` detection enabled.
 
 ```bash
-make test          # Headless unit + integration tests (345+ tests)
-make verify        # Build + screenshot capture for all fixtures (38+ fixtures)
+make test          # Headless unit + integration tests (350+ tests)
+make verify        # Build + screenshot capture for all fixtures (42+ fixtures)
 make check         # Both (the gate)
 
 # Native e2e tests (real AppKit, no display needed)

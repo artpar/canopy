@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated after Phase 4 (Hardening + Process Model). This document gives a new session everything it needs to continue work on jview.
+Last updated after Notes Clone (SplitView, OutlineView, SearchField, RichTextEditor + Notes app). This document gives a new session everything it needs to continue work on jview.
 
 ## What Is jview
 
@@ -69,7 +69,22 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - 5 LLM tools: `a2ui_createChannel`, `a2ui_deleteChannel`, `a2ui_publish`, `a2ui_subscribe`, `a2ui_unsubscribe`
 - Channel demo sample app in `sample_apps/channel_demo/` exercising broadcast + queue channels with inline tests
 
-**345+ tests pass** across protocol/, engine/, transport/ with race detection. 38+ fixtures screenshot-verified.
+**Notes Clone complete.** 4 new native components and 3 new evaluator functions for building Apple Notes-like apps:
+- SplitView: NSSplitView with preferred pane widths from `style.width`, frame-based containers for children, delegate-driven initial layout
+- OutlineView: NSOutlineView with source-list style, JSON tree data source, disclosure triangles, SF Symbol icons, selection callback
+- SearchField: NSSearchField with two-way data binding, keystroke callbacks, built-in cancel button
+- RichTextEditor: NSTextView in NSScrollView with bidirectional markdown↔NSAttributedString conversion, debounced change callback (300ms), edit-guard to prevent cursor jump
+- 3 new evaluator functions: `filter(array, key, value)`, `find(array, key, value)`, `getField(object, fieldName)`
+- Full Apple Notes sample app in `sample_apps/notes/` with 3-pane layout, folder sidebar, note list, rich text editor
+- Standalone demo fixtures for each new component in `testdata/`
+
+**Bug fixes during testing:**
+- SplitView: children with Auto Layout fought NSSplitView frame management — fixed with frame-based container wrapping + `resizeSubviewsWithOldSize:` delegate for initial preferred-width layout
+- Root flex expansion: `kJVNeedsFlexExpansionKey` associated object flag bridges SetChildren → SetRootView timing — root Columns with flexGrow children get tight `=` bottom constraint, others get loose `<=`
+- OutlineView: column auto-resizing style set to uniform for proper width fill
+- RichTextEditor: NSTextView scroll configuration (verticallyResizable, widthTracksTextView, containerSize)
+
+**350+ tests pass** across protocol/, engine/, transport/ with race detection. 42+ fixtures screenshot-verified.
 
 ## Repository Layout
 
@@ -104,8 +119,8 @@ engine/                        Session routing, surface management, data model, 
   datamodel.go                 JSON Pointer get/set/delete with proper array shrinking
   binding.go                   BindingTracker: path -> component reverse index
   resolver.go                  Resolves DynamicValues against DataModel, registers bindings
-                               Handles all 18 component types + function call evaluation
-  evaluator.go                 FunctionCall evaluator: 17 built-in + user-defined + FFI fallthrough, recursive arg resolution
+                               Handles all 22 component types + function call evaluation
+  evaluator.go                 FunctionCall evaluator: 20 built-in + user-defined + FFI fallthrough, recursive arg resolution
   validator.go                 Validation engine: 5 rule types with custom messages
   ffilib.go                    Generic FFI via libffi: dlopen, ffi_prep_cif, ffi_call, handle table
   ffilib_config.go             FFI config loading (JSON file with library/function declarations)
@@ -139,7 +154,7 @@ renderer/                      Platform-agnostic interface
 platform/darwin/               macOS CGo + ObjC implementation
   app.go/.h/.m                 NSApplication init/run loop + AppStop/AppRunUntilIdle/ForceLayout
   viewquery.go/.h/.m           ObjC view frame/style queries (JVGetViewFrame, JVGetViewStyle)
-  renderer.go                  DarwinRenderer implementing Renderer interface (18 component types + InvokeCallback + QueryLayout/Style)
+  renderer.go                  DarwinRenderer implementing Renderer interface (22 component types + InvokeCallback + QueryLayout/Style)
   dispatch.go/.h/.m            GCD-based main thread dispatcher
   registry.go                  CallbackRegistry (uint64 -> Go func)
   callback.go                  CGo callback bridge (GoCallbackInvoke)
@@ -160,6 +175,10 @@ platform/darwin/               macOS CGo + ObjC implementation
   modal.go/.h/.m               Modal dialog (NSPanel) with dismiss delegate + data binding
   video.go/.h/.m               Video player (AVPlayerView) with playback controls + onEnded
   audio.go/.h/.m               Audio player (AVPlayer) compact control bar + onEnded
+  splitview.go/.h/.m           NSSplitView resizable multi-pane layout with delegate
+  outlineview.go/.h/.m         NSOutlineView hierarchical tree sidebar (source-list style)
+  searchfield.go/.h/.m         NSSearchField with keystroke delegate
+  richtexteditor.go/.h/.m      NSTextView rich text with markdown↔NSAttributedString conversion
   screenshot.go/.h/.m          Window capture (NSBitmapImageRep → PNG bytes)
   style.go/.h/.m               Cross-cutting visual style application (bg, color, radius, font, alignment, flexGrow)
   cleanup.go                   Type-aware CGo cleanup dispatch (Audio/Video/Modal) before removeFromSuperview
@@ -224,6 +243,12 @@ testdata/                      JSONL fixtures (29 top-level + subdirectories)
   process_interval.jsonl       Counter + interval process that increments it via functionCall
   channel.jsonl                Channel demo: broadcast + queue channels with data binding
   channel_test.jsonl           Native e2e test: channel primitives (7 assertions)
+  splitview.jsonl              SplitView demo: 3-pane resizable layout with different backgrounds
+  splitview_test.jsonl         Native e2e test: SplitView assertions
+  searchfield.jsonl            SearchField demo: native search with data binding
+  searchfield_test.jsonl       Native e2e test: SearchField assertions
+  outlineview.jsonl            OutlineView demo: folder tree with SF Symbol icons
+  richtexteditor.jsonl         RichTextEditor demo: toolbar + markdown rendering
   includes/                    Include feature: main.jsonl includes defs.jsonl
   calculator_v2/               All DX features combined: include + defineFunction + defineComponent
 
@@ -244,6 +269,7 @@ sample_apps/                   LLM-generated sample applications (10 apps)
   scrollable_feed/             Scrollable feed demo (List with scroll view)
   live_monitor/                Process lifecycle demo (interval timer, status binding, functionCall updates)
   channel_demo/                Channel primitives demo (broadcast + queue channels with inline tests)
+  notes/                       Apple Notes clone (SplitView, OutlineView, SearchField, RichTextEditor, 3-pane layout)
 ```
 
 ## Key Patterns
@@ -325,10 +351,16 @@ sample_apps/                   LLM-generated sample applications (10 apps)
 36. **Channel values stay Go types** — Values published via `cm.Publish()` in Go stay as Go types (e.g. int stays int, not float64). Don't compare against float64 in tests for integer values published from Go code.
 37. **Channel Unsubscribe granularity** — `Unsubscribe` with `targetPath` set removes only that specific subscription. Without `targetPath`, it removes ALL subscriptions for the given `processId`. Empty `processId` matches session-level subscribers.
 38. **MCP ServerOption pattern** — `mcp.NewServer` uses functional options (`WithProcessManager`, `WithChannelManager`). Don't pass raw pointers.
+39. **NSSplitView + Auto Layout** — NSSplitView uses frame-based layout for its panes. Children with `translatesAutoresizingMaskIntoConstraints = NO` fight the frame management. Wrap each child in a frame-based container (autoresizingMask = width+height sizable), then pin the Auto Layout child to the container edges. Lower priority of width constraints from `style` to 250 so they act as preferred pane sizes, not requirements.
+40. **NSSplitView initial pane sizes** — `adjustSubviews` distributes equally. To respect `style.width` preferences, implement `resizeSubviewsWithOldSize:` delegate method that reads width constraints from children on first layout (oldSize is zero) and distributes remaining space to panes without explicit width.
+41. **Root view flex expansion timing** — `SetRootView` is called AFTER `SetChildren` in the rendering pipeline. `stack.superview` is nil during `SetChildren` for root views. Solution: `kJVNeedsFlexExpansionKey` associated object flag set during `SetChildren` when flex detected, checked in `JVSetRootView` to choose tight `=` or loose `<=` bottom constraint.
+42. **NSTextView scroll view configuration** — NSTextView requires: `verticallyResizable = YES`, `horizontallyResizable = NO`, `autoresizingMask = NSViewWidthSizable`, `textContainer.widthTracksTextView = YES`, `textContainer.containerSize = NSMakeSize(width, FLT_MAX)`. Without these, text content doesn't flow and the text view appears empty.
+43. **OutlineView outlineData is JSON** — `outlineData` prop passes JSON-serialized tree data. Use `resolveJSON()` (not `resolveString()`) to serialize the data model array properly before passing to ObjC.
+44. **RichTextEditor edit guard** — Track `isEditing` flag in the delegate. Skip external data model updates while the user is actively editing to prevent cursor jump. The debounce timer (300ms) clears the flag when the user stops typing.
 
 ## What To Work On Next
 
-See `plan.md` for the full roadmap. Phase 4 is complete — hardening and process model are done. The next phase is Production Polish:
+See `plan.md` for the full roadmap. Phase 4 and the Notes Clone are complete. The next phase is Production Polish:
 
 1. **Multi-surface window management** — multiple windows from one session, window positioning, focus management
 2. **Incremental tree diff** — only re-render components whose resolved props actually changed
@@ -341,8 +373,8 @@ See `plan.md` for the full roadmap. Phase 4 is complete — hardening and proces
 
 ```bash
 make build                           # Build binary to build/jview
-make test                            # Headless tests with -race (331 tests)
-make verify                          # Screenshot verification (37 fixtures)
+make test                            # Headless tests with -race (350+ tests)
+make verify                          # Screenshot verification (42+ fixtures)
 make check                           # Full gate (test + verify)
 build/jview test testdata/contact_form_test.jsonl  # Native e2e test
 build/jview testdata/hello.jsonl     # File mode (static fixture, MCP on stdin/stdout)

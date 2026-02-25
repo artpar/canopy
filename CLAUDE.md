@@ -173,7 +173,7 @@ Native Cocoa widgets           ← visible on screen
 ## Rendering Rules
 - Topological sort: create leaves before parents (children before containers)
 - Two-pass: (1) create/update all views, (2) set children on containers
-- Root view: pin top/leading/trailing tight, bottom with `constraintLessThanOrEqualToAnchor`
+- Root view: pin top/leading/trailing tight, bottom with `constraintLessThanOrEqualToAnchor` (or `=` if root has flexGrow children, via `kJVNeedsFlexExpansionKey` flag)
 - NSBox (Card): add stack to existing contentView, never replace contentView
 
 ## Callback Flow
@@ -231,3 +231,15 @@ Reliability, process model, channels, always-on MCP.
 | Channel primitives (pub/sub, broadcast/queue) | infra | high | **done** |
 | Always-on MCP server | infra | high | **done** |
 | macOS .app bundle packaging | infra | low | not started |
+
+### Notes Clone — COMPLETE
+4 new native components, 3 new evaluator functions, Apple Notes sample app.
+
+| Task | Tag | Priority | Status |
+|------|-----|----------|--------|
+| SplitView (NSSplitView) | component | high | **done** |
+| OutlineView (NSOutlineView) | component | high | **done** |
+| SearchField (NSSearchField) | component | high | **done** |
+| RichTextEditor (NSTextView) | component | high | **done** |
+| filter/find/getField functions | engine | high | **done** |
+| Notes sample app (3-pane layout) | app | high | **done** |

@@ -76,6 +76,7 @@ void JVUpdateStackView(void* handle, const char* justify, const char* align, int
 
 // Shared key for flexGrow associated object (also used by style.m)
 const void *kJVFlexGrowKey = &kJVFlexGrowKey;
+const void *kJVNeedsFlexExpansionKey = &kJVNeedsFlexExpansionKey;
 
 // Pin a child on the cross-axis based on alignment.
 static void pinCrossAxis(NSView *child, NSStackView *stack, BOOL stretch,
@@ -200,6 +201,17 @@ void JVStackViewSetChildren(void* handle, void** children, int count) {
             } else {
                 [prevChild.bottomAnchor constraintEqualToAnchor:stack.bottomAnchor constant:-insets.bottom].active = YES;
             }
+        }
+
+        // Mark stack as needing flex expansion. For non-root stacks with a superview,
+        // add the constraint now. For root stacks (superview is nil at SetChildren time),
+        // JVSetRootView in app.m reads this flag and uses tight bottom constraint.
+        objc_setAssociatedObject(stack, kJVNeedsFlexExpansionKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+        if (stack.superview) {
+            NSLayoutConstraint *expandBottom = [stack.bottomAnchor constraintEqualToAnchor:stack.superview.bottomAnchor];
+            expandBottom.priority = 999;
+            expandBottom.active = YES;
         }
 
     } else {

@@ -788,6 +788,60 @@ Audio playback using AVFoundation's AVPlayer with a compact control bar (play/pa
 
 The AudioPlayer is a leaf node (no children). It renders as a horizontal bar ~40pt tall that stretches to parent width. Controls are always shown (play/pause, scrubber, time label). URL change detection avoids reloading the same audio. Autoplay only applies on initial load, not on updates. The `onEnded` callback fires only when loop is false.
 
+### SplitView
+
+Resizable multi-pane layout (NSSplitView).
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| dividerStyle | string | `"thin"` | `thin`, `thick`, `paneSplitter` |
+| vertical | DynamicBoolean | `true` | Vertical dividers (side-by-side panes). `false` for horizontal dividers (stacked panes). |
+
+Children become resizable panes. Each child is wrapped in a frame-based container so NSSplitView manages pane frames while children use Auto Layout internally. On first layout, pane widths are read from children's `style.width` constraints (if set); remaining space is distributed equally to panes without explicit width. Minimum pane width is 100px, enforced by the delegate.
+
+### OutlineView
+
+Hierarchical tree list (NSOutlineView) with disclosure triangles and optional SF Symbol icons. Source-list style sidebar appearance.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| outlineData | DynamicString | `""` | JSON-serialized tree array |
+| labelKey | string | `"name"` | Key for display text in each node |
+| childrenKey | string | `"children"` | Key for nested items in each node |
+| iconKey | string | `""` | Key for SF Symbol name in each node |
+| idKey | string | `"id"` | Key for unique item identifier |
+| selectedId | DynamicString | `""` | Currently selected item ID (data-bound) |
+| dataBinding | string | | JSON Pointer for selected ID (two-way) |
+| onSelect | EventAction | | Action to fire on selection change (sends selected item ID) |
+
+The data source parses JSON tree data. Update preserves expansion state. All items expanded by default.
+
+### SearchField
+
+Native search input (NSSearchField) with magnifying glass icon, cancel button, and keystroke callbacks.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| placeholder | DynamicString | `""` | Placeholder text |
+| value | DynamicString | `""` | Current search string |
+| dataBinding | string | | JSON Pointer for two-way binding |
+| onChange | EventAction | | Action to fire on each keystroke |
+
+The built-in cancel button clears the field and fires the callback with an empty string.
+
+### RichTextEditor
+
+Rich text editor (NSTextView in NSScrollView) with bidirectional markdown conversion. Stores content as markdown in the data model; renders as formatted NSAttributedString.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| content | DynamicString | `""` | Markdown content |
+| editable | DynamicBoolean | `true` | Whether editing is enabled |
+| dataBinding | string | | JSON Pointer for content (two-way) |
+| onChange | EventAction | | Action to fire on content change (debounced 300ms) |
+
+Supported markdown: `# Title`, `## Heading`, `### Subheading`, `**bold**`, `*italic*`, `~~strikethrough~~`, `` `monospace` ``, `- [ ] checklist`, `- [x] checked`, `- bullet`, `1. numbered`. External data model updates are skipped while the user is actively editing to prevent cursor jump.
+
 ---
 
 ## Visual Styling
@@ -955,6 +1009,9 @@ Functions registered via `defineFunction` are available in the same expression c
 | `append` | array, element | array | Append element to array |
 | `removeLast` | array | array | Remove last element from array |
 | `slice` | array, start, end? | array | Extract sub-array from start to end (exclusive) |
+| `filter` | array, key, value | array | Return items where `item[key] == value` |
+| `find` | array, key, value | any | Return first item where `item[key] == value` (nil if not found) |
+| `getField` | object, fieldName | any | Extract a field from an object (nil if missing) |
 
 ---
 
@@ -1018,4 +1075,4 @@ The MCP server enables programmatic UI control, testing, and integration with ex
 
 ## Reserved Component Types (Not Yet Implemented)
 
-No reserved component types remain. All Phase 3 components are implemented.
+No reserved component types remain. All components through the Notes Clone phase are implemented (22 total).

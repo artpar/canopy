@@ -80,6 +80,22 @@ Reliability, process management, and always-on MCP.
 
 ---
 
+## Notes Clone — COMPLETE
+
+4 new native components, 3 new evaluator functions, and a full Apple Notes sample app.
+
+**Delivered:**
+- SplitView: NSSplitView with preferred pane widths, frame-based container wrapping, delegate-driven initial layout, min 100px pane width
+- OutlineView: NSOutlineView with JSON tree data source, source-list style, SF Symbol icons, disclosure triangles, selection callback, expansion state preservation
+- SearchField: NSSearchField with two-way data binding, keystroke callbacks, built-in cancel button
+- RichTextEditor: NSTextView in NSScrollView with bidirectional markdown↔NSAttributedString conversion (headings, bold, italic, strikethrough, monospace, checklists, bullets, numbered lists), debounced 300ms change callback, edit-guard
+- 3 new evaluator functions: `filter(array, key, value)`, `find(array, key, value)`, `getField(object, fieldName)`
+- Full Apple Notes sample app in `sample_apps/notes/` with 3-pane layout (sidebar 200px, note list 280px, editor), folder navigation, note selection, rich text editing
+- Standalone demo fixtures: `testdata/splitview.jsonl`, `testdata/searchfield.jsonl`, `testdata/outlineview.jsonl`, `testdata/richtexteditor.jsonl`
+- Bug fixes: SplitView container wrapping, root flex expansion flag, OutlineView column sizing, RichTextEditor scroll config, restored samples/dynamic_list.jsonl, added theme_switcher test messages
+
+---
+
 ## Phase 5: Production Polish
 
 Packaging and remaining transport modes.

@@ -211,11 +211,12 @@ void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
         outlineView.style = NSTableViewStyleSourceList;
     }
 
-    // Add a single column
+    // Add a single column that fills the outline width
     NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"main"];
     column.resizingMask = NSTableColumnAutoresizingMask;
     [outlineView addTableColumn:column];
     outlineView.outlineTableColumn = column;
+    outlineView.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
 
     outlineView.dataSource = dataSource;
 

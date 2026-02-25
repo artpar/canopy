@@ -223,7 +223,19 @@ void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     // Use specified padding; default to 20 if not set (padding==0 means no value provided from protocol)
     // To get edge-to-edge, set padding to -1 in protocol which maps to 0 here
     CGFloat inset = (padding > 0) ? (CGFloat)padding : (padding < 0) ? 0.0 : 20.0;
-    NSLayoutConstraint *bottom = [nsView.bottomAnchor constraintLessThanOrEqualToAnchor:contentView.bottomAnchor constant:-inset];
+
+    // Check if root view has flex children — if so, use tight bottom constraint
+    extern const void *kJVNeedsFlexExpansionKey;
+    NSNumber *needsFlex = objc_getAssociatedObject(nsView, kJVNeedsFlexExpansionKey);
+    NSLayoutConstraint *bottom;
+    if (needsFlex && [needsFlex boolValue]) {
+        // Tight: root fills window so flexGrow children can expand
+        bottom = [nsView.bottomAnchor constraintEqualToAnchor:contentView.bottomAnchor constant:-inset];
+    } else {
+        // Loose: root sizes to content, sits at top of window
+        bottom = [nsView.bottomAnchor constraintLessThanOrEqualToAnchor:contentView.bottomAnchor constant:-inset];
+    }
+
     [NSLayoutConstraint activateConstraints:@[
         [nsView.topAnchor constraintEqualToAnchor:contentView.topAnchor constant:inset],
         [nsView.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:inset],
