@@ -215,6 +215,7 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 
 @interface JVRichTextDelegate : NSObject <NSTextViewDelegate>
 @property (nonatomic, assign) uint64_t callbackID;
+@property (nonatomic, assign) uint64_t formatCallbackID;
 @property (nonatomic, assign) BOOL suppressCallback;
 @property (nonatomic, weak) NSTextView *textView;
 @end
@@ -227,6 +228,52 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
     NSString *markdown = attributedStringToMarkdown(self.textView.textStorage);
     const char *val = [markdown UTF8String];
     GoCallbackInvoke(self.callbackID, val);
+}
+
+- (void)textViewDidChangeSelection:(NSNotification *)notification {
+    if (self.suppressCallback || self.formatCallbackID == 0) return;
+
+    NSTextView *tv = self.textView;
+    if (!tv) return;
+
+    NSDictionary *attrs;
+    NSUInteger loc = tv.selectedRange.location;
+    if (loc > 0 && loc <= tv.textStorage.length) {
+        attrs = [tv.textStorage attributesAtIndex:loc - 1 effectiveRange:NULL];
+    } else if (tv.textStorage.length > 0) {
+        attrs = [tv.textStorage attributesAtIndex:0 effectiveRange:NULL];
+    } else {
+        attrs = tv.typingAttributes;
+    }
+
+    BOOL bold = NO;
+    BOOL italic = NO;
+    BOOL underline = NO;
+    BOOL strikethrough = NO;
+
+    NSFont *font = attrs[NSFontAttributeName];
+    if (font) {
+        NSFontTraitMask traits = [[NSFontManager sharedFontManager] traitsOfFont:font];
+        bold = (traits & NSBoldFontMask) != 0;
+        italic = (traits & NSItalicFontMask) != 0;
+    }
+
+    NSNumber *underlineVal = attrs[NSUnderlineStyleAttributeName];
+    if (underlineVal && [underlineVal integerValue] != 0) {
+        underline = YES;
+    }
+
+    NSNumber *strikeVal = attrs[NSStrikethroughStyleAttributeName];
+    if (strikeVal && [strikeVal integerValue] != 0) {
+        strikethrough = YES;
+    }
+
+    NSString *json = [NSString stringWithFormat:@"{\"bold\":%@,\"italic\":%@,\"underline\":%@,\"strikethrough\":%@}",
+                      bold ? @"true" : @"false",
+                      italic ? @"true" : @"false",
+                      underline ? @"true" : @"false",
+                      strikethrough ? @"true" : @"false"];
+    GoCallbackInvoke(self.formatCallbackID, [json UTF8String]);
 }
 
 @end
@@ -323,4 +370,12 @@ void JVUpdateRichTextEditor(void* handle, const char* content, bool editable) {
     delegate.suppressCallback = YES;
     [textView.textStorage setAttributedString:attrStr];
     delegate.suppressCallback = NO;
+}
+
+void JVRichTextEditorSetFormatCallbackID(void* handle, uint64_t callbackID) {
+    NSScrollView *scrollView = (__bridge NSScrollView*)handle;
+    JVRichTextDelegate *delegate = objc_getAssociatedObject(scrollView, kRTEDelegateKey);
+    if (delegate) {
+        delegate.formatCallbackID = callbackID;
+    }
 }

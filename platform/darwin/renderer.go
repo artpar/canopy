@@ -134,6 +134,11 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 		}
 	}
 
+	// Attach context menu if specified
+	if node.Props.ContextMenu != "" {
+		attachContextMenu(uintptr(handle), node.Props.ContextMenu)
+	}
+
 	r.mu.Lock()
 	if r.handles[surfaceID] == nil {
 		r.handles[surfaceID] = make(map[string]renderer.ViewHandle)
@@ -202,6 +207,11 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 		if cbID, ok := node.Callbacks["click"]; ok && cbID != 0 {
 			updateClickGestureCallbackID(handle, uint64(cbID))
 		}
+	}
+
+	// Update context menu
+	if node.Props.ContextMenu != "" {
+		attachContextMenu(uintptr(handle), node.Props.ContextMenu)
 	}
 }
 
@@ -348,6 +358,15 @@ func (r *DarwinRenderer) PerformAction(selector string) {
 // UpdateToolbar sets the toolbar for a surface's window.
 func (r *DarwinRenderer) UpdateToolbar(surfaceID string, items []renderer.ToolbarItemSpec) {
 	updateToolbar(surfaceID, items)
+}
+
+// UpdateWindow sets window properties (title, minimum size).
+func (r *DarwinRenderer) UpdateWindow(surfaceID string, title string, minWidth, minHeight int) {
+	cSID := C.CString(surfaceID)
+	defer C.free(unsafe.Pointer(cSID))
+	cTitle := C.CString(title)
+	defer C.free(unsafe.Pointer(cTitle))
+	C.JVUpdateWindow(cSID, cTitle, C.int(minWidth), C.int(minHeight))
 }
 
 // removeView removes an NSView from its superview.

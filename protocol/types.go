@@ -27,6 +27,7 @@ const (
 	MsgUnsubscribe      MessageType = "unsubscribe"
 	MsgUpdateMenu       MessageType = "updateMenu"
 	MsgUpdateToolbar    MessageType = "updateToolbar"
+	MsgUpdateWindow     MessageType = "updateWindow"
 )
 
 // TestMessage defines a test case with a sequence of assert/simulate steps.
@@ -208,24 +209,38 @@ type UpdateToolbar struct {
 
 // ToolbarItemSpec describes a single toolbar item.
 type ToolbarItemSpec struct {
-	ID             string       `json:"id,omitempty"`
-	Icon           string       `json:"icon,omitempty"`           // SF Symbol name
-	Label          string       `json:"label,omitempty"`          // tooltip / text
-	StandardAction string       `json:"standardAction,omitempty"` // AppKit selector
-	Action         *EventAction `json:"action,omitempty"`         // custom action (onClick)
-	Separator      bool         `json:"separator,omitempty"`      // thin divider
-	Flexible       bool         `json:"flexible,omitempty"`       // flexible space
-	SearchField    bool         `json:"searchField,omitempty"`    // NSSearchToolbarItem
-	DataBinding    string       `json:"dataBinding,omitempty"`    // for search field
+	ID             string          `json:"id,omitempty"`
+	Icon           string          `json:"icon,omitempty"`           // SF Symbol name
+	Label          string          `json:"label,omitempty"`          // tooltip / text
+	StandardAction string          `json:"standardAction,omitempty"` // AppKit selector
+	Action         *EventAction    `json:"action,omitempty"`         // custom action (onClick)
+	Separator      bool            `json:"separator,omitempty"`      // thin divider
+	Flexible       bool            `json:"flexible,omitempty"`       // flexible space
+	SearchField    bool            `json:"searchField,omitempty"`    // NSSearchToolbarItem
+	DataBinding    string          `json:"dataBinding,omitempty"`    // for search field
+	Enabled        *DynamicBoolean `json:"enabled,omitempty"`        // interactive state (default true)
+	Selected       *DynamicBoolean `json:"selected,omitempty"`       // toggle/highlight state
+}
+
+// UpdateWindow sets window properties (title, minimum size).
+type UpdateWindow struct {
+	Type      MessageType `json:"type"`
+	SurfaceID string      `json:"surfaceId"`
+	Title     string      `json:"title,omitempty"`
+	MinWidth  int         `json:"minWidth,omitempty"`
+	MinHeight int         `json:"minHeight,omitempty"`
 }
 
 // MenuItem is a single menu or menu item.
 type MenuItem struct {
-	ID             string       `json:"id,omitempty"`
-	Label          string       `json:"label,omitempty"`
-	KeyEquivalent  string       `json:"keyEquivalent,omitempty"`
-	Separator      bool         `json:"separator,omitempty"`
-	StandardAction string       `json:"standardAction,omitempty"`
-	Action         *EventAction `json:"action,omitempty"`
-	Children       []MenuItem   `json:"children,omitempty"`
+	ID             string          `json:"id,omitempty"`
+	Label          string          `json:"label,omitempty"`
+	KeyEquivalent  string          `json:"keyEquivalent,omitempty"`
+	KeyModifiers   string          `json:"keyModifiers,omitempty"` // "option", "shift", "option+shift" — Cmd always included
+	Separator      bool            `json:"separator,omitempty"`
+	StandardAction string          `json:"standardAction,omitempty"`
+	Action         *EventAction    `json:"action,omitempty"`
+	Children       []MenuItem      `json:"children,omitempty"`
+	Icon           string          `json:"icon,omitempty"`     // SF Symbol name
+	Disabled       *DynamicBoolean `json:"disabled,omitempty"` // grayed out when true
 }

@@ -24,6 +24,9 @@ type Surface struct {
 	// activeCallbacks tracks registered callbacks: componentID → eventType → CallbackID
 	activeCallbacks map[string]map[string]renderer.CallbackID
 
+	// lastToolbarMsg stores the most recent toolbar message for re-resolution on data changes
+	lastToolbarMsg *protocol.UpdateToolbar
+
 	// validationErrors tracks current validation errors: componentID → []errorMessages
 	validationErrors map[string][]string
 
@@ -229,13 +232,17 @@ func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 // HandleUpdateToolbar registers callbacks for toolbar items and dispatches
 // the toolbar update to the renderer.
 func (s *Surface) HandleUpdateToolbar(msg protocol.UpdateToolbar) {
-	// Unregister old toolbar callbacks
+	// Store for re-dispatch when bound data changes
+	s.lastToolbarMsg = &msg
+
+	// Unregister old toolbar callbacks and bindings
 	if old, exists := s.activeCallbacks["__toolbar__"]; exists {
 		for _, cbID := range old {
 			s.rend.UnregisterCallback(cbID)
 		}
 		delete(s.activeCallbacks, "__toolbar__")
 	}
+	s.tracker.Unregister("__toolbar__")
 
 	specs := make([]renderer.ToolbarItemSpec, len(msg.Items))
 	for i, item := range msg.Items {
@@ -247,6 +254,8 @@ func (s *Surface) HandleUpdateToolbar(msg protocol.UpdateToolbar) {
 			Separator:      item.Separator,
 			Flexible:       item.Flexible,
 			SearchField:    item.SearchField,
+			Enabled:        s.resolver.resolveBoolDefault("__toolbar__", item.Enabled, true),
+			Selected:       s.resolver.resolveBool("__toolbar__", item.Selected),
 		}
 		if item.Action != nil && item.Action.Action != nil {
 			action := item.Action.Action
@@ -322,8 +331,11 @@ func (s *Surface) buildMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemS
 			ID:             item.ID,
 			Label:          item.Label,
 			KeyEquivalent:  item.KeyEquivalent,
+			KeyModifiers:   item.KeyModifiers,
 			Separator:      item.Separator,
 			StandardAction: item.StandardAction,
+			Icon:           item.Icon,
+			Disabled:       s.resolver.resolveBool("__menu__", item.Disabled),
 		}
 		if item.Action != nil && item.Action.Action != nil {
 			action := item.Action.Action
@@ -348,9 +360,62 @@ func (s *Surface) buildMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemS
 	return specs
 }
 
+// buildContextMenuSpecs builds menu specs for a component's context menu,
+// using a namespace that avoids collision with the menu bar callbacks.
+func (s *Surface) buildContextMenuSpecs(compID string, items []protocol.MenuItem) []renderer.MenuItemSpec {
+	specs := make([]renderer.MenuItemSpec, len(items))
+	for i, item := range items {
+		spec := renderer.MenuItemSpec{
+			ID:             item.ID,
+			Label:          item.Label,
+			Separator:      item.Separator,
+			StandardAction: item.StandardAction,
+			Icon:           item.Icon,
+			Disabled:       s.resolver.resolveBool(compID, item.Disabled),
+		}
+		if item.Action != nil && item.Action.Action != nil {
+			action := item.Action.Action
+			cbID := s.rend.RegisterCallback(s.id, "__ctx_"+compID+"_"+item.ID, "click", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			spec.CallbackID = cbID
+			s.trackCallback(compID, "__ctx_"+item.ID, cbID)
+		}
+		if len(item.Children) > 0 {
+			spec.Children = s.buildContextMenuSpecs(compID, item.Children)
+		}
+		specs[i] = spec
+	}
+	return specs
+}
+
 // renderComponents resolves and dispatches render operations for the given component IDs.
 func (s *Surface) renderComponents(componentIDs []string) {
 	jlog.Infof("render", s.id, "renderComponents: %v", componentIDs)
+
+	// Re-dispatch toolbar if its bindings are affected
+	if s.lastToolbarMsg != nil {
+		var remaining []string
+		for _, id := range componentIDs {
+			if id == "__toolbar__" {
+				s.HandleUpdateToolbar(*s.lastToolbarMsg)
+			} else {
+				remaining = append(remaining, id)
+			}
+		}
+		if len(remaining) == 0 {
+			return
+		}
+		componentIDs = remaining
+	}
+
 	// Re-expand forEach parents whose data source changed.
 	// Skip during re-expansion to prevent recursion.
 	if !s.reexpanding {
@@ -523,6 +588,8 @@ func (s *Surface) executeFunctionCall(fc *protocol.ActionFuncCall) {
 		s.executeUpdateDataModel(fc.Args)
 	case "setTheme":
 		s.executeSetTheme(fc.Args)
+	case "updateWindow":
+		s.executeUpdateWindow(fc.Args)
 	default:
 		logWarn("functioncall", s.id, fmt.Sprintf("unknown functionCall: %s", fc.Call))
 	}
@@ -597,6 +664,46 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 	if len(affected) > 0 {
 		s.renderComponents(affected)
 	}
+}
+
+// executeUpdateWindow sets window properties via the renderer.
+func (s *Surface) executeUpdateWindow(args interface{}) {
+	argsMap, ok := args.(map[string]interface{})
+	if !ok {
+		logWarn("functioncall", s.id, "updateWindow args not a map")
+		return
+	}
+	evaluator := NewEvaluator(s.dm)
+	evaluator.FFI = s.ffi
+	evaluator.customFuncs = s.funcDefs
+	title := ""
+	if titleRaw, ok := argsMap["title"]; ok {
+		resolved, err := evaluator.resolveArg(titleRaw)
+		if err == nil {
+			title = toString(resolved)
+		}
+	}
+	minWidth := 0
+	if v, ok := argsMap["minWidth"]; ok {
+		resolved, err := evaluator.resolveArg(v)
+		if err == nil {
+			if f, err := toFloat(resolved); err == nil {
+				minWidth = int(f)
+			}
+		}
+	}
+	minHeight := 0
+	if v, ok := argsMap["minHeight"]; ok {
+		resolved, err := evaluator.resolveArg(v)
+		if err == nil {
+			if f, err := toFloat(resolved); err == nil {
+				minHeight = int(f)
+			}
+		}
+	}
+	s.dispatch.RunOnMain(func() {
+		s.rend.UpdateWindow(s.id, title, minWidth, minHeight)
+	})
 }
 
 // executeSetTheme changes the window theme via the renderer.
@@ -892,28 +999,74 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 		}
 
 	case protocol.CompRichTextEditor:
-		if comp.Props.DataBinding != "" {
-			binding := comp.Props.DataBinding
-			compID := comp.ComponentID
+		compID := comp.ComponentID
+		binding := comp.Props.DataBinding
+		onChange := comp.Props.OnChange
+		if binding != "" || onChange != nil {
 			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "change", func(value string) {
-				changed, err := s.dm.Set(binding, value)
-				if err != nil {
-					logWarn("binding", s.id, fmt.Sprintf("richtexteditor binding error: %v", err))
-					return
-				}
-				affected := s.tracker.Affected(changed)
-				var toRender []string
-				for _, id := range affected {
-					if id != compID {
-						toRender = append(toRender, id)
+				var allChanged []string
+				// Write to dataBinding path if set
+				if binding != "" {
+					changed, err := s.dm.Set(binding, value)
+					if err != nil {
+						logWarn("binding", s.id, fmt.Sprintf("richtexteditor binding error: %v", err))
+						return
 					}
+					allChanged = append(allChanged, changed...)
 				}
-				if len(toRender) > 0 {
-					s.renderComponents(toRender)
+				// Fire onChange action — write value to /_input so action can reference it
+				if onChange != nil && onChange.Action != nil {
+					s.dm.Set("/_input", value)
+					action := onChange.Action
+					if action.FunctionCall != nil {
+						s.executeFunctionCall(action.FunctionCall)
+					} else if action.Event != nil && s.ActionHandler != nil {
+						resolved := make(map[string]interface{})
+						for _, ref := range action.Event.DataRefs {
+							val, _ := s.dm.Get(ref)
+							resolved[ref] = val
+						}
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+					s.dm.Delete("/_input")
+				}
+				// Re-render affected components (excluding source editor)
+				if binding != "" {
+					affected := s.tracker.Affected(allChanged)
+					var toRender []string
+					for _, id := range affected {
+						if id != compID {
+							toRender = append(toRender, id)
+						}
+					}
+					if len(toRender) > 0 {
+						s.renderComponents(toRender)
+					}
 				}
 			})
 			node.Callbacks["change"] = cbID
 			s.trackCallback(comp.ComponentID, "change", cbID)
+		}
+		if comp.Props.FormatBinding != "" {
+			binding := comp.Props.FormatBinding
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "formatchange", func(data string) {
+				var formatState map[string]interface{}
+				if err := json.Unmarshal([]byte(data), &formatState); err != nil {
+					logWarn("binding", s.id, fmt.Sprintf("formatchange parse error: %v", err))
+					return
+				}
+				changed, err := s.dm.Set(binding, formatState)
+				if err != nil {
+					logWarn("binding", s.id, fmt.Sprintf("formatchange binding error: %v", err))
+					return
+				}
+				affected := s.tracker.Affected(changed)
+				if len(affected) > 0 {
+					s.renderComponents(affected)
+				}
+			})
+			node.Callbacks["formatchange"] = cbID
+			s.trackCallback(comp.ComponentID, "formatchange", cbID)
 		}
 
 	case protocol.CompModal:
@@ -952,6 +1105,17 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 		})
 		node.Callbacks["dismiss"] = cbID
 		s.trackCallback(comp.ComponentID, "dismiss", cbID)
+	}
+
+	// Context menu support for any component type
+	if comp.Props.ContextMenu != nil {
+		var menuItems []protocol.MenuItem
+		if err := json.Unmarshal(comp.Props.ContextMenu, &menuItems); err == nil && len(menuItems) > 0 {
+			specs := s.buildContextMenuSpecs(comp.ComponentID, menuItems)
+			if data, err := json.Marshal(specs); err == nil {
+				node.Props.ContextMenu = string(data)
+			}
+		}
 	}
 
 	// General onClick support for any component type (if not already handled above)
@@ -1397,6 +1561,9 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	if p.DataBinding != "" {
 		p.DataBinding = rewritePath(p.DataBinding, prefix, itemPath)
 	}
+	if p.FormatBinding != "" {
+		p.FormatBinding = rewritePath(p.FormatBinding, prefix, itemPath)
+	}
 
 	// Rewrite paths in onClick action
 	rewriteAction := func(ea *protocol.EventAction) {
@@ -1422,6 +1589,17 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	rewriteAction(p.OnEnded)
 	rewriteAction(p.OnSearch)
 	rewriteAction(p.OnRichChange)
+
+	// Rewrite paths in contextMenu JSON
+	if p.ContextMenu != nil {
+		var raw interface{}
+		if err := json.Unmarshal(p.ContextMenu, &raw); err == nil {
+			rewriteActionArgs(raw, prefix, itemPath)
+			if data, err := json.Marshal(raw); err == nil {
+				p.ContextMenu = data
+			}
+		}
+	}
 }
 
 // deepCopyComponent creates a deep copy of a component, including all pointer fields in Props.
@@ -1481,6 +1659,13 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	p.OnEnded = deepCopyEventAction(p.OnEnded)
 	p.OnSearch = deepCopyEventAction(p.OnSearch)
 	p.OnRichChange = deepCopyEventAction(p.OnRichChange)
+
+	// Deep copy ContextMenu raw bytes
+	if p.ContextMenu != nil {
+		cm := make(json.RawMessage, len(p.ContextMenu))
+		copy(cm, p.ContextMenu)
+		p.ContextMenu = cm
+	}
 
 	// Deep copy children
 	if c.Children != nil {

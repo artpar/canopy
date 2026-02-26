@@ -18,10 +18,13 @@ type menuItemJSON struct {
 	ID             string         `json:"id,omitempty"`
 	Label          string         `json:"label,omitempty"`
 	KeyEquivalent  string         `json:"keyEquivalent,omitempty"`
+	KeyModifiers   string         `json:"keyModifiers,omitempty"`
 	Separator      bool           `json:"separator,omitempty"`
 	StandardAction string         `json:"standardAction,omitempty"`
 	CallbackID     uint64         `json:"callbackID,omitempty"`
 	Children       []menuItemJSON `json:"children,omitempty"`
+	Icon           string         `json:"icon,omitempty"`
+	Disabled       bool           `json:"disabled,omitempty"`
 }
 
 func specToJSON(specs []renderer.MenuItemSpec) []menuItemJSON {
@@ -31,9 +34,12 @@ func specToJSON(specs []renderer.MenuItemSpec) []menuItemJSON {
 			ID:             s.ID,
 			Label:          s.Label,
 			KeyEquivalent:  s.KeyEquivalent,
+			KeyModifiers:   s.KeyModifiers,
 			Separator:      s.Separator,
 			StandardAction: s.StandardAction,
 			CallbackID:     uint64(s.CallbackID),
+			Icon:           s.Icon,
+			Disabled:       s.Disabled,
 		}
 		if len(s.Children) > 0 {
 			items[i].Children = specToJSON(s.Children)

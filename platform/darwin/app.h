@@ -11,5 +11,6 @@ void JVDestroyWindow(const char* surfaceID);
 void JVSetWindowRootView(const char* surfaceID, void* view, int padding);
 void JVSetWindowTheme(const char* surfaceID, const char* theme);
 void JVRemoveView(void* view);
+void JVUpdateWindow(const char* surfaceID, const char* title, int minWidth, int minHeight);
 
 #endif

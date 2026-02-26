@@ -62,4 +62,20 @@ var FunctionRegistry = []FuncMeta{
 
 	// Date functions
 	{Name: "formatDateRelative", Args: "isoDate", Desc: "format ISO date as relative string (Today at 2:30 PM, Yesterday, Feb 24, etc.)", Category: "string"},
+	{Name: "now", Args: "", Desc: "current ISO 8601 timestamp", Category: "string"},
+
+	// Object functions (additional)
+	{Name: "setField", Args: "object, key, value", Desc: "return object with field set to value", Category: "object"},
+
+	// Array functions (additional)
+	{Name: "countWhere", Args: "array, key, value", Desc: "count items where item[key] == value", Category: "array"},
+	{Name: "insertAt", Args: "array, index, item", Desc: "insert item at index position", Category: "array"},
+	{Name: "filterContainsAny", Args: "array, keys, substring", Desc: "return items where any of the listed keys contains substring (case-insensitive)", Category: "array"},
+
+	// Tree functions
+	{Name: "appendToTree", Args: "tree, parentId, item", Desc: "insert item as child of node with matching ID; if parentId is empty, appends to root", Category: "array"},
+	{Name: "removeFromTree", Args: "tree, id", Desc: "remove node with matching ID from tree (searches recursively)", Category: "array"},
+
+	// Utility functions
+	{Name: "uuid", Args: "", Desc: "generate UUID v4 string", Category: "string"},
 }

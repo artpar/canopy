@@ -202,12 +202,14 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 			p.IDKey = "id"
 		}
 		p.SelectedID = r.resolveString(comp.ComponentID, cp.SelectedID)
+		p.BadgeKey = cp.BadgeKey
 		p.DataBinding = cp.DataBinding
 
 	case protocol.CompRichTextEditor:
 		p.RichContent = r.resolveString(comp.ComponentID, cp.RichContent)
 		p.Editable = r.resolveBoolDefault(comp.ComponentID, cp.Editable, true)
 		p.DataBinding = cp.DataBinding
+		p.FormatBinding = cp.FormatBinding
 	}
 
 	node.Style = comp.Style

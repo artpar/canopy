@@ -204,6 +204,22 @@ void JVRemoveView(void* view) {
     [nsView removeFromSuperview];
 }
 
+void JVUpdateWindow(const char* surfaceID, const char* title, int minWidth, int minHeight) {
+    NSString *sid = [NSString stringWithUTF8String:surfaceID];
+    NSWindow *window = windowMap[sid];
+    if (!window) return;
+
+    NSString *titleStr = [NSString stringWithUTF8String:title];
+    if ([titleStr length] > 0) {
+        [window setTitle:titleStr];
+    }
+    if (minWidth > 0 || minHeight > 0) {
+        CGFloat w = (minWidth > 0) ? (CGFloat)minWidth : window.minSize.width;
+        CGFloat h = (minHeight > 0) ? (CGFloat)minHeight : window.minSize.height;
+        window.minSize = NSMakeSize(w, h);
+    }
+}
+
 void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSWindow *window = windowMap[sid];

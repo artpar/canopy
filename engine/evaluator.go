@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"crypto/rand"
 	"fmt"
 	"jview/protocol"
 	"math"
@@ -77,6 +78,14 @@ func init() {
 		"updateItem":          (*Evaluator).fnUpdateItem,
 		"lessThan":            (*Evaluator).fnLessThan,
 		"formatDateRelative":  (*Evaluator).fnFormatDateRelative,
+		"now":                 (*Evaluator).fnNow,
+		"setField":            (*Evaluator).fnSetField,
+		"countWhere":          (*Evaluator).fnCountWhere,
+		"insertAt":            (*Evaluator).fnInsertAt,
+		"filterContainsAny":   (*Evaluator).fnFilterContainsAny,
+		"uuid":                (*Evaluator).fnUUID,
+		"appendToTree":        (*Evaluator).fnAppendToTree,
+		"removeFromTree":      (*Evaluator).fnRemoveFromTree,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa
@@ -886,4 +895,230 @@ func (e *Evaluator) fnFormatDateRelative(args []any) (any, error) {
 		return tLocal.Format("Jan 2"), nil
 	}
 	return tLocal.Format("1/2/06"), nil
+}
+
+func (e *Evaluator) fnNow(args []any) (any, error) {
+	return time.Now().UTC().Format(time.RFC3339), nil
+}
+
+func (e *Evaluator) fnUUID(args []any) (any, error) {
+	var uuid [16]byte
+	_, err := rand.Read(uuid[:])
+	if err != nil {
+		return "", fmt.Errorf("uuid: %w", err)
+	}
+	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
+	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16]), nil
+}
+
+func (e *Evaluator) fnSetField(args []any) (any, error) {
+	if len(args) < 3 {
+		return nil, fmt.Errorf("setField requires 3 args (object, key, value)")
+	}
+	obj, ok := args[0].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("setField: first arg must be an object")
+	}
+	key := toString(args[1])
+	clone := make(map[string]any, len(obj))
+	for k, v := range obj {
+		clone[k] = v
+	}
+	clone[key] = args[2]
+	return clone, nil
+}
+
+func (e *Evaluator) fnCountWhere(args []any) (any, error) {
+	if len(args) < 3 {
+		return float64(0), fmt.Errorf("countWhere requires 3 args (array, key, value)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return float64(0), nil
+	}
+	key := toString(args[1])
+	value := toString(args[2])
+	count := 0
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if toString(m[key]) == value {
+			count++
+		}
+	}
+	return float64(count), nil
+}
+
+func (e *Evaluator) fnInsertAt(args []any) (any, error) {
+	if len(args) < 3 {
+		return []any{}, fmt.Errorf("insertAt requires 3 args (array, index, item)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{args[2]}, nil
+	}
+	idx, err := toFloat(args[1])
+	if err != nil {
+		return arr, err
+	}
+	i := int(idx)
+	if i < 0 {
+		i = 0
+	}
+	if i > len(arr) {
+		i = len(arr)
+	}
+	result := make([]any, len(arr)+1)
+	copy(result, arr[:i])
+	result[i] = args[2]
+	copy(result[i+1:], arr[i:])
+	return result, nil
+}
+
+func (e *Evaluator) fnFilterContainsAny(args []any) (any, error) {
+	if len(args) < 3 {
+		return []any{}, fmt.Errorf("filterContainsAny requires 3 args (array, keys, substring)")
+	}
+	arr, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	// Keys can be a []any of strings or a single string
+	var keys []string
+	switch k := args[1].(type) {
+	case []any:
+		for _, v := range k {
+			keys = append(keys, toString(v))
+		}
+	case string:
+		keys = []string{k}
+	default:
+		keys = []string{toString(k)}
+	}
+	sub := strings.ToLower(toString(args[2]))
+	if sub == "" {
+		result := make([]any, len(arr))
+		copy(result, arr)
+		return result, nil
+	}
+	var result []any
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range keys {
+			if strings.Contains(strings.ToLower(toString(m[key])), sub) {
+				result = append(result, item)
+				break
+			}
+		}
+	}
+	if result == nil {
+		return []any{}, nil
+	}
+	return result, nil
+}
+
+func (e *Evaluator) fnAppendToTree(args []any) (any, error) {
+	if len(args) < 3 {
+		return []any{}, fmt.Errorf("appendToTree requires 3 args (tree, parentId, item)")
+	}
+	tree, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	parentID := toString(args[1])
+	item := args[2]
+
+	// Deep copy the tree to avoid mutation
+	result := make([]any, len(tree))
+	for i, n := range tree {
+		result[i] = deepCopyJSON(n)
+	}
+
+	// If parentId is empty, append to root
+	if parentID == "" {
+		return append(result, item), nil
+	}
+
+	// Find parent and append child
+	if appendToNode(result, parentID, item) {
+		return result, nil
+	}
+	// Parent not found — append to root as fallback
+	return append(result, item), nil
+}
+
+// appendToNode recursively searches for a node by ID and appends item to its children.
+func appendToNode(tree []any, parentID string, item any) bool {
+	for i, node := range tree {
+		m, ok := node.(map[string]any)
+		if !ok {
+			continue
+		}
+		if toString(m["id"]) == parentID {
+			children, _ := m["children"].([]any)
+			clone := make(map[string]any, len(m))
+			for k, v := range m {
+				clone[k] = v
+			}
+			clone["children"] = append(children, item)
+			tree[i] = clone
+			return true
+		}
+		// Recurse into children
+		if children, ok := m["children"].([]any); ok && len(children) > 0 {
+			if appendToNode(children, parentID, item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (e *Evaluator) fnRemoveFromTree(args []any) (any, error) {
+	if len(args) < 2 {
+		return []any{}, fmt.Errorf("removeFromTree requires 2 args (tree, id)")
+	}
+	tree, ok := args[0].([]any)
+	if !ok {
+		return []any{}, nil
+	}
+	targetID := toString(args[1])
+	return removeFromNode(tree, targetID), nil
+}
+
+// removeFromNode recursively removes a node by ID from the tree.
+func removeFromNode(tree []any, targetID string) []any {
+	var result []any
+	for _, node := range tree {
+		m, ok := node.(map[string]any)
+		if !ok {
+			result = append(result, node)
+			continue
+		}
+		if toString(m["id"]) == targetID {
+			continue // skip this node
+		}
+		// Recurse into children
+		if children, ok := m["children"].([]any); ok && len(children) > 0 {
+			clone := make(map[string]any, len(m))
+			for k, v := range m {
+				clone[k] = v
+			}
+			clone["children"] = removeFromNode(children, targetID)
+			result = append(result, clone)
+		} else {
+			result = append(result, node)
+		}
+	}
+	if result == nil {
+		return []any{}
+	}
+	return result
 }

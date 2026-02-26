@@ -27,13 +27,15 @@ func createOutlineView(node *renderer.RenderNode, surfaceID string) renderer.Vie
 	defer C.free(unsafe.Pointer(cIDKey))
 	cSelectedID := C.CString(node.Props.SelectedID)
 	defer C.free(unsafe.Pointer(cSelectedID))
+	cBadgeKey := C.CString(node.Props.BadgeKey)
+	defer C.free(unsafe.Pointer(cBadgeKey))
 
 	var cbID uint64
 	if id, ok := node.Callbacks["select"]; ok {
 		cbID = uint64(id)
 	}
 
-	ptr := C.JVCreateOutlineView(cData, cLabelKey, cChildrenKey, cIconKey, cIDKey, cSelectedID, C.uint64_t(cbID))
+	ptr := C.JVCreateOutlineView(cData, cLabelKey, cChildrenKey, cIconKey, cIDKey, cSelectedID, cBadgeKey, C.uint64_t(cbID))
 	return renderer.ViewHandle(uintptr(ptr))
 }
 

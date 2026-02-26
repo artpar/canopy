@@ -216,6 +216,12 @@ func (s *Session) HandleMessage(msg *protocol.Message) {
 		}
 		surf.HandleUpdateToolbar(ut)
 
+	case protocol.MsgUpdateWindow:
+		uw := msg.Body.(protocol.UpdateWindow)
+		s.dispatch.RunOnMain(func() {
+			s.rend.UpdateWindow(uw.SurfaceID, uw.Title, uw.MinWidth, uw.MinHeight)
+		})
+
 	default:
 		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}

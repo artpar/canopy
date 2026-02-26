@@ -24,6 +24,12 @@ func createRichTextEditorView(node *renderer.RenderNode, surfaceID string) rende
 	}
 
 	ptr := C.JVCreateRichTextEditor(cContent, C.bool(node.Props.Editable), C.uint64_t(cbID))
+
+	// Set format callback ID if present
+	if fmtID, ok := node.Callbacks["formatchange"]; ok && fmtID != 0 {
+		C.JVRichTextEditorSetFormatCallbackID(ptr, C.uint64_t(fmtID))
+	}
+
 	return renderer.ViewHandle(uintptr(ptr))
 }
 
@@ -32,4 +38,9 @@ func updateRichTextEditorView(handle renderer.ViewHandle, node *renderer.RenderN
 	defer C.free(unsafe.Pointer(cContent))
 
 	C.JVUpdateRichTextEditor(unsafe.Pointer(handle), cContent, C.bool(node.Props.Editable))
+
+	// Sync format callback ID (may change on forEach re-expansion)
+	if fmtID, ok := node.Callbacks["formatchange"]; ok {
+		C.JVRichTextEditorSetFormatCallbackID(unsafe.Pointer(handle), C.uint64_t(fmtID))
+	}
 }

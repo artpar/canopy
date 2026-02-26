@@ -13,6 +13,7 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 @property (nonatomic, strong) NSString *itemID;
 @property (nonatomic, strong) NSString *label;
 @property (nonatomic, strong) NSString *iconName;
+@property (nonatomic, assign) NSInteger badgeValue;
 @property (nonatomic, strong) NSMutableArray<JVOutlineItem*> *children;
 @end
 
@@ -33,11 +34,12 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 @property (nonatomic, strong) NSString *childrenKey;
 @property (nonatomic, strong) NSString *iconKey;
 @property (nonatomic, strong) NSString *idKey;
+@property (nonatomic, strong) NSString *badgeKey;
 @end
 
 @implementation JVOutlineDataSource
 
-- (instancetype)initWithLabelKey:(NSString*)lk childrenKey:(NSString*)ck iconKey:(NSString*)ik idKey:(NSString*)idk {
+- (instancetype)initWithLabelKey:(NSString*)lk childrenKey:(NSString*)ck iconKey:(NSString*)ik idKey:(NSString*)idk badgeKey:(NSString*)bk {
     self = [super init];
     if (self) {
         _rootItems = [NSMutableArray array];
@@ -45,6 +47,7 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
         _childrenKey = ck;
         _iconKey = ik;
         _idKey = idk;
+        _badgeKey = bk;
     }
     return self;
 }
@@ -74,6 +77,13 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
     if (self.iconKey.length > 0) {
         id iconVal = dict[self.iconKey];
         if (iconVal) item.iconName = [iconVal description];
+    }
+
+    if (self.badgeKey.length > 0) {
+        id badgeVal = dict[self.badgeKey];
+        if (badgeVal && [badgeVal respondsToSelector:@selector(integerValue)]) {
+            item.badgeValue = [badgeVal integerValue];
+        }
     }
 
     id childrenVal = dict[self.childrenKey];
@@ -117,6 +127,7 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 @interface JVOutlineViewDelegate : NSObject <NSOutlineViewDelegate>
 @property (nonatomic, assign) uint64_t callbackID;
 @property (nonatomic, assign) BOOL suppressSelection;
+@property (nonatomic, assign) BOOL hasBadges;
 @end
 
 @implementation JVOutlineViewDelegate
@@ -124,34 +135,57 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 - (NSView *)outlineView:(NSOutlineView *)outlineView viewForTableColumn:(NSTableColumn *)tableColumn item:(id)item {
     JVOutlineItem *outlineItem = (JVOutlineItem*)item;
 
-    NSTableCellView *cellView = [outlineView makeViewWithIdentifier:@"JVOutlineCell" owner:self];
-    if (!cellView) {
-        cellView = [[NSTableCellView alloc] init];
-        cellView.identifier = @"JVOutlineCell";
+    // Always create fresh cell views to avoid stale badge state
+    NSTableCellView *cellView = [[NSTableCellView alloc] init];
 
-        NSImageView *imageView = [[NSImageView alloc] init];
-        imageView.translatesAutoresizingMaskIntoConstraints = NO;
-        [imageView setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
+    NSImageView *imageView = [[NSImageView alloc] init];
+    imageView.translatesAutoresizingMaskIntoConstraints = NO;
+    [imageView setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-        NSTextField *textField = [NSTextField labelWithString:@""];
-        textField.translatesAutoresizingMaskIntoConstraints = NO;
-        textField.lineBreakMode = NSLineBreakByTruncatingTail;
+    NSTextField *textField = [NSTextField labelWithString:@""];
+    textField.translatesAutoresizingMaskIntoConstraints = NO;
+    textField.lineBreakMode = NSLineBreakByTruncatingTail;
+    [textField setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-        [cellView addSubview:imageView];
-        [cellView addSubview:textField];
-        cellView.imageView = imageView;
-        cellView.textField = textField;
+    [cellView addSubview:imageView];
+    [cellView addSubview:textField];
+    cellView.imageView = imageView;
+    cellView.textField = textField;
 
-        [NSLayoutConstraint activateConstraints:@[
-            [imageView.leadingAnchor constraintEqualToAnchor:cellView.leadingAnchor constant:2],
-            [imageView.centerYAnchor constraintEqualToAnchor:cellView.centerYAnchor],
-            [imageView.widthAnchor constraintEqualToConstant:16],
-            [imageView.heightAnchor constraintEqualToConstant:16],
-            [textField.leadingAnchor constraintEqualToAnchor:imageView.trailingAnchor constant:4],
-            [textField.trailingAnchor constraintEqualToAnchor:cellView.trailingAnchor constant:-2],
-            [textField.centerYAnchor constraintEqualToAnchor:cellView.centerYAnchor],
-        ]];
+    // Badge label (right-aligned, gray pill)
+    NSTextField *badgeLabel = nil;
+    if (self.hasBadges && outlineItem.badgeValue > 0) {
+        badgeLabel = [NSTextField labelWithString:[NSString stringWithFormat:@"%ld", (long)outlineItem.badgeValue]];
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        badgeLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightMedium];
+        badgeLabel.textColor = [NSColor secondaryLabelColor];
+        badgeLabel.alignment = NSTextAlignmentCenter;
+        [badgeLabel setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
+        [cellView addSubview:badgeLabel];
     }
+
+    NSMutableArray *constraints = [NSMutableArray arrayWithArray:@[
+        [imageView.leadingAnchor constraintEqualToAnchor:cellView.leadingAnchor constant:2],
+        [imageView.centerYAnchor constraintEqualToAnchor:cellView.centerYAnchor],
+        [imageView.widthAnchor constraintEqualToConstant:16],
+        [imageView.heightAnchor constraintEqualToConstant:16],
+        [textField.leadingAnchor constraintEqualToAnchor:imageView.trailingAnchor constant:4],
+        [textField.centerYAnchor constraintEqualToAnchor:cellView.centerYAnchor],
+    ]];
+
+    if (badgeLabel) {
+        [constraints addObjectsFromArray:@[
+            [textField.trailingAnchor constraintLessThanOrEqualToAnchor:badgeLabel.leadingAnchor constant:-4],
+            [badgeLabel.trailingAnchor constraintEqualToAnchor:cellView.trailingAnchor constant:-4],
+            [badgeLabel.centerYAnchor constraintEqualToAnchor:cellView.centerYAnchor],
+        ]];
+    } else {
+        [constraints addObject:
+            [textField.trailingAnchor constraintEqualToAnchor:cellView.trailingAnchor constant:-2]
+        ];
+    }
+
+    [NSLayoutConstraint activateConstraints:constraints];
 
     cellView.textField.stringValue = outlineItem.label ?: @"";
 
@@ -187,23 +221,40 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 
 @end
 
+// --- JVOutlineView: subclass for context menu row selection ---
+@interface JVOutlineView : NSOutlineView
+@end
+
+@implementation JVOutlineView
+- (NSMenu *)menuForEvent:(NSEvent *)event {
+    NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+    NSInteger row = [self rowAtPoint:point];
+    if (row >= 0) {
+        // Select the right-clicked row (fires selection delegate)
+        [self selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+    }
+    return [super menuForEvent:event];
+}
+@end
+
 // --- C API ---
 
 void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
                            const char* childrenKey, const char* iconKey,
                            const char* idKey, const char* selectedID,
-                           uint64_t callbackID) {
+                           const char* badgeKey, uint64_t callbackID) {
     NSString *lk = [NSString stringWithUTF8String:labelKey];
     NSString *ck = [NSString stringWithUTF8String:childrenKey];
     NSString *ik = [NSString stringWithUTF8String:iconKey];
     NSString *idk = [NSString stringWithUTF8String:idKey];
+    NSString *bk = [NSString stringWithUTF8String:badgeKey];
 
     // Create data source
-    JVOutlineDataSource *dataSource = [[JVOutlineDataSource alloc] initWithLabelKey:lk childrenKey:ck iconKey:ik idKey:idk];
+    JVOutlineDataSource *dataSource = [[JVOutlineDataSource alloc] initWithLabelKey:lk childrenKey:ck iconKey:ik idKey:idk badgeKey:bk];
     [dataSource parseJSON:[NSString stringWithUTF8String:dataJSON]];
 
-    // Create outline view
-    NSOutlineView *outlineView = [[NSOutlineView alloc] init];
+    // Create outline view (JVOutlineView subclass for context menu row selection)
+    JVOutlineView *outlineView = [[JVOutlineView alloc] init];
     outlineView.headerView = nil;
     outlineView.indentationPerLevel = 16;
     outlineView.rowSizeStyle = NSTableViewRowSizeStyleSmall;
@@ -223,6 +274,7 @@ void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
     // Create delegate
     JVOutlineViewDelegate *delegate = [[JVOutlineViewDelegate alloc] init];
     delegate.callbackID = callbackID;
+    delegate.hasBadges = (bk.length > 0);
     outlineView.delegate = delegate;
 
     // Wrap in scroll view

@@ -203,6 +203,13 @@ func ParseLine(line []byte) (*Message, error) {
 		}
 		msg.Body = ut
 
+	case MsgUpdateWindow:
+		var uw UpdateWindow
+		if err := json.Unmarshal(env.Payload, &uw); err != nil {
+			return nil, fmt.Errorf("parse updateWindow: %w", err)
+		}
+		msg.Body = uw
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

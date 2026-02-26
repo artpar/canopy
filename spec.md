@@ -1,6 +1,6 @@
 # jview A2UI Protocol Specification
 
-This document describes the A2UI JSONL protocol subset implemented by jview and the rendering rules applied by the engine.
+This document describes the A2UI JSONL protocol superset implemented by jview and the rendering rules applied by the engine.
 
 ## Wire Format
 
@@ -526,6 +526,110 @@ Sends a value to a channel. The value is written to `/channels/{id}/value` on al
 
 Publishing to a non-existent channel returns an error. Publishing to a channel with no subscribers is allowed — the value is still written to `/channels/{id}/value`.
 
+### updateMenu
+
+Defines the menu bar for a surface's window. Replaces any existing menu.
+
+```json
+{
+  "type": "updateMenu",
+  "surfaceId": "main",
+  "items": [
+    {
+      "id": "file",
+      "label": "File",
+      "children": [
+        {"id": "new", "label": "New", "keyEquivalent": "n", "action": {...}},
+        {"separator": true},
+        {"id": "close", "label": "Close", "keyEquivalent": "w", "standardAction": "performClose:"}
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| surfaceId | string | yes | Surface whose window gets this menu |
+| items | MenuItem[] | yes | Top-level menu items (each becomes a menu bar entry) |
+
+#### MenuItem
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | Unique identifier |
+| label | string | | Display text |
+| keyEquivalent | string | `""` | Keyboard shortcut character (Cmd always included) |
+| keyModifiers | string | `""` | Additional modifiers: `option`, `shift`, `option+shift` |
+| separator | bool | `false` | Render as a separator line |
+| standardAction | string | | AppKit selector (e.g. `performClose:`, `toggleBoldface:`) |
+| action | EventAction | | Custom action to fire on click |
+| children | MenuItem[] | | Submenu items |
+| icon | string | `""` | SF Symbol name displayed beside the label |
+| disabled | DynamicBoolean | `false` | Whether the item is grayed out and non-interactive |
+
+### updateToolbar
+
+Defines the toolbar for a surface's window. Replaces any existing toolbar.
+
+```json
+{
+  "type": "updateToolbar",
+  "surfaceId": "main",
+  "items": [
+    {"id": "save", "icon": "square.and.arrow.down", "label": "Save", "action": {...}},
+    {"separator": true},
+    {"id": "bold", "icon": "bold", "label": "Bold", "standardAction": "toggleBoldface:", "selected": {"path": "/formatState/bold"}},
+    {"flexible": true},
+    {"id": "search", "searchField": true, "label": "Search", "dataBinding": "/searchQuery"}
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| surfaceId | string | yes | Surface whose window gets this toolbar |
+| items | ToolbarItemSpec[] | yes | Toolbar items in order |
+
+#### ToolbarItemSpec
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | Unique identifier |
+| icon | string | | SF Symbol name |
+| label | string | | Tooltip / text |
+| standardAction | string | | AppKit selector (e.g. `toggleBoldface:`) |
+| action | EventAction | | Custom action to fire on click |
+| separator | bool | `false` | Thin divider between items |
+| flexible | bool | `false` | Flexible space (pushes items apart) |
+| searchField | bool | `false` | Render as NSSearchToolbarItem |
+| dataBinding | string | | JSON Pointer for search field two-way binding |
+| enabled | DynamicBoolean | `true` | Whether the item is interactive. When `false`, grayed out. |
+| selected | DynamicBoolean | `false` | Visual toggle state (highlighted appearance). |
+
+Dynamic values (`enabled`, `selected`) create bindings. When bound data model paths change, the toolbar re-evaluates and re-dispatches.
+
+### updateWindow
+
+Sets window properties after creation.
+
+```json
+{
+  "type": "updateWindow",
+  "surfaceId": "main",
+  "title": "My App - Untitled",
+  "minWidth": 600,
+  "minHeight": 400
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| surfaceId | string | | Surface whose window to update |
+| title | string | | Window title (overrides createSurface title) |
+| minWidth | int | 0 | Minimum window width in points |
+| minHeight | int | 0 | Minimum window height in points |
+
 ---
 
 ## Component Model
@@ -552,6 +656,31 @@ Publishing to a non-existent channel returns an error. Publishing to a channel w
 | scope | string | no | Data model scope prefix for `$` paths |
 
 *`type` is required unless `useComponent` is set.
+
+### contextMenu
+
+Any component can declare a `contextMenu` array in `props`. Items use the same `MenuItem` format as `updateMenu`. Right-clicking the component shows the context menu.
+
+```json
+{
+  "componentId": "folder_tree",
+  "type": "OutlineView",
+  "props": {
+    "outlineData": {"path": "/folders"},
+    "contextMenu": [
+      {"id": "new", "label": "New Folder", "icon": "folder.badge.plus", "action": {...}},
+      {"separator": true},
+      {"id": "delete", "label": "Delete", "icon": "trash", "action": {...}}
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| contextMenu | MenuItem[] | Array of menu items shown on right-click. Same structure as `updateMenu` items. |
+
+For OutlineView: the right-clicked row is selected before the menu appears, so the selection callback fires first with the clicked item's ID.
 
 ### ChildList
 
@@ -796,6 +925,7 @@ Resizable multi-pane layout (NSSplitView).
 |------|------|---------|-------------|
 | dividerStyle | string | `"thin"` | `thin`, `thick`, `paneSplitter` |
 | vertical | DynamicBoolean | `true` | Vertical dividers (side-by-side panes). `false` for horizontal dividers (stacked panes). |
+| collapsedPane | DynamicNumber | `-1` | Index of pane to collapse (0-based). `-1` means no pane collapsed. |
 
 Children become resizable panes. Each child is wrapped in a frame-based container so NSSplitView manages pane frames while children use Auto Layout internally. On first layout, pane widths are read from children's `style.width` constraints (if set); remaining space is distributed equally to panes without explicit width. Minimum pane width is 100px, enforced by the delegate.
 
@@ -811,6 +941,7 @@ Hierarchical tree list (NSOutlineView) with disclosure triangles and optional SF
 | iconKey | string | `""` | Key for SF Symbol name in each node |
 | idKey | string | `"id"` | Key for unique item identifier |
 | selectedId | DynamicString | `""` | Currently selected item ID (data-bound) |
+| badgeKey | string | `""` | Key in item data for a numeric badge. Displayed right-aligned in the cell. Hidden when 0. |
 | dataBinding | string | | JSON Pointer for selected ID (two-way) |
 | onSelect | EventAction | | Action to fire on selection change (sends selected item ID) |
 
@@ -838,6 +969,7 @@ Rich text editor (NSTextView in NSScrollView) with bidirectional markdown conver
 | content | DynamicString | `""` | Markdown content |
 | editable | DynamicBoolean | `true` | Whether editing is enabled |
 | dataBinding | string | | JSON Pointer for content (two-way) |
+| formatBinding | string | | JSON Pointer. When cursor moves, writes `{bold, italic, underline, strikethrough}` (booleans) to this path. |
 | onChange | EventAction | | Action to fire on content change (debounced 300ms) |
 
 Supported markdown: `# Title`, `## Heading`, `### Subheading`, `**bold**`, `*italic*`, `~~strikethrough~~`, `` `monospace` ``, `- [ ] checklist`, `- [x] checked`, `- bullet`, `1. numbered`. External data model updates are skipped while the user is actively editing to prevent cursor jump.
@@ -1009,9 +1141,30 @@ Functions registered via `defineFunction` are available in the same expression c
 | `append` | array, element | array | Append element to array |
 | `removeLast` | array | array | Remove last element from array |
 | `slice` | array, start, end? | array | Extract sub-array from start to end (exclusive) |
+| `toUpperCase` | s | string | Uppercase |
+| `toLowerCase` | s | string | Lowercase |
+| `trim` | s | string | Strip whitespace |
+| `substring` | s, start, end? | string | Extract substring |
+| `substringAfter` | s, delimiter | string | Return part after first delimiter occurrence |
+| `replace` | s, old, new | string | Replace all occurrences of old with new |
+| `format` | template, arg0, arg1, ... | string | Replace {0}, {1}, etc. in template |
 | `filter` | array, key, value | array | Return items where `item[key] == value` |
+| `filterContains` | array, key, substring | array | Return items where `item[key]` contains substring (case-insensitive) |
+| `filterContainsAny` | array, keys, substring | array | Return items where any of the listed keys contains substring (case-insensitive) |
 | `find` | array, key, value | any | Return first item where `item[key] == value` (nil if not found) |
+| `sort` | array, key, descending? | array | Sort array of objects by key; descending is optional boolean (default false) |
+| `remove` | array, key, value | array | Return items where `item[key] != value` (inverse of filter) |
+| `insertAt` | array, index, item | array | Insert item at index position |
 | `getField` | object, fieldName | any | Extract a field from an object (nil if missing) |
+| `setField` | object, key, value | object | Return object with field set to value |
+| `updateItem` | array, idKey, idValue, field, value | array | Return array with item matching idKey==idValue having field set to value |
+| `countWhere` | array, key, value | number | Count items where `item[key] == value` |
+| `lessThan` | a, b | bool | a < b |
+| `formatDateRelative` | isoDate | string | Format ISO date as relative string (Today at 2:30 PM, Yesterday, Feb 24, etc.) |
+| `now` | | string | Current ISO 8601 timestamp |
+| `uuid` | | string | Generate UUID v4 string |
+| `appendToTree` | tree, parentId, item | array | Insert item as child of node with matching ID; if parentId is empty, appends to root |
+| `removeFromTree` | tree, id | array | Remove node with matching ID from tree (searches recursively) |
 
 ---
 

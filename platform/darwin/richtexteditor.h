@@ -6,5 +6,6 @@
 
 void* JVCreateRichTextEditor(const char* content, bool editable, uint64_t callbackID);
 void JVUpdateRichTextEditor(void* handle, const char* content, bool editable);
+void JVRichTextEditorSetFormatCallbackID(void* handle, uint64_t callbackID);
 
 #endif

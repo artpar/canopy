@@ -6,7 +6,7 @@
 void* JVCreateOutlineView(const char* dataJSON, const char* labelKey,
                            const char* childrenKey, const char* iconKey,
                            const char* idKey, const char* selectedID,
-                           uint64_t callbackID);
+                           const char* badgeKey, uint64_t callbackID);
 void JVUpdateOutlineView(void* handle, const char* dataJSON,
                           const char* selectedID);
 

@@ -155,13 +155,18 @@ type Props struct {
 	IconKey     string         `json:"iconKey,omitempty"`     // key for SF Symbol name
 	IDKey       string         `json:"idKey,omitempty"`       // key for item identifier (default "id")
 	SelectedID  *DynamicString `json:"selectedId,omitempty"`  // currently selected item ID
+	BadgeKey    string         `json:"badgeKey,omitempty"`    // key for numeric badge (hidden when 0)
 
 	// RichTextEditor
-	RichContent *DynamicString  `json:"richContent,omitempty"`  // markdown content
-	Editable    *DynamicBoolean `json:"editable,omitempty"`     // default true
-	OnRichChange *EventAction   `json:"onRichChange,omitempty"` // fired on content change
+	RichContent   *DynamicString  `json:"richContent,omitempty"`   // markdown content
+	Editable      *DynamicBoolean `json:"editable,omitempty"`      // default true
+	OnRichChange  *EventAction    `json:"onRichChange,omitempty"`  // fired on content change
+	FormatBinding string          `json:"formatBinding,omitempty"` // JSON Pointer for cursor format state
 
 	// Dynamic style overrides (resolved at render time, override static style values)
 	BackgroundColor *DynamicString `json:"backgroundColor,omitempty"`
 	TextColor       *DynamicString `json:"textColor,omitempty"`
+
+	// Universal props
+	ContextMenu json.RawMessage `json:"contextMenu,omitempty"` // []MenuItem for right-click menu
 }

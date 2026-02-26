@@ -32,8 +32,19 @@ static NSMenuItem* buildMenuItem(NSDictionary *spec, NSMutableArray *targets) {
     NSEventModifierFlags modFlags = NSEventModifierFlagCommand;
     NSString *actualKey = keyEquiv;
 
-    // Uppercase letter means Cmd+Shift
-    if ([keyEquiv length] == 1) {
+    // Check explicit keyModifiers field
+    NSString *keyMods = spec[@"keyModifiers"];
+    if (keyMods && [keyMods length] > 0) {
+        modFlags = NSEventModifierFlagCommand;
+        if ([keyMods containsString:@"option"]) {
+            modFlags |= NSEventModifierFlagOption;
+        }
+        if ([keyMods containsString:@"shift"]) {
+            modFlags |= NSEventModifierFlagShift;
+        }
+        actualKey = [keyEquiv lowercaseString];
+    } else if ([keyEquiv length] == 1) {
+        // Uppercase letter means Cmd+Shift (legacy convention)
         unichar ch = [keyEquiv characterAtIndex:0];
         if (ch >= 'A' && ch <= 'Z') {
             modFlags = NSEventModifierFlagCommand | NSEventModifierFlagShift;
@@ -61,6 +72,21 @@ static NSMenuItem* buildMenuItem(NSDictionary *spec, NSMutableArray *targets) {
         item.target = target;
         item.action = @selector(menuItemClicked:);
         [targets addObject:target]; // prevent dealloc
+    }
+
+    // SF Symbol icon
+    NSString *iconName = spec[@"icon"];
+    if (iconName && [iconName length] > 0) {
+        NSImage *image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:label];
+        if (image) {
+            image.size = NSMakeSize(16, 16);
+            item.image = image;
+        }
+    }
+
+    // Disabled state
+    if ([spec[@"disabled"] boolValue]) {
+        item.enabled = NO;
     }
 
     // Children → submenu

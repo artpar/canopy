@@ -68,4 +68,7 @@ type Renderer interface {
 
 	// UpdateToolbar sets the toolbar for a surface's window.
 	UpdateToolbar(surfaceID string, items []ToolbarItemSpec)
+
+	// UpdateWindow sets window properties (title, minimum size).
+	UpdateWindow(surfaceID string, title string, minWidth, minHeight int)
 }

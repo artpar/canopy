@@ -107,10 +107,15 @@ type ResolvedProps struct {
 	IconKey     string `json:"iconKey,omitempty"`
 	IDKey       string `json:"idKey,omitempty"`
 	SelectedID  string `json:"selectedId,omitempty"`
+	BadgeKey    string `json:"badgeKey,omitempty"`
 
 	// RichTextEditor
-	RichContent string `json:"richContent,omitempty"`
-	Editable    bool   `json:"editable,omitempty"`
+	RichContent   string `json:"richContent,omitempty"`
+	Editable      bool   `json:"editable,omitempty"`
+	FormatBinding string `json:"formatBinding,omitempty"`
+
+	// Universal
+	ContextMenu string `json:"contextMenu,omitempty"` // serialized []MenuItemSpec JSON
 }
 
 // OptionItem represents a single option in a ChoicePicker.
@@ -170,23 +175,28 @@ type MenuItemSpec struct {
 	ID             string
 	Label          string
 	KeyEquivalent  string
+	KeyModifiers   string // "option", "shift", "option+shift" — Cmd always included
 	Separator      bool
 	StandardAction string
 	CallbackID     CallbackID
 	Children       []MenuItemSpec
+	Icon           string
+	Disabled       bool
 }
 
 // ToolbarItemSpec describes a single toolbar item for the native toolbar.
 type ToolbarItemSpec struct {
-	ID             string
-	Icon           string // SF Symbol name
-	Label          string
-	StandardAction string
-	CallbackID     CallbackID
-	Separator      bool
-	Flexible       bool
-	SearchField    bool
+	ID               string
+	Icon             string // SF Symbol name
+	Label            string
+	StandardAction   string
+	CallbackID       CallbackID
+	Separator        bool
+	Flexible         bool
+	SearchField      bool
 	SearchCallbackID CallbackID // for search field change events
+	Enabled          bool
+	Selected         bool
 }
 
 // WindowSpec describes a new window to create.

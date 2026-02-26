@@ -121,6 +121,22 @@ static NSString *const kToolbarID = @"JVToolbar";
             [self.targets addObject:target];
         }
 
+        // Enabled state (default true)
+        NSNumber *enabledVal = spec[@"enabled"];
+        if (enabledVal) {
+            item.enabled = [enabledVal boolValue];
+        }
+
+        // Selected state — use NSButton as item.view for toggle appearance
+        if ([spec[@"selected"] boolValue]) {
+            NSButton *btn = [NSButton buttonWithImage:item.image ?: [NSImage new] target:item.target action:item.action];
+            btn.bezelStyle = NSBezelStyleTexturedRounded;
+            btn.state = NSControlStateValueOn;
+            btn.toolTip = item.toolTip;
+            if (enabledVal) btn.enabled = [enabledVal boolValue];
+            item.view = btn;
+        }
+
         return item;
     }
 
