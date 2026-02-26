@@ -95,7 +95,7 @@ func (m *MockRenderer) UpdateView(surfaceID string, handle ViewHandle, node *Ren
 	m.populateStyle(surfaceID, node)
 }
 
-// populateStyle extracts style info from a RenderNode's StyleProps into the mock style store.
+// populateStyle extracts style info from a RenderNode's ResolvedStyleProps into the mock style store.
 // Only sets fields that have non-zero values, preserving any previously set style info.
 // Must be called with m.mu held.
 func (m *MockRenderer) populateStyle(surfaceID string, node *RenderNode) {

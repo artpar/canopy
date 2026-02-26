@@ -9,12 +9,11 @@ package darwin
 */
 import "C"
 import (
-	"jview/protocol"
 	"jview/renderer"
 	"unsafe"
 )
 
-func applyStyle(handle renderer.ViewHandle, style protocol.StyleProps) {
+func applyStyle(handle renderer.ViewHandle, style renderer.ResolvedStyleProps) {
 	cBg := C.CString(style.BackgroundColor)
 	defer C.free(unsafe.Pointer(cBg))
 	cTc := C.CString(style.TextColor)

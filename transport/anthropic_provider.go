@@ -241,10 +241,32 @@ func convertAnthropicMessages(messages []providers.Message) ([]anthropic.Message
 			}
 
 		case providers.RoleTool:
-			m := anthropic.NewUserMessage(
-				anthropic.NewToolResultBlock(msg.ToolCallID, msg.ContentString(), false),
-			)
-			result = append(result, m)
+			content := msg.ContentString()
+			if strings.HasPrefix(content, "__screenshot:") {
+				b64Data := content[len("__screenshot:"):]
+				toolBlock := anthropic.ToolResultBlockParam{
+					ToolUseID: msg.ToolCallID,
+					Content: []anthropic.ToolResultBlockParamContentUnion{
+						{OfImage: &anthropic.ImageBlockParam{
+							Source: anthropic.ImageBlockParamSourceUnion{
+								OfBase64: &anthropic.Base64ImageSourceParam{
+									Data:      b64Data,
+									MediaType: anthropic.Base64ImageSourceMediaType("image/png"),
+								},
+							},
+						}},
+					},
+				}
+				m := anthropic.NewUserMessage(
+					anthropic.ContentBlockParamUnion{OfToolResult: &toolBlock},
+				)
+				result = append(result, m)
+			} else {
+				m := anthropic.NewUserMessage(
+					anthropic.NewToolResultBlock(msg.ToolCallID, content, false),
+				)
+				result = append(result, m)
+			}
 		}
 	}
 

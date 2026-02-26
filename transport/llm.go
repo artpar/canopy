@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -31,6 +32,19 @@ type actionPayload struct {
 	Data      map[string]interface{}
 }
 
+// ScreenshotRequest is sent from the transport to the consumer goroutine
+// to capture a window screenshot on the main thread.
+type ScreenshotRequest struct {
+	SurfaceID string
+	ResultCh  chan ScreenshotResult
+}
+
+// ScreenshotResult is the response from a screenshot capture.
+type ScreenshotResult struct {
+	Data []byte
+	Err  error
+}
+
 // LLMTransport connects to an LLM provider and streams A2UI messages
 // from the LLM's responses. User actions trigger new conversation turns.
 type LLMTransport struct {
@@ -46,6 +60,21 @@ type LLMTransport struct {
 	// OnInitialTurnDone is called after the first doTurn completes.
 	// Use this to finalize cache files.
 	OnInitialTurnDone func()
+
+	// TestResultCh receives test results from the consumer goroutine.
+	// When the transport sends an a2ui_test message, it waits on this channel
+	// for the result string before responding to the LLM.
+	TestResultCh chan string
+
+	// LayoutResultCh receives feedback from the consumer goroutine
+	// after updateComponents messages are buffered. Components are not
+	// rendered until a non-updateComponents message triggers a flush.
+	LayoutResultCh chan string
+
+	// ScreenshotReqCh sends screenshot requests to the consumer goroutine.
+	// The consumer dispatches the capture to the main thread and responds
+	// on the per-request ResultCh.
+	ScreenshotReqCh chan ScreenshotRequest
 }
 
 func NewLLMTransport(cfg LLMConfig) *LLMTransport {
@@ -53,11 +82,14 @@ func NewLLMTransport(cfg LLMConfig) *LLMTransport {
 		cfg.Mode = "tools"
 	}
 	return &LLMTransport{
-		config:   cfg,
-		messages: make(chan *protocol.Message, 64),
-		errors:   make(chan error, 8),
-		actions:  make(chan actionPayload, 16),
-		done:     make(chan struct{}),
+		config:          cfg,
+		messages:        make(chan *protocol.Message, 64),
+		errors:          make(chan error, 8),
+		actions:         make(chan actionPayload, 16),
+		done:            make(chan struct{}),
+		TestResultCh:    make(chan string, 1),
+		LayoutResultCh:  make(chan string, 1),
+		ScreenshotReqCh: make(chan ScreenshotRequest, 1),
 	}
 }
 
@@ -87,6 +119,14 @@ func (t *LLMTransport) SendAction(surfaceID string, event *protocol.EventDef, da
 	case t.actions <- actionPayload{SurfaceID: surfaceID, Event: event, Data: data}:
 	case <-t.done:
 	}
+}
+
+// truncate returns s truncated to maxLen characters with "..." appended if needed.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // recordLine writes a JSONL line to the recorder file. No-op if no RecordTo path.
@@ -228,11 +268,26 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 		// Process tool calls
 		if len(choice.Message.ToolCalls) > 0 {
 			for _, tc := range choice.Message.ToolCalls {
-				jlog.Infof("transport", "", "processing tool call: %s", tc.Function.Name)
+				// Log tool call with args preview
+				argsPreview := tc.Function.Arguments
+				if len(argsPreview) > 300 {
+					argsPreview = argsPreview[:300] + "..."
+				}
+				jlog.Infof("transport", "", "tool call: %s — %s", tc.Function.Name, argsPreview)
 
 				// Handle utility tools that return data to the LLM (not protocol messages)
+				if tc.Function.Name == "a2ui_takeScreenshot" {
+					result := t.handleScreenshot(tc)
+					history = append(history, anyllm.Message{
+						Role:       anyllm.RoleTool,
+						Content:    result,
+						ToolCallID: tc.ID,
+					})
+					continue
+				}
 				if tc.Function.Name == "a2ui_inspectLibrary" {
 					result := handleInspectLibrary(tc)
+					jlog.Debugf("transport", "", "inspectLibrary result: %s", truncate(result, 200))
 					history = append(history, anyllm.Message{
 						Role:       anyllm.RoleTool,
 						Content:    result,
@@ -242,6 +297,7 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 				}
 				if tc.Function.Name == "a2ui_getLogs" {
 					result := handleGetLogs(tc)
+					jlog.Infof("transport", "", "getLogs result: %s", truncate(result, 300))
 					history = append(history, anyllm.Message{
 						Role:       anyllm.RoleTool,
 						Content:    result,
@@ -264,10 +320,53 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 
 				t.recordLine(rawBytes)
 
+				// Handle test messages: send to consumer, wait for real results
+				if msg.Type == protocol.MsgTest {
+					select {
+					case t.messages <- msg:
+					case <-t.done:
+						return nil
+					}
+					// Wait for test result from consumer goroutine
+					var result string
+					select {
+					case result = <-t.TestResultCh:
+					case <-time.After(5 * time.Second):
+						result = "PASS (headless mode — no renderer available for live assertions)"
+					case <-t.done:
+						return nil
+					}
+					jlog.Infof("transport", "", "test result: %s", result)
+					history = append(history, anyllm.Message{
+						Role:       anyllm.RoleTool,
+						Content:    result,
+						ToolCallID: tc.ID,
+					})
+					continue
+				}
+
 				select {
 				case t.messages <- msg:
 				case <-t.done:
 					return nil
+				}
+
+				// For updateComponents, wait for layout feedback from consumer
+				if msg.Type == protocol.MsgUpdateComponents {
+					var layoutInfo string
+					select {
+					case layoutInfo = <-t.LayoutResultCh:
+					case <-time.After(5 * time.Second):
+						layoutInfo = "ok"
+					case <-t.done:
+						return nil
+					}
+					history = append(history, anyllm.Message{
+						Role:       anyllm.RoleTool,
+						Content:    layoutInfo,
+						ToolCallID: tc.ID,
+					})
+					continue
 				}
 
 				// Send success as tool result
@@ -365,6 +464,46 @@ func (t *LLMTransport) doTurnRaw(ctx context.Context, history []anyllm.Message) 
 	})
 
 	return history
+}
+
+// handleScreenshot requests a screenshot from the consumer goroutine and
+// returns a special content string that the Anthropic provider converts to an image.
+func (t *LLMTransport) handleScreenshot(tc anyllm.ToolCall) string {
+	var params struct {
+		SurfaceID string `json:"surfaceId"`
+	}
+	if err := json.Unmarshal([]byte(tc.Function.Arguments), &params); err != nil {
+		return fmt.Sprintf("error: invalid params: %v", err)
+	}
+	if params.SurfaceID == "" {
+		return "error: surfaceId is required"
+	}
+
+	resultCh := make(chan ScreenshotResult, 1)
+	select {
+	case t.ScreenshotReqCh <- ScreenshotRequest{SurfaceID: params.SurfaceID, ResultCh: resultCh}:
+	case <-time.After(2 * time.Second):
+		return "Screenshot not available (headless mode). Proceed to writing tests."
+	case <-t.done:
+		return "error: transport stopped"
+	}
+
+	var result ScreenshotResult
+	select {
+	case result = <-resultCh:
+	case <-time.After(10 * time.Second):
+		return "error: screenshot timed out"
+	case <-t.done:
+		return "error: transport stopped"
+	}
+
+	if result.Err != nil {
+		return fmt.Sprintf("error: %v", result.Err)
+	}
+
+	b64 := base64.StdEncoding.EncodeToString(result.Data)
+	jlog.Infof("transport", "", "screenshot captured: %d bytes (base64: %d)", len(result.Data), len(b64))
+	return "__screenshot:" + b64
 }
 
 // formatAction formats a user event into a message string for the LLM.

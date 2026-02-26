@@ -39,7 +39,7 @@ func a2uiTools() []anyllm.Tool {
 			Type: "function",
 			Function: anyllm.Function{
 				Name:        "a2ui_updateComponents",
-				Description: "Create or update UI components on a surface. Components form a tree: containers (Row, Column, Card, List) declare their children via children.static, leaf components (Text, Button, TextField, etc.) do not. Each component has a unique componentId. Props vary by type.",
+				Description: "Create or update UI components on a surface. Merge semantics: call multiple times — each call adds new components or updates existing ones by componentId. Components form a tree: containers (Row, Column, Card, List) declare their children via children.static, leaf components (Text, Button, TextField, etc.) do not. Each component has a unique componentId. Props vary by type. IMPORTANT: Send at most 8-10 components per call. Group by logical section and call multiple times.",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -50,23 +50,24 @@ func a2uiTools() []anyllm.Tool {
 								"type": "object",
 								"properties": map[string]any{
 									"componentId": map[string]any{"type": "string"},
-									"type":        map[string]any{"type": "string", "enum": []string{"Text", "Row", "Column", "Card", "Button", "TextField", "CheckBox", "Slider", "Image", "Icon", "Divider", "List", "Tabs", "Modal", "ChoicePicker", "DateTimeInput"}},
+									"type":        map[string]any{"type": "string", "enum": []string{"Text", "Row", "Column", "Card", "Button", "TextField", "CheckBox", "Slider", "Image", "Icon", "Divider", "List", "Tabs", "Modal", "ChoicePicker", "DateTimeInput", "SplitView", "OutlineView", "RichTextEditor", "SearchField"}},
 									"children":    map[string]any{"type": "object", "description": "Tree structure: {\"static\": [\"childId1\", \"childId2\"]}. Required on containers."},
 									"props":       map[string]any{"type": "object"},
 									"style": map[string]any{
 										"type":        "object",
-										"description": "Visual styling overrides",
+										"description": "Visual styling overrides. All values accept literals OR dynamic values ({\"path\":\"/x\"} or {\"functionCall\":{...}}).",
 										"properties": map[string]any{
-											"backgroundColor": map[string]any{"type": "string", "description": "Background color (#RRGGBB)"},
-											"textColor":       map[string]any{"type": "string", "description": "Text color (#RRGGBB)"},
-											"cornerRadius":    map[string]any{"type": "number", "description": "Corner radius in points"},
-											"width":           map[string]any{"type": "number", "description": "Fixed width in points"},
-											"height":          map[string]any{"type": "number", "description": "Fixed height in points"},
-											"fontSize":        map[string]any{"type": "number", "description": "Font size in points"},
-											"fontWeight":      map[string]any{"type": "string", "enum": []string{"bold", "semibold", "medium", "light"}},
-											"fontFamily":      map[string]any{"type": "string", "description": "Font family name (system or registered via a2ui_loadAssets)"},
-											"textAlign":       map[string]any{"type": "string", "enum": []string{"left", "center", "right"}},
-											"opacity":         map[string]any{"type": "number", "description": "Opacity 0.0-1.0"},
+											"backgroundColor": map[string]any{"description": "Background color (#RRGGBB) or dynamic value"},
+											"textColor":       map[string]any{"description": "Text color (#RRGGBB) or dynamic value"},
+											"cornerRadius":    map[string]any{"description": "Corner radius in points (number or dynamic value)"},
+											"width":           map[string]any{"description": "Fixed width in points (number or dynamic value)"},
+											"height":          map[string]any{"description": "Fixed height in points (number or dynamic value)"},
+											"fontSize":        map[string]any{"description": "Font size in points (number or dynamic value)"},
+											"fontWeight":      map[string]any{"description": "Font weight: \"bold\"|\"semibold\"|\"medium\"|\"light\" (or dynamic value)"},
+											"fontFamily":      map[string]any{"description": "Font family name (system or registered via a2ui_loadAssets, or dynamic value)"},
+											"textAlign":       map[string]any{"description": "Text alignment: \"left\"|\"center\"|\"right\" (or dynamic value)"},
+											"opacity":         map[string]any{"description": "Opacity 0.0-1.0 (number or dynamic value)"},
+											"flexGrow":        map[string]any{"description": "Flex grow factor (number or dynamic value). Expands to fill available space in parent stack."},
 										},
 									},
 								},
@@ -104,20 +105,8 @@ func a2uiTools() []anyllm.Tool {
 				},
 			},
 		},
-		{
-			Type: "function",
-			Function: anyllm.Function{
-				Name:        "a2ui_deleteSurface",
-				Description: "Close and destroy a UI surface (window).",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"surfaceId": map[string]any{"type": "string"},
-					},
-					"required": []string{"surfaceId"},
-				},
-			},
-		},
+		// a2ui_deleteSurface intentionally omitted from LLM tools — destroying
+		// and recreating surfaces wastes turns and can crash. Fix layout instead.
 		{
 			Type: "function",
 			Function: anyllm.Function{
@@ -151,9 +140,10 @@ func a2uiTools() []anyllm.Tool {
 									"id":             map[string]any{"type": "string", "description": "Unique menu item identifier"},
 									"label":          map[string]any{"type": "string", "description": "Display text"},
 									"keyEquivalent":  map[string]any{"type": "string", "description": "Keyboard shortcut letter (e.g. \"c\" for Cmd+C, \"Z\" uppercase for Cmd+Shift+Z)"},
+									"keyModifiers":   map[string]any{"type": "string", "description": "Modifier override: \"option\" for Opt+key, \"shift\" for Shift+key. Default is Cmd."},
 									"separator":      map[string]any{"type": "boolean", "description": "True for a separator line"},
 									"standardAction": map[string]any{"type": "string", "description": "AppKit selector string (e.g. \"copy:\", \"paste:\", \"undo:\", \"selectAll:\"). Routes through responder chain."},
-									"action":         map[string]any{"type": "object", "description": "Custom action (same structure as button onClick)"},
+									"action":         map[string]any{"type": "object", "description": "Custom action — takes the SAME value as button onClick, i.e. {\"action\":{\"functionCall\":{\"call\":\"updateDataModel\",\"args\":{\"ops\":[...]}}}}. Note the double 'action' nesting."},
 									"children": map[string]any{
 										"type":  "array",
 										"items": map[string]any{"type": "object"},
@@ -276,13 +266,13 @@ func a2uiTools() []anyllm.Tool {
 			Type: "function",
 			Function: anyllm.Function{
 				Name:        "a2ui_defineFunction",
-				Description: "Define a reusable function with parameters. The body is a JSON expression tree (using functionCall, path refs, and literals) where {\"param\":\"name\"} nodes get replaced with argument values at call time. User-defined functions can be used anywhere a built-in function can: in value expressions, in button onClick actions, etc.",
+				Description: "Define a reusable function with parameters. AVOID for complex logic — use inline function composition and data model lookup tables instead (see system prompt). Only use for trivially simple helpers (1-2 nested levels). The body is a JSON expression tree where {\"param\":\"name\"} nodes get replaced with argument values at call time.",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"name":   map[string]any{"type": "string", "description": "Function name (must not conflict with built-in functions)"},
 						"params": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Parameter names (positional)"},
-						"body":   map[string]any{"description": "JSON expression tree with {\"param\":\"name\"} placeholders"},
+						"body":   map[string]any{"type": "object", "description": "JSON expression tree with {\"param\":\"name\"} placeholders. MUST be an object like {\"functionCall\":{...}} or {\"param\":\"x\"} — NEVER a JSON-encoded string. If you accidentally send a string it will be auto-parsed but this is an error."},
 					},
 					"required": []string{"name", "params", "body"},
 				},
@@ -428,6 +418,71 @@ func a2uiTools() []anyllm.Tool {
 		{
 			Type: "function",
 			Function: anyllm.Function{
+				Name:        "a2ui_updateToolbar",
+				Description: "Set the native toolbar for a surface's window. Toolbar items appear as buttons in the window titlebar. Items can have icons (SF Symbols), labels, custom actions or standard AppKit selectors. Use bordered:true for rounded button appearance, selected for toggle state.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"surfaceId": map[string]any{"type": "string"},
+						"items": map[string]any{
+							"type":        "array",
+							"description": "Toolbar items in order. Use separator:true or flexible:true for spacing.",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"id":             map[string]any{"type": "string", "description": "Unique toolbar item identifier"},
+									"icon":           map[string]any{"type": "string", "description": "SF Symbol name (e.g. \"bold\", \"italic\", \"sidebar.left\")"},
+									"label":          map[string]any{"type": "string", "description": "Tooltip / text label"},
+									"standardAction": map[string]any{"type": "string", "description": "AppKit selector (e.g. \"toggleBoldface:\", \"toggleSidebar:\"). Routes through responder chain."},
+									"action":         map[string]any{"type": "object", "description": "Custom action — takes the SAME value as button onClick, i.e. {\"action\":{\"functionCall\":{\"call\":\"updateDataModel\",\"args\":{\"ops\":[...]}}}}. Note the double 'action' nesting."},
+									"separator":      map[string]any{"type": "boolean", "description": "Thin divider between items"},
+									"flexible":       map[string]any{"type": "boolean", "description": "Flexible space (pushes items apart)"},
+									"searchField":    map[string]any{"type": "boolean", "description": "Render as NSSearchToolbarItem instead of button"},
+									"dataBinding":    map[string]any{"type": "string", "description": "JSON pointer for search field text binding"},
+									"bordered":       map[string]any{"type": "boolean", "description": "Rounded button appearance (macOS 11+)"},
+									"selected":       map[string]any{"description": "Toggle/highlight state (bool or {\"path\":\"/x\"} for dynamic binding)"},
+								},
+							},
+						},
+					},
+					"required": []string{"surfaceId", "items"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_updateWindow",
+				Description: "Update window properties after creation. Set title, minimum size constraints.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"surfaceId": map[string]any{"type": "string"},
+						"title":     map[string]any{"type": "string", "description": "New window title"},
+						"minWidth":  map[string]any{"type": "integer", "description": "Minimum window width in points"},
+						"minHeight": map[string]any{"type": "integer", "description": "Minimum window height in points"},
+					},
+					"required": []string{"surfaceId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
+				Name:        "a2ui_takeScreenshot",
+				Description: "Take a screenshot of the current window. Returns the visual state as an image so you can verify layout, spacing, and component rendering. Use this after building your UI to check the result visually.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"surfaceId": map[string]any{"type": "string", "description": "Surface to screenshot"},
+					},
+					"required": []string{"surfaceId"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: anyllm.Function{
 				Name:        "a2ui_getLogs",
 				Description: "Query application logs. Use this to inspect errors, debug binding issues, and understand what happened in the app. Returns matching log entries with level, component, surface, and message.",
 				Parameters: map[string]any{
@@ -462,6 +517,25 @@ func toolCallToMessage(tc anyllm.ToolCall) (*protocol.Message, []byte, error) {
 		return nil, nil, fmt.Errorf("parse tool call args: %w", err)
 	}
 
+	// Auto-unwrap string-encoded fields. LLMs sometimes serialize arrays/objects
+	// as JSON strings (e.g. "components": "[{...}]" instead of "components": [{...}]).
+	// Detect and unwrap these to prevent parse errors.
+	for key, raw := range args {
+		if len(raw) > 2 && raw[0] == '"' {
+			var str string
+			if err := json.Unmarshal(raw, &str); err == nil {
+				trimmed := strings.TrimSpace(str)
+				if len(trimmed) > 0 && (trimmed[0] == '[' || trimmed[0] == '{') {
+					var parsed json.RawMessage
+					if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+						args[key] = parsed
+						jlog.Warnf("transport", "", "tool call %s: auto-unwrapped string-encoded field %q", name, key)
+					}
+				}
+			}
+		}
+	}
+
 	// Inject the "type" field
 	typeBytes, _ := json.Marshal(msgType)
 	args["type"] = typeBytes
@@ -489,6 +563,8 @@ var categoryOrder = []struct {
 	{"string", "String functions"},
 	{"math", "Math functions"},
 	{"logic", "Logic functions"},
+	{"array", "Array/list functions"},
+	{"object", "Object functions"},
 }
 
 // functionDocsForPrompt generates the AVAILABLE FUNCTIONS block from the registry.
@@ -563,6 +639,10 @@ AVAILABLE COMPONENTS:
 - Modal: Floating panel window. Props: title (string), visible (bool or data binding), dataBinding (JSON pointer for two-way visible binding), width (int), height (int), onDismiss (action). Children define modal content. When dismissed, dataBinding is set to false.
 - ChoicePicker: Dropdown/selection. Props: options (array of {value, label}), dataBinding (JSON pointer), mutuallyExclusive (bool)
 - DateTimeInput: Date/time picker. Props: enableDate (bool), enableTime (bool), dataBinding (JSON pointer)
+- SplitView: Multi-pane resizable layout (NSSplitView). Props: dividerStyle ("thin"|"thick"|"paneSplitter"), vertical (bool, REQUIRED — true for side-by-side panes like a 3-column layout), collapsedPane (number or functionCall, pane index to collapse, -1=none). Children = panes. IMPORTANT: Set style.width on the CHILD pane components (e.g. sidebar Column gets width:200), NOT on the SplitView itself. The SplitView should have NO width — it fills its parent. Always set vertical:true for multi-column layouts.
+- OutlineView: Hierarchical tree view (NSOutlineView). Props: outlineData (path to tree array), labelKey (string, default "name"), childrenKey (string, default "children"), iconKey (string, SF Symbol key), idKey (string, default "id"), selectedId (string or path), badgeKey (string, numeric badge hidden when 0), dataBinding (JSON pointer for selection)
+- RichTextEditor: Rich text editor (NSTextView). Props: richContent (markdown string or path), editable (bool, default true), formatBinding (JSON pointer for cursor format state: bold/italic/underline/strikethrough booleans), dataBinding (JSON pointer for content). CRITICAL: You MUST add an onChange handler to persist edits — without it, all typing is lost. onChange receives the new content at /_input path. Example: "onChange":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/selectedId"},"content",{"path":"/_input"}]}}}]}}}}
+- SearchField: Native search input (NSSearchField). Props: placeholder (string), value (string or path), dataBinding (JSON pointer for search text)
 
 CLIENT-SIDE ACTIONS (Button onClick):
 Buttons can trigger client-side data model updates via functionCall. The onClick prop uses this EXACT structure:
@@ -593,6 +673,27 @@ For standard AppKit actions (routed through responder chain, e.g. formatting in 
 }
 Common selectors: toggleBoldface:, toggleItalics:, underline:, undo:, redo:, copy:, paste:, cut:, selectAll:
 
+TOOLBAR, MENU, AND CONTEXT MENU ACTIONS:
+The "action" field on toolbar items, menu items, and context menu items takes the SAME value as button onClick.
+Since onClick = {"action": {"functionCall": ...}}, the toolbar/menu/context menu action field becomes:
+
+"action": {
+  "action": {
+    "functionCall": {
+      "call": "updateDataModel",
+      "args": {"ops": [...]}
+    }
+  }
+}
+
+YES, there are two nested "action" keys — the outer one is the field name, the inner one is part of the EventAction structure (same as onClick).
+WRONG (will silently fail): "action": {"functionCall": {"call": "updateDataModel", ...}}
+RIGHT: "action": {"action": {"functionCall": {"call": "updateDataModel", ...}}}
+
+For standard AppKit actions on toolbar/menu items, use the top-level standardAction field instead:
+{"id": "bold", "standardAction": "toggleBoldface:", ...}
+Do NOT put standardAction inside the "action" field.
+
 For server-side actions (sending events back to the LLM), use this structure instead:
 "onClick": {
   "action": {
@@ -613,6 +714,26 @@ Anywhere a "value" appears in an updateDataModel op, it can be one of:
 Function call args are POSITIONAL (an array), and each arg can itself be a literal, path ref, or nested function call.
 
 IMPORTANT: Do NOT invent syntax like {"$fn": ...}, {"$ref": ...}, or named parameters like {"condition": ..., "then": ..., "else": ...}. The ONLY valid object forms in a value are {"path": "..."} and {"functionCall": {"name": "...", "args": [...]}}.
+
+IMPORTANT: Only use functions listed in AVAILABLE FUNCTIONS below. Do NOT invent functions. Common patterns:
+- Count matching items: countWhere(list, key, value) or length(filter(list, key, value))
+- Truncate string: substring(str, 0, 80) — substring safely handles strings shorter than the limit, no min/if needed
+- Get nested field from found item: getField(find(list, idKey, idValue), fieldName)
+- Look up display name from map: getField(/folderNames, selectedId) — store maps in data model, not in defineFunction if-chains
+- Multi-field search: filterContainsAny(list, ["title","content"], query) — case-insensitive search across multiple string fields
+
+CRITICAL PATTERNS (common mistakes that break apps):
+
+1. ID GENERATION: Use a monotonic counter in the data model (e.g. /nextNoteNum), NOT length(array)+1. The length-based approach breaks because: (a) operations in a single updateDataModel execute sequentially, so length changes after an append — the second op computes a DIFFERENT ID; (b) deletions cause ID collisions. Correct pattern:
+   ops: [
+     {op:"replace", path:"/selectedId", value: concat("n", toString(/nextNoteNum))},  ← select FIRST
+     {op:"replace", path:"/items", value: append(/items, {id: concat("n", toString(/nextNoteNum)), ...})},  ← append SECOND (counter unchanged)
+     {op:"replace", path:"/nextNoteNum", value: add(/nextNoteNum, 1)}  ← increment LAST
+   ]
+
+2. SEARCH MUST BE GLOBAL: When implementing search + folder filtering, the search branch must filter the ENTIRE collection, NOT a folder-filtered subset. Wrong: filterContainsAny(filter(notes, folderId, x), ...). Right: if(searchActive, filterContainsAny(/notes, fields, query), folderFilter). Search and folder filter are alternative branches, never nested.
+
+3. OUTLINEVIEW TREE NAVIGATION: Every node in the tree (parents AND leaves) can be selected. Parent nodes like "iCloud" or "On My Mac" don't correspond to any folderId. You MUST handle all clickable node IDs in filter logic. Best practice: use the same string for tree node IDs and the account/folderId values in your data. For parent-level nodes, switch to account-based filtering (e.g., clicking "iCloud" → filter by account="icloud"). NEVER assume only leaf nodes will be selected.
 
 ` + functionDocsForPrompt() + `
 
@@ -659,12 +780,39 @@ Any component can have a "style" object alongside "props" with these properties:
 - fontFamily: font family name (e.g. "Comic Sans MS", "Courier New", or a custom font registered via a2ui_loadAssets)
 - textAlign: "left"|"center"|"right"
 - opacity: 0.0-1.0
+- flexGrow: number — expand to fill available space in parent stack (e.g. 1 fills remaining space)
+
+ALL style properties accept dynamic values: {"path": "/someColor"} or {"functionCall": {"name": "if", "args": [...]}}
+Example dynamic backgroundColor: "style": {"backgroundColor": {"functionCall": {"name": "if", "args": [{"path": "/selected"}, "#007AFF", "#FFFFFF"]}}}
+
+Text component also supports: maxLines (int, 0=unlimited, 1+=truncate with ellipsis)
 
 Surface-level styling:
 - backgroundColor on createSurface sets the window background color
 - padding on createSurface sets root inset (default 20, use -1 for edge-to-edge)
 
 Layout tip: use justify:"fillEqually" on Row/Column to make all children equal-width/height.
+
+DYNAMIC CHILDREN (forEach):
+Instead of static children, containers can iterate over a data model array:
+"children": {"forEach": "/items", "templateId": "item_tmpl", "itemVariable": "item"}
+- forEach: JSON pointer to an array in the data model, OR a functionCall that returns an array (for filtering/sorting)
+- templateId: componentId of the template (defined alongside, not rendered directly)
+- itemVariable: variable name; template components use "/item/field" paths to access item data
+Template components are cloned per array element with rewritten paths. Adding/removing items from the data model array automatically adds/removes rendered components.
+
+IMPORTANT: To filter or sort the list, put the logic INSIDE the forEach value as a functionCall:
+"children": {"forEach": {"functionCall": {"name": "sort", "args": [{"functionCall": {"name": "filter", "args": [{"path": "/notes"}, "folderId", {"path": "/selectedFolderId"}]}}, "modified", true]}}, "templateId": "note_row", "itemVariable": "note"}
+Do NOT add a separate "filter" key — it is not supported and will be ignored.
+
+CONTEXT MENUS:
+Any component can have a "contextMenu" prop (in props) for right-click menus:
+"contextMenu": [
+  {"id": "edit", "label": "Edit", "icon": "pencil", "action": {"action": {"functionCall": {"call": "updateDataModel", "args": {"ops": [...]}}}}},
+  {"separator": true},
+  {"id": "delete", "label": "Delete", "icon": "trash", "action": {"action": {"functionCall": {"call": "updateDataModel", "args": {"ops": [...]}}}}}
+]
+Note: action uses the SAME double-nested structure as toolbar/menu actions (see TOOLBAR, MENU, AND CONTEXT MENU ACTIONS above).
 
 NATIVE LIBRARIES (FFI):
 You can load ANY native dynamic library at runtime and call its functions directly with their real C signatures — no wrappers needed.
@@ -703,21 +851,16 @@ a2ui_loadAssets({"assets": [
 ]})
 Then: Image src "asset:logo", or Text style {"fontFamily": "Custom Font Family Name"}
 
-REUSABLE FUNCTIONS (defineFunction):
-Define reusable expression trees with parameters. Use {\"param\":\"name\"} as placeholders in the body:
+REUSABLE FUNCTIONS (defineFunction) — AVOID for complex logic:
+defineFunction exists but you should almost NEVER need it. All filtering, sorting, and lookups can be done INLINE using built-in functions composed in forEach values, props, and action ops.
 
-a2ui_defineFunction({
-  "name": "appendDigit",
-  "params": ["digit"],
-  "body": {"functionCall":{"name":"if","args":[
-    {"functionCall":{"name":"or","args":[{"path":"/clearOnInput"},{"functionCall":{"name":"equals","args":[{"path":"/display"},"0"]}}]}},
-    {"param":"digit"},
-    {"functionCall":{"name":"concat","args":[{"path":"/display"},{"param":"digit"}]}}
-  ]}}
-})
+INSTEAD OF defineFunction, use these patterns:
+- Lookup tables: Store a map in the data model (e.g. /folderNames = {"notes":"Notes","work":"Work",...}), then use getField(/folderNames, selectedId)
+- Inline filtering: Put filter/sort/if composition directly in the forEach value (see DATA MODEL PATTERNS below)
+- Inline logic in actions: Put if/equals/concat directly in updateDataModel op values
 
-Then call: {"functionCall":{"name":"appendDigit","args":["7"]}}
-User functions are checked after built-ins, before FFI. They can call other user functions.
+Only use defineFunction for TRIVIALLY simple helpers (1-2 nested levels, like appendDigit for a calculator).
+If a function body would have more than 3 nested functionCalls, do NOT use defineFunction — compose inline instead.
 
 REUSABLE COMPONENTS (defineComponent):
 Define component templates with parameters. Use {\"param\":\"name\"} for parameterization and \"$/path\" for scoped data:
@@ -743,15 +886,145 @@ Rules:
 - \"$/path\" is replaced with scope prefix (default: /instanceId)
 - Use explicit scope for shared state: {"scope":"/calc1"}
 
-WORKFLOW:
-1. Call a2ui_defineFunction to register reusable functions (optional)
-2. Call a2ui_defineComponent to register reusable component templates (optional)
-3. Call a2ui_loadAssets if you need custom fonts or want to preload images (optional)
-4. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding)
-5. Call a2ui_updateDataModel to set initial data (if needed)
-6. Call a2ui_updateComponents to create the component tree (can use useComponent for defined templates)
-7. Call a2ui_updateMenu to set up an Edit menu with standard actions (Undo/Redo/Cut/Copy/Paste/Select All) — this is REQUIRED for keyboard shortcuts to work in text fields and editors
-8. When the user interacts (clicks a button), you'll receive the action details. Respond by updating data or components.
+DATA MODEL PATTERNS (use these instead of defineFunction):
+
+1. LOOKUP TABLES — store name-to-value maps in the data model, look up with getField:
+   Data model: /folderNames = {"icloud":"iCloud","all-icloud":"All iCloud","notes":"Notes","work":"Work","personal":"Personal","trash":"Recently Deleted"}
+   Usage: getField(/folderNames, /selectedFolderId) → returns the display name for the selected folder
+   This replaces any need for a defineFunction with if/equals chains.
+
+   FOLDER TREE DATA — include noteCount for badge display:
+   /folders = [{"id":"icloud","name":"iCloud","icon":"icloud","children":[{"id":"all-icloud","name":"All iCloud","icon":"tray.full.fill","noteCount":4},{"id":"notes","name":"Notes","icon":"folder.fill","noteCount":2,"children":[]},{"id":"work","name":"Work","icon":"folder.fill","noteCount":1,"children":[{"id":"meetings","name":"Meetings","icon":"folder.fill","noteCount":1}]}]},{"id":"mac","name":"On My Mac","icon":"laptopcomputer","children":[{"id":"personal","name":"Personal","icon":"folder.fill","noteCount":1}]},{"id":"trash","name":"Recently Deleted","icon":"trash","children":[]}]
+   Every leaf folder MUST have "noteCount" matching the number of notes in that folder (shown as badge via badgeKey:"noteCount").
+
+2. INLINE FILTERING for note list (full pattern with search + folder + account handling):
+   The forEach value should be a single composed functionCall:
+   sort(
+     if(not(equals(/searchQuery, "")),
+       filterContainsAny(/notes, ["title","content"], /searchQuery),
+       if(or(equals(/selectedFolderId,"icloud"), equals(/selectedFolderId,"all-icloud"), equals(/selectedFolderId,"mac")),
+         filter(/notes, "account", if(equals(/selectedFolderId,"all-icloud"), "icloud", /selectedFolderId)),
+         filter(/notes, "folderId", /selectedFolderId)
+       )
+     ),
+     /sortKey,
+     /sortDescending
+   )
+   This handles: search mode (filter ALL notes by query across title+content), account-level folders (filter by account), and leaf folders (filter by folderId). No defineFunction needed.
+
+3. NOTE COUNT DISPLAY — use the same inline filter pattern wrapped in length() + toString():
+   concat(toString(length(if(searchActive, filterContainsAny(...), if(accountFolder, filter(...account...), filter(...folderId...))))), " Notes")
+
+4. EDITOR CONTENT LOOKUP — use find + getField inline:
+   richContent: if(not(equals(/selectedNoteId, "")), getField(find(/notes, "id", /selectedNoteId), "content"), "")
+   This replaces any "getSelectedNote" defineFunction.
+
+5. NOTE SNIPPET CLEANUP — strip ALL markdown formatting for list previews:
+   trim(substring(replace(replace(replace(replace(replace(replace(substringAfter(/note/content, "\n\n"), "\n", " "), "#", ""), "**", ""), "- [ ] ", ""), "- [x] ", ""), "- ", ""), 0, 50))
+   Chain: substringAfter skips title, replace strips newlines/headings/bold/checkboxes/bullets, substring(0,50) truncates, trim cleans whitespace. IMPORTANT: strip "- [ ] " and "- [x] " BEFORE "- " to avoid partial matches.
+
+6. DELETE TO TRASH — save previousFolderId before moving, for undo support:
+   ops: [
+     {op:"replace", path:"/notes", value: if(equals(/selectedFolderId,"trash"), remove(/notes,"id",/selectedNoteId), updateItem(updateItem(/notes,"id",/selectedNoteId,"previousFolderId",getField(find(/notes,"id",/selectedNoteId),"folderId")),"id",/selectedNoteId,"folderId","trash"))},
+     {op:"replace", path:"/selectedNoteId", value: ""}
+   ]
+   When in trash folder, permanently remove. Otherwise, save current folderId as previousFolderId then set folderId to "trash".
+
+COMPONENT PATTERNS:
+
+1. Three-pane SplitView (sidebar + list + detail):
+Use a SINGLE root SplitView with 3 children (NOT nested 2-pane SplitViews):
+Sidebar: {"componentId":"sidebar","type":"Column","children":{"static":["folderTree"]},"props":{"align":"stretch"},"style":{"width":200}}
+List pane: {"componentId":"noteListPane","type":"Column","children":{"static":["listHeader","noteCount","noteList"]},"props":{"align":"stretch"},"style":{"width":280}}
+Editor pane: {"componentId":"editorPane","type":"Column","children":{"static":["editorDate","editor","emptyLabel"]},"props":{"align":"stretch"},"style":{"flexGrow":1}}
+Root: {"componentId":"root","type":"SplitView","props":{"vertical":true,"dividerStyle":"thin","collapsedPane":{"functionCall":{"name":"if","args":[{"path":"/sidebarCollapsed"},0,-1]}}},"children":{"static":["sidebar","noteListPane","editorPane"]}}
+— IMPORTANT: "vertical":true is REQUIRED for side-by-side panes. style.width goes on CHILD panes (sidebar=200, noteListPane=280), NOT on the SplitView. collapsedPane=0 collapses first pane, -1=none. Use "align":"stretch" on Column panes so children fill width.
+
+2. OutlineView with nested tree data:
+First set data: a2ui_updateDataModel ops=[{op:"add",path:"/folders",value:[{"id":"f1","name":"Notes","icon":"folder.fill","noteCount":3,"children":[{"id":"n1","name":"My Note","icon":"doc.text"}]}]}]
+Then: {"componentId":"sidebar_tree","type":"OutlineView","props":{"outlineData":{"path":"/folders"},"labelKey":"name","childrenKey":"children","iconKey":"icon","idKey":"id","selectedId":{"path":"/selectedNoteId"},"badgeKey":"noteCount","dataBinding":"/selectedNoteId"}}
+IMPORTANT: badgeKey must match the actual field name in the data (e.g. "noteCount" in data → badgeKey:"noteCount"). Use icon names with ".fill" suffix for folders (folder.fill, tray.full.fill).
+
+3. RichTextEditor with format binding and onChange (REQUIRED to persist edits):
+Set format state: a2ui_updateDataModel ops=[{op:"add",path:"/format",value:{"bold":false,"italic":false,"underline":false,"strikethrough":false}}]
+Then: {"componentId":"editor","type":"RichTextEditor","props":{"richContent":{"functionCall":{"name":"getField","args":[{"functionCall":{"name":"find","args":[{"path":"/notes"},"id",{"path":"/selectedNoteId"}]}},"content"]}},"editable":true,"formatBinding":"/format","onChange":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/selectedNoteId"},"content",{"path":"/_input"}]}}}]}}}}},"style":{"flexGrow":1}}
+— formatBinding auto-updates /format/bold etc. as cursor moves. Toolbar buttons can read these to show active state.
+— onChange fires on every edit with new content at /_input. Use updateItem to write it back to the notes array. Without onChange, edits are lost when switching notes.
+
+4. Toolbar with format buttons and search (note double-nested action):
+a2ui_updateToolbar({surfaceId:"main",items:[
+  {"id":"sidebar","icon":"sidebar.leading","label":"Sidebar","bordered":true,"action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/sidebarCollapsed","value":{"functionCall":{"name":"not","args":[{"path":"/sidebarCollapsed"}]}}}]}}}}},
+  {"separator":true},
+  {"id":"delete","icon":"trash","label":"Delete","bordered":true,"action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"remove","args":[{"path":"/notes"},"id",{"path":"/selectedNoteId"}]}}},{"op":"replace","path":"/selectedNoteId","value":""}]}}}}},
+  {"flexible":true},
+  {"id":"newNote","icon":"square.and.pencil","label":"New Note","bordered":true,"action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[...]}}}}},
+  {"separator":true},
+  {"id":"bold","icon":"bold","label":"Bold","standardAction":"toggleBoldface:","bordered":true,"selected":{"path":"/format/bold"}},
+  {"id":"italic","icon":"italic","label":"Italic","standardAction":"toggleItalics:","bordered":true,"selected":{"path":"/format/italic"}},
+  {"id":"underline","icon":"underline","label":"Underline","standardAction":"underline:","bordered":true,"selected":{"path":"/format/underline"}},
+  {"id":"strikethrough","icon":"strikethrough","label":"Strikethrough","standardAction":"addStrikethrough:","bordered":true,"selected":{"path":"/format/strikethrough"}},
+  {"flexible":true},
+  {"id":"search","searchField":true,"dataBinding":"/searchText"}
+]})
+— Custom actions use {"action":{"action":{...}}} (double-nested). standardAction goes directly on the item (no action wrapper needed).
+
+5. forEach dynamic list with FULL inline filter+sort+search (no defineFunction needed):
+The forEach value handles search mode, account-level folders, and leaf folders — all inline:
+{"componentId":"noteList","type":"List","style":{"flexGrow":1},"children":{"forEach":{"functionCall":{"name":"sort","args":[{"functionCall":{"name":"if","args":[{"functionCall":{"name":"not","args":[{"functionCall":{"name":"equals","args":[{"path":"/searchQuery"},""]}}]}},{"functionCall":{"name":"filterContainsAny","args":[{"path":"/notes"},["title","content"],{"path":"/searchQuery"}]}},{"functionCall":{"name":"if","args":[{"functionCall":{"name":"or","args":[{"functionCall":{"name":"equals","args":[{"path":"/selectedFolderId"},"icloud"]}},{"functionCall":{"name":"equals","args":[{"path":"/selectedFolderId"},"all-icloud"]}},{"functionCall":{"name":"equals","args":[{"path":"/selectedFolderId"},"mac"]}}]}},{"functionCall":{"name":"filter","args":[{"path":"/notes"},"account",{"functionCall":{"name":"if","args":[{"functionCall":{"name":"equals","args":[{"path":"/selectedFolderId"},"all-icloud"]}},"icloud",{"path":"/selectedFolderId"}]}}]}},{"functionCall":{"name":"filter","args":[{"path":"/notes"},"folderId",{"path":"/selectedFolderId"}]}}]}}]}},{"path":"/sortKey"},{"path":"/sortDescending"}]}},"templateId":"notePreview","itemVariable":"note"}}
+Template (must be in SAME updateComponents call as the noteList above):
+[{"componentId":"notePreview","type":"Column","props":{"gap":0,"padding":0,"onClick":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/selectedNoteId","value":{"path":"/note/id"}}]}}}},"contextMenu":[{"id":"pinNote","label":{"functionCall":{"name":"if","args":[{"functionCall":{"name":"equals","args":[{"functionCall":{"name":"getField","args":[{"functionCall":{"name":"find","args":[{"path":"/notes"},"id",{"path":"/note/id"}]}},"pinned"]}},"true"]}},"Unpin Note","Pin Note"]}},"icon":"pin","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/note/id"},"pinned",{"functionCall":{"name":"if","args":[{"functionCall":{"name":"equals","args":[{"functionCall":{"name":"getField","args":[{"functionCall":{"name":"find","args":[{"path":"/notes"},"id",{"path":"/note/id"}]}},"pinned"]}},"true"]}},"false","true"]}}]}}}]}}}}},{"separator":true},{"id":"delete","label":"Delete","icon":"trash","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"if","args":[{"functionCall":{"name":"equals","args":[{"path":"/selectedFolderId"},"trash"]}},{"functionCall":{"name":"remove","args":[{"path":"/notes"},"id",{"path":"/note/id"}]}},{"functionCall":{"name":"updateItem","args":[{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/note/id"},"previousFolderId",{"functionCall":{"name":"getField","args":[{"functionCall":{"name":"find","args":[{"path":"/notes"},"id",{"path":"/note/id"}]}},"folderId"]}}]}},"id",{"path":"/note/id"},"folderId","trash"]}}]}}}]}}}}}]},"style":{"backgroundColor":{"functionCall":{"name":"if","args":[{"functionCall":{"name":"equals","args":[{"path":"/note/id"},{"path":"/selectedNoteId"}]}},"#FBE5A2",""]}},"cornerRadius":8},"children":{"static":["noteContent"]}},
+{"componentId":"noteContent","type":"Column","props":{"gap":2,"padding":10},"children":{"static":["noteTitle","noteSubRow"]}},
+{"componentId":"noteTitle","type":"Text","props":{"content":{"path":"/note/title"},"variant":"body","maxLines":1},"style":{"fontWeight":"bold","fontSize":14}},
+{"componentId":"noteSubRow","type":"Row","props":{"gap":6,"align":"center"},"children":{"static":["noteDate","noteSnippet"]}},
+{"componentId":"noteDate","type":"Text","props":{"content":{"functionCall":{"name":"formatDateRelative","args":[{"path":"/note/modified"}]}},"variant":"caption","maxLines":1},"style":{"textColor":"#3C3C43","fontSize":12}},
+{"componentId":"noteSnippet","type":"Text","props":{"content":{"functionCall":{"name":"trim","args":[{"functionCall":{"name":"substring","args":[{"functionCall":{"name":"replace","args":[{"functionCall":{"name":"replace","args":[{"functionCall":{"name":"replace","args":[{"functionCall":{"name":"replace","args":[{"functionCall":{"name":"substringAfter","args":[{"path":"/note/content"},"\n\n"]}},"\n"," "]}},"#",""]}},"**",""]}},"- ",""]}},"- [ ] ",""]},0,50]}}]}},"variant":"caption","maxLines":1},"style":{"flexGrow":1,"textColor":"#8E8E93","fontSize":12}}]
+— Note the snippet: substringAfter skips the title line, then replace strips markdown (headings, bold, list markers), substring truncates, trim cleans whitespace.
+— forEach value is a functionCall (sort wrapping if/filter chain), NOT a path + separate "filter" key. The filter key is not supported. Do NOT use defineFunction for this — compose inline.
+
+6. Menu with Edit and custom actions (keyboard shortcuts REQUIRE a menu):
+a2ui_updateMenu({surfaceId:"main",items:[
+  {"id":"file","label":"File","children":[
+    {"id":"newNote","label":"New Note","keyEquivalent":"n","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"append","args":[{"path":"/notes"},{"id":"new","title":"New Note","content":""}]}}}]}}}}},
+    {"separator":true},
+    {"id":"close","label":"Close","keyEquivalent":"w","standardAction":"performClose:"}
+  ]},
+  {"id":"edit","label":"Edit","children":[
+    {"id":"undo","label":"Undo","keyEquivalent":"z","standardAction":"undo:"},
+    {"id":"redo","label":"Redo","keyEquivalent":"Z","standardAction":"redo:"},
+    {"separator":true},
+    {"id":"cut","label":"Cut","keyEquivalent":"x","standardAction":"cut:"},
+    {"id":"copy","label":"Copy","keyEquivalent":"c","standardAction":"copy:"},
+    {"id":"paste","label":"Paste","keyEquivalent":"v","standardAction":"paste:"},
+    {"id":"selectAll","label":"Select All","keyEquivalent":"a","standardAction":"selectAll:"}
+  ]},
+  {"id":"view","label":"View","children":[
+    {"id":"toggleSidebar","label":"Show/Hide Sidebar","keyEquivalent":"s","keyModifiers":"option","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/sidebarCollapsed","value":{"functionCall":{"name":"not","args":[{"path":"/sidebarCollapsed"}]}}}]}}}}},
+    {"separator":true},
+    {"id":"sortDateEdited","label":"Date Edited","keyEquivalent":"1","keyModifiers":"option","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/sortKey","value":"modified"}]}}}}},
+    {"id":"sortTitle","label":"Title","keyEquivalent":"3","keyModifiers":"option","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/sortKey","value":"title"}]}}}}}
+  ]},
+  {"id":"format","label":"Format","children":[
+    {"id":"bold","label":"Bold","keyEquivalent":"b","standardAction":"toggleBoldface:"},
+    {"id":"italic","label":"Italic","keyEquivalent":"i","standardAction":"toggleItalics:"},
+    {"id":"underline","label":"Underline","keyEquivalent":"u","standardAction":"underline:"}
+  ]}
+]})
+— Standard actions use standardAction directly (no action wrapper). Custom actions use "action":{"action":{...}} (double-nested). The Edit menu is REQUIRED for Cmd+C/V/X/Z to work.
+— Use keyModifiers:"option" for Opt+key shortcuts (e.g. Opt+S for sidebar toggle, Opt+1/2/3 for sort). Default modifier is Cmd.
+
+WORKFLOW (order matters):
+1. Call a2ui_defineComponent to register reusable component templates (optional, rarely needed)
+2. Call a2ui_loadAssets if you need custom fonts or want to preload images (optional)
+3. Call a2ui_createSurface to create a window (optionally with backgroundColor and padding=-1 for edge-to-edge)
+4. Call a2ui_updateWindow to set minimum window size constraints (optional)
+5. Call a2ui_updateDataModel to set initial data. IMPORTANT: include lookup tables (like /folderNames map) so you can use getField() instead of defineFunction if-chains.
+6. Call a2ui_updateMenu to set up menus with standard actions (Undo/Redo/Cut/Copy/Paste/Select All) — REQUIRED for keyboard shortcuts in text fields and editors. Custom actions use double-nested format: "action":{"action":{"functionCall":{...}}}
+7. Call a2ui_updateToolbar to add native toolbar buttons (optional but recommended). Custom actions use the same double-nested format.
+8. Call a2ui_updateComponents MULTIPLE TIMES to build the component tree in batches (after menu/toolbar are ready). See COMPONENT BATCHING below. Each call returns layout coordinates of the rendered components — CHECK THEM for zero-width/zero-height issues.
+9. Call a2ui_takeScreenshot ONCE to visually verify layout. Do NOT take multiple screenshots — one is enough.
+10. Immediately call a2ui_test to write tests (REQUIRED — at least 5 tests covering: initial layout/children, data model state, component props with resolved content, count of forEach-expanded items like noteList, and click simulation to verify data model updates). After tests, you are DONE — do not loop back to screenshots.
+
+DO NOT call a2ui_defineFunction for complex logic — use inline function composition and data model lookup tables instead (see DATA MODEL PATTERNS above).
 
 COMPONENT TREE RULES:
 - Every component needs a unique componentId
@@ -761,8 +1034,53 @@ COMPONENT TREE RULES:
 - Do NOT rely on parentId — it is not used for tree construction
 - Data binding: set dataBinding to a JSON Pointer (e.g. "/form/name") and the component auto-syncs with the data model
 
-TESTING:
-After building a UI, write tests using a2ui_test to verify correctness. Tests run headlessly.
+COMPONENT BATCHING (REQUIRED):
+a2ui_updateComponents has merge semantics — each call adds or updates components by componentId. Use 1-2 calls (ideally 1 call with all components). Fewer batches = better layout coherence.
+
+Batching strategy for a 3-pane layout:
+- Call 1: Sidebar + middle pane (outline tree, list templates + forEach container, list header — templates MUST be in same call as their forEach)
+- Call 2: Editor pane + root SplitView (editor, labels, pane wrapper, root)
+
+CRITICAL: forEach templates and their parent container MUST be in the SAME batch. The engine resolves templates within each batch.
+
+Example for a Notes app (3-pane SplitView):
+  // Batch 1: Sidebar + note list WITH templates (must be same batch as forEach)
+  a2ui_updateComponents({surfaceId:"notes", components:[
+    {componentId:"folderTree", type:"OutlineView", props:{outlineData:{path:"/folders"}, ...}, style:{flexGrow:1}},
+    {componentId:"sidebar", type:"Column", children:{static:["folderTree"]}, props:{align:"stretch"}, style:{width:200}},
+    {componentId:"noteTitle", type:"Text", props:{content:{path:"/note/title"}, maxLines:1}, style:{fontWeight:"bold",fontSize:14}},
+    {componentId:"noteSubRow", type:"Row", props:{gap:6,align:"center"}, children:{static:["noteDate","noteSnippet"]}},
+    {componentId:"noteDate", type:"Text", props:{content:{functionCall:{name:"formatDateRelative",args:[{path:"/note/modified"}]}}}, style:{textColor:"#3C3C43",fontSize:12}},
+    {componentId:"noteSnippet", type:"Text", props:{content:{functionCall:{name:"trim",args:[{functionCall:{name:"substring",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"replace",args:[{functionCall:{name:"substringAfter",args:[{path:"/note/content"},"\n\n"]}},"\n"," "]}},"#",""]}},"**",""]}},"- [ ] ",""]}},"- [x] ",""]}},"- ",""]}},0,50]}}]}}, maxLines:1}, style:{flexGrow:1,textColor:"#8E8E93",fontSize:12}},
+    {componentId:"noteContent", type:"Column", props:{gap:2,padding:10}, children:{static:["noteTitle","noteSubRow"]}},
+    {componentId:"notePreview", type:"Column", props:{gap:0, onClick:{...}, contextMenu:[...]}, style:{backgroundColor:{functionCall:...},cornerRadius:8}, children:{static:["noteContent"]}},
+    {componentId:"listTitle", type:"Text", props:{content:{functionCall:{name:"if",args:[{functionCall:{name:"not",args:[{functionCall:{name:"equals",args:[{path:"/searchQuery"},""]}}]}},{functionCall:{name:"concat",args:["Search: ",{path:"/searchQuery"}]}},{functionCall:{name:"getField",args:[{path:"/folderNames"},{path:"/selectedFolderId"}]}}]}}}, style:{flexGrow:1,fontWeight:"bold",fontSize:17}},
+    {componentId:"listHeader", type:"Row", props:{gap:8,align:"center",padding:8}, children:{static:["listTitle"]}},
+    {componentId:"noteCount", type:"Text", props:{content:{functionCall:{name:"concat",args:[{functionCall:{name:"toString",args:[...]}}, " Notes"]}}}, style:{textColor:"#8E8E93",textAlign:"center"}},
+    {componentId:"noteList", type:"List", children:{forEach:{functionCall:...}, templateId:"notePreview", itemVariable:"note"}, style:{flexGrow:1}},
+    {componentId:"noteListPane", type:"Column", children:{static:["listHeader","noteCount","noteList"]}, props:{align:"stretch"}, style:{width:280}}
+  ]})
+  // Batch 2: Editor + root SplitView (NO width on SplitView — it fills its parent)
+  a2ui_updateComponents({surfaceId:"notes", components:[
+    {componentId:"editorDate", type:"Text", props:{content:{functionCall:...}}, style:{textColor:"#8E8E93",textAlign:"center"}},
+    {componentId:"editor", type:"RichTextEditor", props:{richContent:{functionCall:...}, editable:true, formatBinding:"/formatState", onChange:{...}}, style:{flexGrow:1}},
+    {componentId:"emptyLabel", type:"Text", props:{content:{functionCall:{name:"if",args:[{functionCall:{name:"equals",args:[{path:"/selectedNoteId"},""]}}, "Select a note", ""]}}}, style:{textColor:"#8E8E93",fontSize:16}},
+    {componentId:"editorPane", type:"Column", children:{static:["editorDate","editor","emptyLabel"]}, props:{align:"stretch"}, style:{flexGrow:1}},
+    {componentId:"root", type:"SplitView", props:{vertical:true, dividerStyle:"thin", collapsedPane:{functionCall:{name:"if",args:[{path:"/sidebarCollapsed"},0,-1]}}}, children:{static:["sidebar","noteListPane","editorPane"]}}
+  ]})
+
+LAYOUT FEEDBACK:
+Components are buffered across a2ui_updateComponents calls and rendered all at once when you call a2ui_takeScreenshot or a2ui_test. Each updateComponents call responds with the number of components buffered. Do NOT try to fix layout between batches — the final layout is only visible after all components are rendered.
+
+SCREENSHOTS:
+Call a2ui_takeScreenshot ONCE after all components are rendered. Do NOT call it multiple times — one screenshot is sufficient. After the screenshot, proceed directly to writing tests.
+
+TESTING (REQUIRED — write at least 8 tests):
+After building a UI, you MUST write tests using a2ui_test to verify correctness. Tests execute IMMEDIATELY and return real PASS/FAIL results. If a test fails, read the error message and fix the issue before continuing. Write tests covering ALL of these: (1) initial layout/children, (2) initial data model state, (3) component props with resolved content, (4) count of forEach-expanded items, (5) click simulation to verify data model updates, (6) resolved text content of key components.
+
+forEach-expanded component IDs follow the pattern: {listId}_{templateId}_{index}
+Example: if noteList has templateId "notePreview", the expanded components are:
+  noteList_notePreview_0, noteList_notePreview_1, ... (and their children: noteList_noteTitle_0, noteList_noteDate_0, etc.)
 
 Assertion types:
 - component: Subset match on resolved props. {"assert":"component","componentId":"id","props":{"content":"Hello","variant":"h1"}}
@@ -780,6 +1098,15 @@ Simulation:
   Events: change (TextField), click (Button), toggle (CheckBox), slide (Slider), select (ChoicePicker/Tabs), datechange (DateTimeInput)
 
 Tests execute in file order. Side effects persist across tests. Actions reset per test.
+
+REQUIRED test patterns (include ALL of these):
+1. Layout test: {"assert":"children","componentId":"root","children":["sidebar","noteListPane","editorPane"]}
+2. Data model test: {"assert":"dataModel","path":"/selectedFolderId","value":"all-icloud"}
+3. Count test (forEach items): {"assert":"count","componentId":"noteList","count":4}
+4. Resolved content test: {"assert":"component","componentId":"noteList_noteTitle_0","props":{"content":"Meeting Notes"}}
+5. Click simulation: {"simulate":"event","componentId":"noteList_notePreview_1","event":"click"}, then {"assert":"dataModel","path":"/selectedNoteId","value":"n2"}
+6. Editor content test: {"assert":"component","componentId":"editor","props":{"richContent":"# Meeting Notes\n\n..."}}
+7. Resolved header test: {"assert":"component","componentId":"listTitle","props":{"content":"All iCloud"}}
 
 CHANNELS (Inter-Process Communication):
 Create named channels for processes to communicate via publish/subscribe.

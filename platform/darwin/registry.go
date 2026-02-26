@@ -9,14 +9,36 @@ import (
 // CallbackRegistry maps uint64 IDs to Go callback functions.
 // Used by ObjC target-action to route events back to Go.
 type CallbackRegistry struct {
-	mu      sync.RWMutex
-	next    uint64
-	entries map[uint64]func(string)
+	mu       sync.RWMutex
+	next     uint64
+	entries  map[uint64]func(string)
+	suppress bool
 }
 
 var globalRegistry = &CallbackRegistry{
 	next:    1,
 	entries: make(map[uint64]func(string)),
+}
+
+// SetSuppress enables or disables callback suppression.
+// When suppressed, GoCallbackInvoke (user input from ObjC) is silently dropped.
+func (r *CallbackRegistry) SetSuppress(v bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.suppress = v
+}
+
+// Suppressed returns true if callbacks are currently suppressed.
+func (r *CallbackRegistry) Suppressed() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.suppress
+}
+
+// SetSuppressCallbacks enables or disables user callback suppression globally.
+// Used during LLM generation to prevent user interactions from changing data model state.
+func SetSuppressCallbacks(v bool) {
+	globalRegistry.SetSuppress(v)
 }
 
 // Register stores a callback and returns its ID.

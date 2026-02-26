@@ -18,6 +18,7 @@ func feedMessages(t *testing.T, sess *Session, jsonl string) {
 		}
 		sess.HandleMessage(msg)
 	}
+	sess.FlushPendingComponents()
 }
 
 func TestHelloFixtureCreatesWindowAndViews(t *testing.T) {
@@ -1557,6 +1558,55 @@ func TestProcessManagerIDs(t *testing.T) {
 }
 
 // mockProcessTransport satisfies ProcessTransport for testing.
+func TestBatchedUpdateComponents(t *testing.T) {
+	sess, mock := newTestSession()
+
+	// Create surface
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}`)
+
+	// Batch 1: Create children
+	feedMessages(t, sess, `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"child1","type":"Text","props":{"content":"A"}},{"componentId":"child2","type":"Text","props":{"content":"B"}}]}`)
+
+	// Both children should be created
+	if mock.GetHandle("s1", "child1") == 0 {
+		t.Fatal("child1 not created after batch 1")
+	}
+	if mock.GetHandle("s1", "child2") == 0 {
+		t.Fatal("child2 not created after batch 1")
+	}
+
+	// Batch 2: Create parent referencing children from batch 1
+	feedMessages(t, sess, `{"type":"updateComponents","surfaceId":"s1","components":[{"componentId":"parent","type":"Column","children":["child1","child2"]}]}`)
+
+	// Parent should be created
+	if mock.GetHandle("s1", "parent") == 0 {
+		t.Fatal("parent not created after batch 2")
+	}
+
+	// SetChildren should wire up child1 and child2 under parent
+	parentHandle := mock.GetHandle("s1", "parent")
+	found := false
+	for _, sc := range mock.Children {
+		if sc.ParentHandle == parentHandle {
+			found = true
+			if len(sc.ChildHandles) != 2 {
+				t.Fatalf("parent has %d children, want 2", len(sc.ChildHandles))
+			}
+		}
+	}
+	if !found {
+		t.Fatal("SetChildren not called for parent after batch 2")
+	}
+
+	// Children from batch 1 should not have been pruned
+	if mock.GetHandle("s1", "child1") == 0 {
+		t.Fatal("child1 was pruned after batch 2")
+	}
+	if mock.GetHandle("s1", "child2") == 0 {
+		t.Fatal("child2 was pruned after batch 2")
+	}
+}
+
 type mockProcessTransport struct {
 	msgs    chan *protocol.Message
 	errs    chan error

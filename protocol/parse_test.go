@@ -248,31 +248,31 @@ func TestParseComponentStyle(t *testing.T) {
 	}
 	uc := msg.Body.(UpdateComponents)
 	s := uc.Components[0].Style
-	if s.BackgroundColor != "#FF9F0A" {
-		t.Errorf("backgroundColor = %q, want #FF9F0A", s.BackgroundColor)
+	if s.BackgroundColor == nil || s.BackgroundColor.Literal != "#FF9F0A" {
+		t.Errorf("backgroundColor = %v, want #FF9F0A", s.BackgroundColor)
 	}
-	if s.TextColor != "#FFFFFF" {
-		t.Errorf("textColor = %q, want #FFFFFF", s.TextColor)
+	if s.TextColor == nil || s.TextColor.Literal != "#FFFFFF" {
+		t.Errorf("textColor = %v, want #FFFFFF", s.TextColor)
 	}
-	if s.CornerRadius != 8 {
+	if s.CornerRadius == nil || s.CornerRadius.Literal != 8 {
 		t.Errorf("cornerRadius = %v, want 8", s.CornerRadius)
 	}
-	if s.Width != 100 {
+	if s.Width == nil || s.Width.Literal != 100 {
 		t.Errorf("width = %v, want 100", s.Width)
 	}
-	if s.Height != 52 {
+	if s.Height == nil || s.Height.Literal != 52 {
 		t.Errorf("height = %v, want 52", s.Height)
 	}
-	if s.FontSize != 20 {
+	if s.FontSize == nil || s.FontSize.Literal != 20 {
 		t.Errorf("fontSize = %v, want 20", s.FontSize)
 	}
-	if s.FontWeight != "bold" {
-		t.Errorf("fontWeight = %q, want bold", s.FontWeight)
+	if s.FontWeight == nil || s.FontWeight.Literal != "bold" {
+		t.Errorf("fontWeight = %v, want bold", s.FontWeight)
 	}
-	if s.TextAlign != "center" {
-		t.Errorf("textAlign = %q, want center", s.TextAlign)
+	if s.TextAlign == nil || s.TextAlign.Literal != "center" {
+		t.Errorf("textAlign = %v, want center", s.TextAlign)
 	}
-	if s.Opacity != 0.9 {
+	if s.Opacity == nil || s.Opacity.Literal != 0.9 {
 		t.Errorf("opacity = %v, want 0.9", s.Opacity)
 	}
 }
@@ -365,10 +365,10 @@ func TestParseFontFamilyStyle(t *testing.T) {
 	}
 	uc := msg.Body.(UpdateComponents)
 	s := uc.Components[0].Style
-	if s.FontFamily != "Comic Sans MS" {
-		t.Errorf("fontFamily = %q, want Comic Sans MS", s.FontFamily)
+	if s.FontFamily == nil || s.FontFamily.Literal != "Comic Sans MS" {
+		t.Errorf("fontFamily = %v, want Comic Sans MS", s.FontFamily)
 	}
-	if s.FontSize != 18 {
+	if s.FontSize == nil || s.FontSize.Literal != 18 {
 		t.Errorf("fontSize = %v, want 18", s.FontSize)
 	}
 }

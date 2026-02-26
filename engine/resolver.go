@@ -213,15 +213,25 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 		p.FormatBinding = cp.FormatBinding
 	}
 
-	node.Style = comp.Style
-	// Dynamic style overrides
-	if cp.BackgroundColor != nil {
-		node.Style.BackgroundColor = r.resolveString(comp.ComponentID, cp.BackgroundColor)
-	}
-	if cp.TextColor != nil {
-		node.Style.TextColor = r.resolveString(comp.ComponentID, cp.TextColor)
-	}
+	node.Style = r.resolveStyle(comp.ComponentID, comp.Style)
 	return node
+}
+
+// resolveStyle resolves all dynamic style fields into concrete ResolvedStyleProps.
+func (r *Resolver) resolveStyle(componentID string, ds protocol.DynamicStyleProps) renderer.ResolvedStyleProps {
+	return renderer.ResolvedStyleProps{
+		BackgroundColor: r.resolveString(componentID, ds.BackgroundColor),
+		TextColor:       r.resolveString(componentID, ds.TextColor),
+		CornerRadius:    r.resolveNumber(componentID, ds.CornerRadius),
+		Width:           r.resolveNumber(componentID, ds.Width),
+		Height:          r.resolveNumber(componentID, ds.Height),
+		FontSize:        r.resolveNumber(componentID, ds.FontSize),
+		FontWeight:      r.resolveString(componentID, ds.FontWeight),
+		TextAlign:       r.resolveString(componentID, ds.TextAlign),
+		Opacity:         r.resolveNumber(componentID, ds.Opacity),
+		FontFamily:      r.resolveString(componentID, ds.FontFamily),
+		FlexGrow:        r.resolveNumber(componentID, ds.FlexGrow),
+	}
 }
 
 func (r *Resolver) resolveString(componentID string, dv *protocol.DynamicString) string {

@@ -172,6 +172,23 @@ void JVDestroyWindow(const char* surfaceID) {
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSWindow *window = windowMap[sid];
     if (window) {
+        // Resign first responder to prevent AppKit from accessing
+        // deallocated text editors / field editors during teardown
+        [window makeFirstResponder:nil];
+
+        // Nil the delegate so AppKit won't call windowWillClose: etc.
+        // on a potentially deallocated object
+        window.delegate = nil;
+
+        // Detach all subviews before closing — prevents AppKit from
+        // walking the view tree and hitting freed ObjC objects
+        [[window contentView] setSubviews:@[]];
+
+        // Remove toolbar to avoid toolbar-delegate callbacks during close
+        window.toolbar = nil;
+
+        // Order out first (hides window), then close (releases)
+        [window orderOut:nil];
         [window close];
         [windowMap removeObjectForKey:sid];
     }
@@ -251,12 +268,15 @@ void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
     // To get edge-to-edge, set padding to -1 in protocol which maps to 0 here
     CGFloat inset = (padding > 0) ? (CGFloat)padding : (padding < 0) ? 0.0 : 20.0;
 
-    // Check if root view has flex children — if so, use tight bottom constraint
+    // Check if root view needs tight bottom constraint:
+    // - NSStackView with flexGrow children (kJVNeedsFlexExpansionKey)
+    // - NSSplitView (no intrinsic content size, must always fill)
     extern const void *kJVNeedsFlexExpansionKey;
     NSNumber *needsFlex = objc_getAssociatedObject(nsView, kJVNeedsFlexExpansionKey);
+    BOOL isSplitView = [nsView isKindOfClass:[NSSplitView class]];
     NSLayoutConstraint *bottom;
-    if (needsFlex && [needsFlex boolValue]) {
-        // Tight: root fills window so flexGrow children can expand
+    if ((needsFlex && [needsFlex boolValue]) || isSplitView) {
+        // Tight: root fills window so flexGrow children / split panes can expand
         bottom = [nsView.bottomAnchor constraintEqualToAnchor:contentView.bottomAnchor constant:-inset];
     } else {
         // Loose: root sizes to content, sits at top of window

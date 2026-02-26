@@ -1,0 +1,17 @@
+Build an Apple Notes clone app. Three-pane layout using a SplitView:
+
+Left pane (200px): A sidebar with an OutlineView showing a folder tree. Folders: iCloud (containing "All iCloud", "Notes", "Work" with sub-folder "Meetings") and "On My Mac" (containing "Personal") and "Recently Deleted". Each folder has an icon and shows a badge with its note count. Selecting a folder filters the note list.
+
+Middle pane (280px): A note list showing notes filtered by the selected folder. Each note preview shows the title (bold, single line), date (relative format), and a content snippet. Notes are sorted by modification date descending. Clicking a note selects it. The selected note has a yellow (#FBE5A2) background. Show the folder name as a header and a count of notes below it. Support searching notes by title and content via a search field in the toolbar.
+
+Right pane: A RichTextEditor showing the selected note's content in markdown. Editing updates the note's content in the data model. Show a relative date label above the editor. Show "Select a note" when no note is selected.
+
+Data model: Store notes as an array at /notes with fields: id, account, folderId, title, content (markdown), modified, created. Store selected folder at /selectedFolderId, selected note at /selectedNoteId, search query at /searchQuery.
+
+Toolbar: sidebar toggle button, delete button, flexible space, new note button, separator, bold/italic/underline/strikethrough formatting buttons using standardAction (toggleBoldface:/toggleItalics:/underline:/addStrikethrough:) with selected state bound to /formatState, separator, checklist button (insertChecklistItem:), flexible space, search field bound to /searchQuery.
+
+Menu bar: File (New Note with Cmd+N that creates a new note, Delete Note with Backspace, Close with Cmd+W), Edit (standard undo/redo/cut/copy/paste/selectAll), View (toggle sidebar with Opt+S, sort options: Date Edited/Date Created/Title), Format (Bold Cmd+B, Italic Cmd+I, Underline Cmd+U).
+
+Include 5 sample notes with markdown content including headings, checklists, bold, italic, strikethrough, and code formatting. Add context menus on folders (New Folder, Delete) and notes (Pin Note, Delete).
+
+All data operations must be client-side using functionCall with updateDataModel. New notes should auto-increment IDs. Deleting moves to trash (or permanently deletes from trash). Sidebar collapse/expand via /sidebarCollapsed.

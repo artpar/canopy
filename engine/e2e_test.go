@@ -48,6 +48,7 @@ func TestE2EHelloFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -91,6 +92,7 @@ func TestE2EContactFormFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -140,6 +142,7 @@ func TestE2EFunctionCallsFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -201,6 +204,7 @@ func TestE2EListFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -247,6 +251,7 @@ func TestE2ELayoutFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -345,6 +350,7 @@ func TestE2ECustomFunctionsFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -411,6 +417,7 @@ func TestE2EComponentDefsFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -455,6 +462,7 @@ func TestE2EIncludeFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -487,6 +495,7 @@ func TestE2ECalculatorV2Fixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -558,6 +567,7 @@ func TestE2ETabsFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -642,6 +652,7 @@ func TestE2EScopedComponentsFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -706,6 +717,7 @@ func TestE2EModalFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -818,6 +830,7 @@ func TestE2EVideoFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -925,6 +938,7 @@ func TestE2EAudioFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {
@@ -1039,6 +1053,7 @@ func TestE2EChannelFixture(t *testing.T) {
 		for msg := range ft.Messages() {
 			sess.HandleMessage(msg)
 		}
+		sess.FlushPendingComponents()
 	}()
 
 	select {

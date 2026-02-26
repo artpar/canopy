@@ -42,6 +42,10 @@ type Surface struct {
 	// reexpanding prevents recursive re-expansion in renderComponents
 	reexpanding bool
 
+	// pendingComponents buffers expanded components from consecutive updateComponents calls.
+	// Flushed as a single render pass when a different message type arrives.
+	pendingComponents []protocol.Component
+
 	// ActionHandler is called when a component triggers a server-bound event.
 	ActionHandler func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
 }
@@ -121,14 +125,29 @@ func (s *Surface) SetCompDefs(defs map[string]*protocol.DefineComponent) {
 	s.compDefs = defs
 }
 
-// HandleUpdateComponents processes a batch of component definitions.
+// HandleUpdateComponents buffers component definitions for deferred rendering.
+// Components are expanded (instances + templates) and accumulated. The actual
+// render pass happens when FlushPendingComponents is called — either by the
+// session before processing a non-updateComponents message, or explicitly.
 func (s *Surface) HandleUpdateComponents(msg protocol.UpdateComponents) {
 	comps := s.expandComponentInstances(msg.Components)
 	expanded := s.expandTemplates(comps)
+	s.pendingComponents = append(s.pendingComponents, expanded...)
+}
+
+// FlushPendingComponents renders all buffered components as a single pass.
+// This prevents intermediate root-wrapping when components arrive in batches.
+func (s *Surface) FlushPendingComponents() {
+	if len(s.pendingComponents) == 0 {
+		return
+	}
+	pending := s.pendingComponents
+	s.pendingComponents = nil
+
 	oldRoots := s.tree.RootIDs()
 	prevRoots := make([]string, len(oldRoots))
 	copy(prevRoots, oldRoots)
-	changed := s.tree.Update(expanded)
+	changed := s.tree.Update(pending)
 	removed := s.tree.Prune(prevRoots, changed)
 	if len(removed) > 0 {
 		s.cleanupComponents(removed)
@@ -438,6 +457,8 @@ func (s *Surface) renderComponents(componentIDs []string) {
 				comps = append(comps, meta.templateTree...)
 				s.HandleUpdateComponents(protocol.UpdateComponents{Components: comps})
 			}
+			// Internal re-expansion must render immediately (not batched)
+			s.FlushPendingComponents()
 			s.reexpanding = false
 			if len(otherIDs) == 0 {
 				return
@@ -1241,10 +1262,10 @@ func (s *Surface) expandOneComponentInstance(inst protocol.Component, def *proto
 				tree["parentId"] = inst.ParentID
 			}
 			// Merge instance-level style onto definition style
-			if inst.Style != (protocol.StyleProps{}) {
-				instStyleJSON, _ := json.Marshal(inst.Style)
-				var instStyle map[string]interface{}
-				json.Unmarshal(instStyleJSON, &instStyle)
+			instStyleJSON, _ := json.Marshal(inst.Style)
+			var instStyle map[string]interface{}
+			json.Unmarshal(instStyleJSON, &instStyle)
+			if len(instStyle) > 0 {
 				if existing, ok := tree["style"].(map[string]interface{}); ok {
 					for k, v := range instStyle {
 						existing[k] = v
@@ -1311,8 +1332,12 @@ func valuHasScopedPath(val interface{}) bool {
 // expandTemplates processes components with template children, expanding them
 // into static children based on data model arrays.
 func (s *Surface) expandTemplates(comps []protocol.Component) []protocol.Component {
-	// Index components in this batch by ID for template lookup
-	compMap := make(map[string]*protocol.Component, len(comps))
+	// Index components in this batch AND pending buffer for template lookup.
+	// Templates from earlier batches are in pendingComponents (not yet in tree).
+	compMap := make(map[string]*protocol.Component, len(comps)+len(s.pendingComponents))
+	for i := range s.pendingComponents {
+		compMap[s.pendingComponents[i].ComponentID] = &s.pendingComponents[i]
+	}
 	for i := range comps {
 		compMap[comps[i].ComponentID] = &comps[i]
 	}
@@ -1556,8 +1581,20 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	rewriteString(p.OutlineData)
 	rewriteString(p.SelectedID)
 	rewriteString(p.RichContent)
-	rewriteString(p.BackgroundColor)
-	rewriteString(p.TextColor)
+
+	// Rewrite dynamic style paths
+	st := &comp.Style
+	rewriteString(st.BackgroundColor)
+	rewriteString(st.TextColor)
+	rewriteString(st.FontWeight)
+	rewriteString(st.TextAlign)
+	rewriteString(st.FontFamily)
+	rewriteNumber(st.CornerRadius)
+	rewriteNumber(st.Width)
+	rewriteNumber(st.Height)
+	rewriteNumber(st.FontSize)
+	rewriteNumber(st.Opacity)
+	rewriteNumber(st.FlexGrow)
 
 	// Rewrite data binding
 	if p.DataBinding != "" {
@@ -1624,14 +1661,26 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	p.OutlineData = deepCopyDynString(p.OutlineData)
 	p.SelectedID = deepCopyDynString(p.SelectedID)
 	p.RichContent = deepCopyDynString(p.RichContent)
-	p.BackgroundColor = deepCopyDynString(p.BackgroundColor)
-	p.TextColor = deepCopyDynString(p.TextColor)
 
 	// Deep copy DynamicNumber pointers
 	p.Min = deepCopyDynNumber(p.Min)
 	p.Max = deepCopyDynNumber(p.Max)
 	p.Step = deepCopyDynNumber(p.Step)
 	p.SliderValue = deepCopyDynNumber(p.SliderValue)
+
+	// Deep copy DynamicStyleProps pointers
+	st := &clone.Style
+	st.BackgroundColor = deepCopyDynString(st.BackgroundColor)
+	st.TextColor = deepCopyDynString(st.TextColor)
+	st.FontWeight = deepCopyDynString(st.FontWeight)
+	st.TextAlign = deepCopyDynString(st.TextAlign)
+	st.FontFamily = deepCopyDynString(st.FontFamily)
+	st.CornerRadius = deepCopyDynNumber(st.CornerRadius)
+	st.Width = deepCopyDynNumber(st.Width)
+	st.Height = deepCopyDynNumber(st.Height)
+	st.FontSize = deepCopyDynNumber(st.FontSize)
+	st.Opacity = deepCopyDynNumber(st.Opacity)
+	st.FlexGrow = deepCopyDynNumber(st.FlexGrow)
 
 	// Deep copy DynamicBoolean pointers
 	p.Disabled = deepCopyDynBool(p.Disabled)

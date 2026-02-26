@@ -16,6 +16,7 @@ type TestResult struct {
 	Name       string
 	Passed     bool
 	Assertions int
+	Skipped    int
 	Error      string // non-empty on failure
 }
 
@@ -73,6 +74,9 @@ func RunTests(r io.Reader, rend renderer.Renderer, disp renderer.Dispatcher) ([]
 			sess.HandleMessage(msg)
 		}
 	}
+
+	// Flush any buffered components before running tests
+	sess.FlushPendingComponents()
 
 	// Execute tests sequentially
 	var results []TestResult
@@ -355,6 +359,84 @@ func assertStyle(rend renderer.Renderer, surfaceID string, step protocol.TestSte
 	}
 
 	return ""
+}
+
+// ExecuteTestLite runs test assertions that only need Surface state.
+// Layout/style assertions are skipped (they require main thread access).
+// If rend is non-nil, simulations are executed via rend.InvokeCallback;
+// if nil (headless mode), simulations are skipped.
+func ExecuteTestLite(sess *Session, rend renderer.Renderer, tm protocol.TestMessage) TestResult {
+	result := TestResult{Name: tm.Name, Passed: true}
+
+	surf := sess.GetSurface(tm.SurfaceID)
+	if surf == nil {
+		result.Passed = false
+		result.Error = fmt.Sprintf("surface %q not found", tm.SurfaceID)
+		return result
+	}
+
+	skipped := 0
+	for i, step := range tm.Steps {
+		if step.Simulate != "" {
+			if rend != nil {
+				errMsg := executeSimulate(sess, rend, tm.SurfaceID, step)
+				if errMsg != "" {
+					result.Passed = false
+					result.Error = fmt.Sprintf("step %d: %s", i+1, errMsg)
+					return result
+				}
+			} else {
+				skipped++
+			}
+			continue
+		}
+		if step.Assert == "" {
+			continue
+		}
+
+		var errMsg string
+		switch step.Assert {
+		case "layout", "style":
+			skipped++
+			continue
+		case "component":
+			errMsg = assertComponent(sess, tm.SurfaceID, step)
+		case "dataModel":
+			errMsg = assertDataModel(sess, tm.SurfaceID, step)
+		case "children":
+			errMsg = assertChildren(sess, tm.SurfaceID, step)
+		case "count":
+			errMsg = assertCount(sess, tm.SurfaceID, step)
+		case "notExists":
+			errMsg = assertNotExists(sess, tm.SurfaceID, step)
+		default:
+			errMsg = fmt.Sprintf("unknown assert type: %s", step.Assert)
+		}
+		result.Assertions++
+
+		if errMsg != "" {
+			result.Passed = false
+			result.Error = fmt.Sprintf("step %d: %s", i+1, errMsg)
+			return result
+		}
+	}
+
+	if skipped > 0 {
+		result.Skipped = skipped
+	}
+	return result
+}
+
+// FormatTestResult formats a TestResult as a human-readable string.
+func FormatTestResult(r TestResult) string {
+	if r.Passed {
+		msg := fmt.Sprintf("PASSED: %q (%d assertions)", r.Name, r.Assertions)
+		if r.Skipped > 0 {
+			msg += fmt.Sprintf(" [%d steps skipped: simulations/layout/style not available during generation]", r.Skipped)
+		}
+		return msg
+	}
+	return fmt.Sprintf("FAILED: %q — %s", r.Name, r.Error)
 }
 
 // jsonEqual compares two values that may have come from JSON (handling float64/int normalization).

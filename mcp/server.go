@@ -170,5 +170,7 @@ func (s *Server) SendMessage(raw json.RawMessage) error {
 		return err
 	}
 	s.sess.HandleMessage(msg)
+	// Flush any buffered components so subsequent MCP queries see the result
+	s.sess.FlushPendingComponents()
 	return nil
 }

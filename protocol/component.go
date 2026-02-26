@@ -30,19 +30,20 @@ const (
 	CompRichTextEditor ComponentType = "RichTextEditor"
 )
 
-// StyleProps holds visual styling overrides applicable to any component.
-type StyleProps struct {
-	BackgroundColor string  `json:"backgroundColor,omitempty"`
-	TextColor       string  `json:"textColor,omitempty"`
-	CornerRadius    float64 `json:"cornerRadius,omitempty"`
-	Width           float64 `json:"width,omitempty"`
-	Height          float64 `json:"height,omitempty"`
-	FontSize        float64 `json:"fontSize,omitempty"`
-	FontWeight      string  `json:"fontWeight,omitempty"` // bold, medium, light
-	TextAlign       string  `json:"textAlign,omitempty"`  // left, center, right
-	Opacity         float64 `json:"opacity,omitempty"`
-	FontFamily      string  `json:"fontFamily,omitempty"`
-	FlexGrow        float64 `json:"flexGrow,omitempty"` // expand to fill available space in parent stack
+// DynamicStyleProps holds visual styling overrides applicable to any component.
+// All fields accept dynamic values (path references, function calls, or literals).
+type DynamicStyleProps struct {
+	BackgroundColor *DynamicString `json:"backgroundColor,omitempty"`
+	TextColor       *DynamicString `json:"textColor,omitempty"`
+	CornerRadius    *DynamicNumber `json:"cornerRadius,omitempty"`
+	Width           *DynamicNumber `json:"width,omitempty"`
+	Height          *DynamicNumber `json:"height,omitempty"`
+	FontSize        *DynamicNumber `json:"fontSize,omitempty"`
+	FontWeight      *DynamicString `json:"fontWeight,omitempty"` // bold, medium, light
+	TextAlign       *DynamicString `json:"textAlign,omitempty"`  // left, center, right
+	Opacity         *DynamicNumber `json:"opacity,omitempty"`
+	FontFamily      *DynamicString `json:"fontFamily,omitempty"`
+	FlexGrow        *DynamicNumber `json:"flexGrow,omitempty"` // expand to fill available space in parent stack
 }
 
 // Component is a single A2UI component definition.
@@ -52,7 +53,7 @@ type Component struct {
 	ParentID     string                 `json:"parentId,omitempty"`
 	Children     *ChildList             `json:"children,omitempty"`
 	Props        Props                  `json:"props,omitempty"`
-	Style        StyleProps             `json:"style,omitempty"`
+	Style        DynamicStyleProps      `json:"style,omitempty"`
 	UseComponent string                 `json:"useComponent,omitempty"`
 	Args         map[string]interface{} `json:"args,omitempty"`
 	Scope        string                 `json:"scope,omitempty"`
@@ -163,10 +164,6 @@ type Props struct {
 	Editable      *DynamicBoolean `json:"editable,omitempty"`      // default true
 	OnRichChange  *EventAction    `json:"onRichChange,omitempty"`  // fired on content change
 	FormatBinding string          `json:"formatBinding,omitempty"` // JSON Pointer for cursor format state
-
-	// Dynamic style overrides (resolved at render time, override static style values)
-	BackgroundColor *DynamicString `json:"backgroundColor,omitempty"`
-	TextColor       *DynamicString `json:"textColor,omitempty"`
 
 	// Universal props
 	ContextMenu json.RawMessage `json:"contextMenu,omitempty"` // []MenuItem for right-click menu

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -26,9 +27,36 @@ import (
 	"github.com/mozilla-ai/any-llm-go/providers/openai"
 )
 
+func loadEnvFile() {
+	f, err := os.Open(".env")
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if os.Getenv(k) == "" {
+			os.Setenv(k, v)
+		}
+	}
+}
+
 func main() {
 	// macOS requires the main thread for AppKit
 	runtime.LockOSThread()
+
+	// Load .env file (does not override existing env vars)
+	loadEnvFile()
 
 	// Initialize central logger
 	jlog.Init(jlog.Config{
@@ -76,7 +104,8 @@ func main() {
 	}
 
 	var tr transport.Transport
-	var generateDone chan struct{} // closed when generate-only can exit
+	var llmTr *transport.LLMTransport // non-nil when using LLM transport
+	var generateDone chan struct{}    // closed when generate-only can exit
 
 	args := flag.Args()
 	if len(args) > 0 && *prompt == "" {
@@ -138,6 +167,7 @@ func main() {
 			}
 
 			tr = lt
+			llmTr = lt
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "usage: jview <file.jsonl>\n")
@@ -259,6 +289,15 @@ func main() {
 	}
 
 	// Process messages in a goroutine
+	// For LLM mode, also handle layout feedback and screenshot requests.
+	// Suppress user callbacks during generation to prevent interactions from
+	// changing data model state and causing test assertion failures.
+	var screenshotCh <-chan transport.ScreenshotRequest
+	if llmTr != nil {
+		screenshotCh = llmTr.ScreenshotReqCh
+		darwin.SetSuppressCallbacks(true)
+	}
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -273,8 +312,29 @@ func main() {
 			select {
 			case msg, ok := <-tr.Messages():
 				if !ok {
+					sess.FlushPendingComponents()
+					if llmTr != nil {
+						darwin.SetSuppressCallbacks(false)
+					}
 					jlog.Info("main", "", "transport closed")
 					return
+				}
+				// Execute test messages and return real results to the LLM
+				if msg.Type == protocol.MsgTest && llmTr != nil {
+					sess.FlushPendingComponents()
+					tm := msg.Body.(protocol.TestMessage)
+					result := engine.ExecuteTestLite(sess, rend, tm)
+					llmTr.TestResultCh <- engine.FormatTestResult(result)
+					continue
+				}
+				// For updateComponents in LLM mode: buffer without rendering.
+				// Components accumulate across batches and render all at once
+				// when a non-updateComponents message triggers a flush.
+				if msg.Type == protocol.MsgUpdateComponents && llmTr != nil {
+					sess.HandleMessage(msg) // just buffers in pendingComponents
+					uc := msg.Body.(protocol.UpdateComponents)
+					llmTr.LayoutResultCh <- fmt.Sprintf("ok — %d components buffered", len(uc.Components))
+					continue
 				}
 				sess.HandleMessage(msg)
 
@@ -283,6 +343,24 @@ func main() {
 					return
 				}
 				jlog.Errorf("main", "", "transport error: %v", err)
+
+			case req := <-screenshotCh:
+				// Flush any buffered components before capturing
+				sess.FlushPendingComponents()
+				// Screenshot request from LLM transport — capture on main thread
+				pngData := dispatchSyncMain(disp, func() []byte {
+					data, err := rend.CaptureWindow(req.SurfaceID)
+					if err != nil {
+						jlog.Errorf("main", "", "screenshot capture failed: %v", err)
+						return nil
+					}
+					return data
+				})
+				if pngData == nil {
+					req.ResultCh <- transport.ScreenshotResult{Err: fmt.Errorf("capture failed for surface %q", req.SurfaceID)}
+				} else {
+					req.ResultCh <- transport.ScreenshotResult{Data: pngData}
+				}
 			}
 		}
 	}()
@@ -352,6 +430,22 @@ func createProvider(name string, apiKey string) (anyllm.Provider, error) {
 	}
 }
 
+// dispatchSyncMain dispatches a function to the main thread and blocks until it completes.
+func dispatchSyncMain[T any](disp renderer.Dispatcher, fn func() T) T {
+	ch := make(chan T, 1)
+	disp.RunOnMain(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				jlog.Errorf("main", "", "dispatch panic: %v", r)
+				var zero T
+				ch <- zero
+			}
+		}()
+		ch <- fn()
+	})
+	return <-ch
+}
+
 func runMCP(args []string) {
 	darwin.AppInit()
 	disp := darwin.NewDispatcher()
@@ -380,6 +474,7 @@ func runMCP(args []string) {
 				select {
 				case msg, ok := <-tr.Messages():
 					if !ok {
+						sess.FlushPendingComponents()
 						jlog.Info("main", "", "mcp: file transport closed")
 						return
 					}

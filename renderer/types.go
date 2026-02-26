@@ -8,13 +8,29 @@ type ViewHandle uintptr
 // CallbackID identifies a registered callback in the platform layer.
 type CallbackID uint64
 
+// ResolvedStyleProps contains all resolved (concrete) style property values.
+// Dynamic values have been evaluated against the data model.
+type ResolvedStyleProps struct {
+	BackgroundColor string  `json:"backgroundColor,omitempty"`
+	TextColor       string  `json:"textColor,omitempty"`
+	CornerRadius    float64 `json:"cornerRadius,omitempty"`
+	Width           float64 `json:"width,omitempty"`
+	Height          float64 `json:"height,omitempty"`
+	FontSize        float64 `json:"fontSize,omitempty"`
+	FontWeight      string  `json:"fontWeight,omitempty"` // bold, medium, light
+	TextAlign       string  `json:"textAlign,omitempty"`  // left, center, right
+	Opacity         float64 `json:"opacity,omitempty"`
+	FontFamily      string  `json:"fontFamily,omitempty"`
+	FlexGrow        float64 `json:"flexGrow,omitempty"`
+}
+
 // RenderNode holds the resolved properties for a single component,
 // ready for the platform renderer to create or update a native view.
 type RenderNode struct {
 	ComponentID string
 	Type        protocol.ComponentType
 	Props       ResolvedProps
-	Style       protocol.StyleProps
+	Style       ResolvedStyleProps
 	ChildIDs    []string
 	Callbacks   map[string]CallbackID // eventType → CallbackID
 }

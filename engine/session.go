@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"jview/protocol"
 	"jview/renderer"
@@ -52,9 +53,23 @@ func (s *Session) ChannelManager() *ChannelManager {
 	return s.cm
 }
 
+// FlushPendingComponents flushes buffered updateComponents on all surfaces.
+// Call this after the message stream ends to ensure all components are rendered.
+func (s *Session) FlushPendingComponents() {
+	for _, surf := range s.surfaces {
+		surf.FlushPendingComponents()
+	}
+}
+
 // HandleMessage routes a parsed A2UI message to the appropriate surface.
 func (s *Session) HandleMessage(msg *protocol.Message) {
 	defer logRecover("session", "", "HandleMessage")
+
+	// Flush buffered components before any non-updateComponents message.
+	// This ensures batched updateComponents calls render as a single pass.
+	if msg.Type != protocol.MsgUpdateComponents {
+		s.FlushPendingComponents()
+	}
 
 	switch msg.Type {
 	case protocol.MsgCreateSurface:
@@ -307,10 +322,21 @@ func (s *Session) handleDefineFunction(df protocol.DefineFunction) {
 	if _, exists := s.funcDefs[df.Name]; exists {
 		logWarn("session", "", fmt.Sprintf("redefining function %s", df.Name))
 	}
+	body := df.Body
+	// Defensive: if the body was double-encoded as a JSON string, auto-parse it
+	if str, ok := body.(string); ok {
+		var parsed interface{}
+		if err := json.Unmarshal([]byte(str), &parsed); err == nil {
+			logWarn("session", "", fmt.Sprintf("defineFunction %s: body was a JSON string, auto-parsed to object", df.Name))
+			body = parsed
+		} else {
+			logWarn("session", "", fmt.Sprintf("defineFunction %s: body is a malformed JSON string (not parseable): %v", df.Name, err))
+		}
+	}
 	def := &FuncDef{
 		Name:   df.Name,
 		Params: df.Params,
-		Body:   df.Body,
+		Body:   body,
 	}
 	s.funcDefs[df.Name] = def
 	// Propagate to all existing surfaces
