@@ -76,7 +76,13 @@ void JVUpdateTextField(void* handle, const char* placeholder, const char* value,
     if (!field) return;
 
     field.placeholderString = [NSString stringWithUTF8String:placeholder];
-    field.stringValue = [NSString stringWithUTF8String:value];
+
+    // Only update value if it actually changed (avoid cursor jump during typing)
+    NSString *newValue = [NSString stringWithUTF8String:value];
+    if (![field.stringValue isEqualToString:newValue]) {
+        field.stringValue = newValue;
+    }
+
     field.editable = !readOnly;
 }
 

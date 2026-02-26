@@ -366,10 +366,15 @@ void JVUpdateRichTextEditor(void* handle, const char* content, bool editable) {
     textView.editable = editable;
 
     NSString *markdown = [NSString stringWithUTF8String:content];
-    NSAttributedString *attrStr = markdownToAttributedString(markdown);
-    delegate.suppressCallback = YES;
-    [textView.textStorage setAttributedString:attrStr];
-    delegate.suppressCallback = NO;
+
+    // Only update content if it actually changed (avoid cursor jump during typing)
+    NSString *currentMarkdown = attributedStringToMarkdown(textView.textStorage);
+    if (![currentMarkdown isEqualToString:markdown]) {
+        NSAttributedString *attrStr = markdownToAttributedString(markdown);
+        delegate.suppressCallback = YES;
+        [textView.textStorage setAttributedString:attrStr];
+        delegate.suppressCallback = NO;
+    }
 }
 
 void JVRichTextEditorSetFormatCallbackID(void* handle, uint64_t callbackID) {
