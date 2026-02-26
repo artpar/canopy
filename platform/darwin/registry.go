@@ -46,6 +46,13 @@ func (r *CallbackRegistry) Invoke(id uint64, data string) {
 	}
 }
 
+// Update replaces the function for an existing ID, re-adding it if previously unregistered.
+func (r *CallbackRegistry) Update(id uint64, fn func(string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries[id] = fn
+}
+
 // Unregister removes a callback.
 func (r *CallbackRegistry) Unregister(id uint64) {
 	r.mu.Lock()

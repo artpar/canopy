@@ -286,11 +286,14 @@ func (r *DarwinRenderer) RegisterCallback(surfaceID string, componentID string, 
 		r.callbacks[surfaceID][componentID] = make(map[string]renderer.CallbackID)
 	}
 
-	// If there's already a callback for this event, unregister the old one
+	// If re-registering for the same event, reuse the same ID (just update the function).
+	// This keeps the ObjC target's callbackID valid — it never goes stale.
 	if oldID, exists := r.callbacks[surfaceID][componentID][eventType]; exists {
-		globalRegistry.Unregister(uint64(oldID))
+		globalRegistry.Update(uint64(oldID), fn)
+		return oldID
 	}
 
+	// First time: allocate a new ID
 	id := globalRegistry.Register(fn)
 	r.callbacks[surfaceID][componentID][eventType] = renderer.CallbackID(id)
 	return renderer.CallbackID(id)
