@@ -163,6 +163,15 @@ func main() {
 					if generateDone != nil {
 						close(generateDone)
 					}
+					// Re-enable user callbacks now that generation is complete
+					darwin.SetSuppressCallbacks(false)
+				}
+			}
+
+			// For non-prompt-file LLM mode, still re-enable callbacks after generation
+			if lt.OnInitialTurnDone == nil {
+				lt.OnInitialTurnDone = func() {
+					darwin.SetSuppressCallbacks(false)
 				}
 			}
 
