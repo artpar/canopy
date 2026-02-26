@@ -19,7 +19,7 @@ func createTextView(node *renderer.RenderNode) renderer.ViewHandle {
 	cVariant := C.CString(node.Props.Variant)
 	defer C.free(unsafe.Pointer(cVariant))
 
-	ptr := C.JVCreateText(cContent, cVariant)
+	ptr := C.JVCreateText(cContent, cVariant, C.int(node.Props.MaxLines))
 	return renderer.ViewHandle(uintptr(ptr))
 }
 
@@ -29,5 +29,5 @@ func updateTextView(handle renderer.ViewHandle, node *renderer.RenderNode) {
 	cVariant := C.CString(node.Props.Variant)
 	defer C.free(unsafe.Pointer(cVariant))
 
-	C.JVUpdateText(unsafe.Pointer(handle), cContent, cVariant)
+	C.JVUpdateText(unsafe.Pointer(handle), cContent, cVariant, C.int(node.Props.MaxLines))
 }

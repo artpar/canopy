@@ -220,6 +220,7 @@ type ToolbarItemSpec struct {
 	DataBinding    string          `json:"dataBinding,omitempty"`    // for search field
 	Enabled        *DynamicBoolean `json:"enabled,omitempty"`        // interactive state (default true)
 	Selected       *DynamicBoolean `json:"selected,omitempty"`       // toggle/highlight state
+	Bordered       bool            `json:"bordered,omitempty"`       // rounded button appearance (macOS 11+)
 }
 
 // UpdateWindow sets window properties (title, minimum size).

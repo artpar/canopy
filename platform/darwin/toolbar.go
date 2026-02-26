@@ -26,6 +26,8 @@ type toolbarItemJSON struct {
 	SearchCallbackID uint64 `json:"searchCallbackID,omitempty"`
 	Enabled          bool   `json:"enabled"`
 	Selected         bool   `json:"selected,omitempty"`
+	HasToggle        bool   `json:"hasToggle,omitempty"`
+	Bordered         bool   `json:"bordered,omitempty"`
 }
 
 func updateToolbar(surfaceID string, items []renderer.ToolbarItemSpec) {
@@ -43,6 +45,8 @@ func updateToolbar(surfaceID string, items []renderer.ToolbarItemSpec) {
 			SearchCallbackID: uint64(s.SearchCallbackID),
 			Enabled:          s.Enabled,
 			Selected:         s.Selected,
+			HasToggle:        s.HasToggle,
+			Bordered:         s.Bordered,
 		}
 	}
 	data, err := json.Marshal(jsonItems)

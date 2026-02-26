@@ -127,11 +127,19 @@ static NSString *const kToolbarID = @"JVToolbar";
             item.enabled = [enabledVal boolValue];
         }
 
-        // Selected state — use NSButton as item.view for toggle appearance
-        if ([spec[@"selected"] boolValue]) {
+        // Bordered appearance (protocol-driven, macOS 11+)
+        if ([spec[@"bordered"] boolValue]) {
+            if (@available(macOS 11.0, *)) {
+                item.bordered = YES;
+            }
+        }
+
+        // Toggle items (hasToggle=true) — always create a button with ON/OFF state
+        if ([spec[@"hasToggle"] boolValue]) {
             NSButton *btn = [NSButton buttonWithImage:item.image ?: [NSImage new] target:item.target action:item.action];
-            btn.bezelStyle = NSBezelStyleTexturedRounded;
-            btn.state = NSControlStateValueOn;
+            btn.buttonType = NSButtonTypePushOnPushOff;
+            btn.bezelStyle = NSBezelStyleToolbar;
+            btn.state = [spec[@"selected"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
             btn.toolTip = item.toolTip;
             if (enabledVal) btn.enabled = [enabledVal boolValue];
             item.view = btn;

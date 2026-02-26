@@ -44,6 +44,7 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 		if p.Variant == "" {
 			p.Variant = "body"
 		}
+		p.MaxLines = cp.MaxLines
 
 	case protocol.CompRow:
 		p.Justify = cp.Justify

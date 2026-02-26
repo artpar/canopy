@@ -256,6 +256,8 @@ func (s *Surface) HandleUpdateToolbar(msg protocol.UpdateToolbar) {
 			SearchField:    item.SearchField,
 			Enabled:        s.resolver.resolveBoolDefault("__toolbar__", item.Enabled, true),
 			Selected:       s.resolver.resolveBool("__toolbar__", item.Selected),
+			HasToggle:      item.Selected != nil,
+			Bordered:       item.Bordered,
 		}
 		if item.Action != nil && item.Action.Action != nil {
 			action := item.Action.Action

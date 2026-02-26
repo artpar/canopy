@@ -222,7 +222,18 @@ void JVSplitViewSetChildren(void* handle, void** children, int count) {
     // while the child uses Auto Layout inside the container
     for (int i = 0; i < count; i++) {
         NSView *child = (__bridge NSView*)children[i];
-        NSView *container = [[NSView alloc] init];
+        NSView *container;
+
+        // First pane of a vertical split: use NSVisualEffectView for sidebar vibrancy
+        if (i == 0 && splitView.vertical && count >= 2) {
+            NSVisualEffectView *effectView = [[NSVisualEffectView alloc] init];
+            effectView.material = NSVisualEffectMaterialSidebar;
+            effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+            effectView.state = NSVisualEffectStateFollowsWindowActiveState;
+            container = effectView;
+        } else {
+            container = [[NSView alloc] init];
+        }
         container.translatesAutoresizingMaskIntoConstraints = YES;
         container.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 

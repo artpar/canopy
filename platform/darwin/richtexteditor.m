@@ -179,28 +179,106 @@ static NSAttributedString* markdownToAttributedString(NSString *markdown) {
 
 // --- NSAttributedString → Markdown ---
 
+// Convert a line's inline content back to markdown by examining font traits and attributes.
+// `lineRange` is the range in attrStr for the content portion (after checkbox/bullet prefix).
+// `isHeading` suppresses bold detection (headings are inherently bold).
+static NSString* inlineContentToMarkdown(NSAttributedString *attrStr, NSRange lineRange, BOOL isHeading) {
+    if (lineRange.length == 0) return @"";
+
+    NSFontManager *fm = [NSFontManager sharedFontManager];
+    NSMutableString *content = [NSMutableString string];
+    NSUInteger pos = lineRange.location;
+    NSUInteger end = NSMaxRange(lineRange);
+
+    while (pos < end) {
+        NSRange effectiveRange;
+        NSDictionary *attrs = [attrStr attributesAtIndex:pos effectiveRange:&effectiveRange];
+
+        // Clamp to line range
+        NSUInteger runEnd = MIN(NSMaxRange(effectiveRange), end);
+        NSRange runRange = NSMakeRange(pos, runEnd - pos);
+        NSString *runText = [attrStr.string substringWithRange:runRange];
+
+        NSFont *font = attrs[NSFontAttributeName] ?: [NSFont systemFontOfSize:14];
+        NSFontTraitMask traits = [fm traitsOfFont:font];
+        BOOL isBold = !isHeading && (traits & NSBoldFontMask) != 0;
+        BOOL isItalic = (traits & NSItalicFontMask) != 0;
+        BOOL isMono = [font.fontName containsString:@"Mono"] || [font.familyName containsString:@"Mono"];
+
+        BOOL isStrike = NO;
+        NSNumber *strikeVal = attrs[NSStrikethroughStyleAttributeName];
+        if (strikeVal && [strikeVal integerValue] != 0) isStrike = YES;
+
+        if (isMono) {
+            [content appendFormat:@"`%@`", runText];
+        } else {
+            if (isStrike) [content appendString:@"~~"];
+            if (isBold && isItalic) [content appendString:@"***"];
+            else if (isBold) [content appendString:@"**"];
+            else if (isItalic) [content appendString:@"*"];
+
+            [content appendString:runText];
+
+            if (isBold && isItalic) [content appendString:@"***"];
+            else if (isBold) [content appendString:@"**"];
+            else if (isItalic) [content appendString:@"*"];
+            if (isStrike) [content appendString:@"~~"];
+        }
+
+        pos = runEnd;
+    }
+
+    return content;
+}
+
 static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
-    // Simple approach: return the plain text, preserving markdown syntax
-    // The editor stores displayed text with unicode bullets/checkboxes,
-    // so we convert back
+    if (attrStr.length == 0) return @"";
+
     NSMutableString *result = [NSMutableString string];
     NSString *plain = attrStr.string;
     NSArray<NSString*> *lines = [plain componentsSeparatedByString:@"\n"];
 
-    for (NSString *line in lines) {
-        NSString *converted = line;
+    NSUInteger charIndex = 0;
+    for (NSUInteger i = 0; i < lines.count; i++) {
+        NSString *line = lines[i];
+        NSRange lineRange = NSMakeRange(charIndex, line.length);
 
-        // Convert checkbox unicode back to markdown
-        if ([line hasPrefix:@"\u2611 "]) {
-            converted = [NSString stringWithFormat:@"- [x] %@", [line substringFromIndex:2]];
-        } else if ([line hasPrefix:@"\u2610 "]) {
-            converted = [NSString stringWithFormat:@"- [ ] %@", [line substringFromIndex:2]];
-        } else if ([line hasPrefix:@"\u2022 "]) {
-            converted = [NSString stringWithFormat:@"- %@", [line substringFromIndex:2]];
+        if (line.length == 0) {
+            [result appendString:@"\n"];
+            charIndex += 1; // skip the \n
+            continue;
         }
 
-        [result appendString:converted];
+        // Detect heading by font size at line start
+        NSDictionary *startAttrs = [attrStr attributesAtIndex:lineRange.location effectiveRange:NULL];
+        NSFont *startFont = startAttrs[NSFontAttributeName] ?: [NSFont systemFontOfSize:14];
+        CGFloat fontSize = startFont.pointSize;
+
+        NSString *prefix = @"";
+        BOOL isHeading = NO;
+        if (fontSize >= 26) { prefix = @"# "; isHeading = YES; }
+        else if (fontSize >= 20) { prefix = @"## "; isHeading = YES; }
+        else if (fontSize >= 16) { prefix = @"### "; isHeading = YES; }
+
+        // Handle checkbox/bullet prefixes (unicode → markdown)
+        NSUInteger contentOffset = 0;
+        if ([line hasPrefix:@"\u2611 "]) {
+            prefix = @"- [x] "; contentOffset = 2;
+        } else if ([line hasPrefix:@"\u2610 "]) {
+            prefix = @"- [ ] "; contentOffset = 2;
+        } else if ([line hasPrefix:@"\u2022 "]) {
+            prefix = @"- "; contentOffset = 2;
+        }
+
+        [result appendString:prefix];
+
+        // Convert inline content with formatting detection
+        NSRange contentRange = NSMakeRange(lineRange.location + contentOffset, lineRange.length - contentOffset);
+        NSString *inlineContent = inlineContentToMarkdown(attrStr, contentRange, isHeading);
+        [result appendString:inlineContent];
         [result appendString:@"\n"];
+
+        charIndex += line.length + 1; // +1 for the \n separator
     }
 
     // Remove trailing newline
@@ -278,13 +356,79 @@ static NSString* attributedStringToMarkdown(NSAttributedString *attrStr) {
 
 @end
 
-// --- Checklist insertion via responder chain ---
+// --- Rich text formatting via responder chain ---
+// These selectors are referenced by toolbar standardAction items.
+// underline: is already on NSText; the others don't exist in AppKit
+// (they're iOS UIResponder methods), so we implement them here.
 
-@interface NSTextView (JVChecklist)
+@interface NSTextView (JVFormatting)
+- (void)toggleBoldface:(id)sender;
+- (void)toggleItalics:(id)sender;
+- (void)addStrikethrough:(id)sender;
 - (void)insertChecklistItem:(id)sender;
 @end
 
-@implementation NSTextView (JVChecklist)
+@implementation NSTextView (JVFormatting)
+
+static void toggleFontTrait(NSTextView *tv, NSFontTraitMask trait) {
+    NSFontManager *fm = [NSFontManager sharedFontManager];
+    NSRange sel = tv.selectedRange;
+
+    if (sel.length > 0) {
+        [tv.textStorage beginEditing];
+        [tv.textStorage enumerateAttribute:NSFontAttributeName inRange:sel options:0 usingBlock:^(id value, NSRange range, BOOL *stop) {
+            NSFont *font = value ?: [NSFont systemFontOfSize:14];
+            NSFontTraitMask traits = [fm traitsOfFont:font];
+            NSFont *newFont;
+            if (traits & trait) {
+                newFont = [fm convertFont:font toNotHaveTrait:trait];
+            } else {
+                newFont = [fm convertFont:font toHaveTrait:trait];
+            }
+            [tv.textStorage addAttribute:NSFontAttributeName value:newFont range:range];
+        }];
+        [tv.textStorage endEditing];
+    } else {
+        NSMutableDictionary *attrs = [tv.typingAttributes mutableCopy];
+        NSFont *font = attrs[NSFontAttributeName] ?: [NSFont systemFontOfSize:14];
+        NSFontTraitMask traits = [fm traitsOfFont:font];
+        NSFont *newFont;
+        if (traits & trait) {
+            newFont = [fm convertFont:font toNotHaveTrait:trait];
+        } else {
+            newFont = [fm convertFont:font toHaveTrait:trait];
+        }
+        attrs[NSFontAttributeName] = newFont;
+        tv.typingAttributes = attrs;
+    }
+}
+
+- (void)toggleBoldface:(id)sender {
+    toggleFontTrait(self, NSBoldFontMask);
+}
+
+- (void)toggleItalics:(id)sender {
+    toggleFontTrait(self, NSItalicFontMask);
+}
+
+- (void)addStrikethrough:(id)sender {
+    NSRange sel = self.selectedRange;
+    if (sel.length > 0) {
+        // Check current strikethrough state at selection start
+        NSDictionary *attrs = [self.textStorage attributesAtIndex:sel.location effectiveRange:NULL];
+        NSNumber *current = attrs[NSStrikethroughStyleAttributeName];
+        BOOL hasStrike = current && [current integerValue] != 0;
+        NSNumber *newVal = hasStrike ? @(0) : @(NSUnderlineStyleSingle);
+        [self.textStorage addAttribute:NSStrikethroughStyleAttributeName value:newVal range:sel];
+    } else {
+        NSMutableDictionary *attrs = [self.typingAttributes mutableCopy];
+        NSNumber *current = attrs[NSStrikethroughStyleAttributeName];
+        BOOL hasStrike = current && [current integerValue] != 0;
+        attrs[NSStrikethroughStyleAttributeName] = hasStrike ? @(0) : @(NSUnderlineStyleSingle);
+        self.typingAttributes = attrs;
+    }
+}
+
 - (void)insertChecklistItem:(id)sender {
     NSRange sel = self.selectedRange;
     NSString *text = self.string;
@@ -353,6 +497,15 @@ void* JVCreateRichTextEditor(const char* content, bool editable, uint64_t callba
     // Store references
     objc_setAssociatedObject(scrollView, kRTEDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(scrollView, kRTETextViewKey, textView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    // Make the text view first responder once it's in a window,
+    // so toolbar standardAction items (B/I/U/S) are validated and enabled.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSWindow *window = scrollView.window;
+        if (window && editable) {
+            [window makeFirstResponder:textView];
+        }
+    });
 
     return (__bridge_retained void*)scrollView;
 }

@@ -144,6 +144,7 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 
     NSTextField *textField = [NSTextField labelWithString:@""];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
+    textField.font = [NSFont systemFontOfSize:13];
     textField.lineBreakMode = NSLineBreakByTruncatingTail;
     [textField setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
 
@@ -202,7 +203,7 @@ static const void *kOutlineInnerKey = &kOutlineInnerKey;
 }
 
 - (CGFloat)outlineView:(NSOutlineView *)outlineView heightOfRowByItem:(id)item {
-    return 24;
+    return 28;
 }
 
 - (void)outlineViewSelectionDidChange:(NSNotification *)notification {

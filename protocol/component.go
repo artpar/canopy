@@ -62,8 +62,9 @@ type Component struct {
 // Only the fields relevant to a component's Type are used.
 type Props struct {
 	// Text
-	Content *DynamicString `json:"content,omitempty"`
-	Variant string         `json:"variant,omitempty"` // h1, h2, h3, h4, h5, body, caption
+	Content  *DynamicString `json:"content,omitempty"`
+	Variant  string         `json:"variant,omitempty"` // h1, h2, h3, h4, h5, body, caption
+	MaxLines int            `json:"maxLines,omitempty"` // 0 = unlimited (default), 1+ = truncate with ellipsis
 
 	// Layout (Row, Column)
 	Justify string `json:"justify,omitempty"` // start, center, end, spaceBetween, spaceAround

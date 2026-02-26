@@ -23,8 +23,9 @@ type RenderNode struct {
 // Dynamic values have been evaluated against the data model.
 type ResolvedProps struct {
 	// Text
-	Content string `json:"content,omitempty"`
-	Variant string `json:"variant,omitempty"`
+	Content  string `json:"content,omitempty"`
+	Variant  string `json:"variant,omitempty"`
+	MaxLines int    `json:"maxLines,omitempty"`
 
 	// Layout
 	Justify string `json:"justify,omitempty"`
@@ -197,6 +198,8 @@ type ToolbarItemSpec struct {
 	SearchCallbackID CallbackID // for search field change events
 	Enabled          bool
 	Selected         bool
+	HasToggle        bool // item has a selected binding (renders as toggle button)
+	Bordered         bool // rounded button appearance
 }
 
 // WindowSpec describes a new window to create.

@@ -103,13 +103,19 @@ void* JVCreateWindow(const char* title, int width, int height, const char* surfa
     NSWindowStyleMask styleMask = NSWindowStyleMaskTitled |
                                    NSWindowStyleMaskClosable |
                                    NSWindowStyleMaskMiniaturizable |
-                                   NSWindowStyleMaskResizable;
+                                   NSWindowStyleMaskResizable |
+                                   NSWindowStyleMaskFullSizeContentView;
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
     [window setTitle:windowTitle];
+    window.titlebarAppearsTransparent = YES;
+    window.titleVisibility = NSWindowTitleHidden;
+    if (@available(macOS 11.0, *)) {
+        window.toolbarStyle = NSWindowToolbarStyleUnified;
+    }
     [window center];
     [window makeKeyAndOrderFront:nil];
 
@@ -257,8 +263,10 @@ void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
         bottom = [nsView.bottomAnchor constraintLessThanOrEqualToAnchor:contentView.bottomAnchor constant:-inset];
     }
 
+    // Use contentLayoutGuide for top anchor so content starts below toolbar (not behind it)
+    NSLayoutGuide *layoutGuide = window.contentLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [nsView.topAnchor constraintEqualToAnchor:contentView.topAnchor constant:inset],
+        [nsView.topAnchor constraintEqualToAnchor:layoutGuide.topAnchor constant:inset],
         [nsView.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:inset],
         [nsView.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-inset],
         bottom,

@@ -19,25 +19,37 @@ static NSColor* colorForVariant(NSString *variant) {
     return [NSColor labelColor];
 }
 
-void* JVCreateText(const char* content, const char* variant) {
+void* JVCreateText(const char* content, const char* variant, int maxLines) {
     NSString *text = [NSString stringWithUTF8String:content];
     NSString *var_ = [NSString stringWithUTF8String:variant];
 
     NSTextField *label = [NSTextField labelWithString:text];
     label.font = fontForVariant(var_);
     label.textColor = colorForVariant(var_);
-    label.lineBreakMode = NSLineBreakByWordWrapping;
-    label.maximumNumberOfLines = 0; // unlimited lines
+    if (maxLines > 0) {
+        label.maximumNumberOfLines = maxLines;
+        label.lineBreakMode = NSLineBreakByTruncatingTail;
+    } else {
+        label.maximumNumberOfLines = 0;
+        label.lineBreakMode = NSLineBreakByWordWrapping;
+    }
     label.translatesAutoresizingMaskIntoConstraints = NO;
     [label setContentHuggingPriority:NSLayoutPriorityDefaultHigh forOrientation:NSLayoutConstraintOrientationVertical];
 
     return (__bridge_retained void*)label;
 }
 
-void JVUpdateText(void* handle, const char* content, const char* variant) {
+void JVUpdateText(void* handle, const char* content, const char* variant, int maxLines) {
     NSTextField *label = (__bridge NSTextField*)handle;
     NSString *var_ = [NSString stringWithUTF8String:variant];
     label.stringValue = [NSString stringWithUTF8String:content];
     label.font = fontForVariant(var_);
     label.textColor = colorForVariant(var_);
+    if (maxLines > 0) {
+        label.maximumNumberOfLines = maxLines;
+        label.lineBreakMode = NSLineBreakByTruncatingTail;
+    } else {
+        label.maximumNumberOfLines = 0;
+        label.lineBreakMode = NSLineBreakByWordWrapping;
+    }
 }
