@@ -6,7 +6,8 @@ SNAP_WAIT := 2
 GO        ?= $(shell command -v go1.25.0 2>/dev/null || echo go)
 
 .PHONY: build test verify verify-fixture check clean \
-       generate-apps generate-app run-app regen-app clean-apps
+       generate-apps generate-app run-app regen-app clean-apps \
+       eval-apps eval-notes eval-loop eval-aggregate eval-full
 
 # ── Build ───────────────────────────────────────────
 build:
@@ -16,7 +17,7 @@ build:
 # Headless unit + integration tests via mock renderer.
 # No CGo, no AppKit, no display needed. Safe for CI.
 test:
-	$(GO) test ./protocol/ ./engine/ ./transport/ -v -count=1 -race
+	$(GO) test ./protocol/ ./engine/ ./transport/ ./eval/ -v -count=1 -race
 
 # ── Verify ──────────────────────────────────────────
 # Build, launch every fixture, capture screenshot, kill.
@@ -86,6 +87,38 @@ regen-app: build
 # Remove all cached JSONL and hash files
 clean-apps:
 	rm -f sample_apps/*/*.jsonl sample_apps/*/*.jsonl.tmp sample_apps/*/.*.hash
+
+# ── Eval ────────────────────────────────────────────
+# Evaluate all cached sample apps against their references (where available)
+eval-apps: build
+	@for d in sample_apps/*/; do \
+		name=$$(basename $$d); \
+		gen=$$d/prompt.jsonl; \
+		ref=sample_apps/notes/prompt.jsonl; \
+		if [ ! -f "$$gen" ]; then echo "SKIP $$name (no prompt.jsonl)"; continue; fi; \
+		echo "==> eval $$name"; \
+		if [ "$$name" != "notes" ] && [ -f "$$ref" ]; then \
+			$(BUILD_DIR)/$(BINARY) eval "$$gen" --ref "$$ref"; \
+		else \
+			$(BUILD_DIR)/$(BINARY) eval "$$gen"; \
+		fi; \
+	done
+
+# Evaluate notes_llm against hand-crafted notes reference
+eval-notes: build
+	$(BUILD_DIR)/$(BINARY) eval sample_apps/notes_llm/prompt.jsonl --ref sample_apps/notes/prompt.jsonl
+
+# Full inner loop for a single app: make eval-loop A=notes_llm
+eval-loop: build
+	$(BUILD_DIR)/$(BINARY) --prompt-file sample_apps/$(A)/prompt.txt --generate-only --regenerate \
+		--eval-ref sample_apps/notes/prompt.jsonl --eval-max-attempts 3
+
+# Cross-app aggregate analysis
+eval-aggregate: build
+	$(BUILD_DIR)/$(BINARY) eval --aggregate
+
+# Full pipeline: generate all apps, evaluate, aggregate
+eval-full: generate-apps eval-apps eval-aggregate
 
 # ── Clean ───────────────────────────────────────────
 clean:

@@ -26,6 +26,12 @@ type LLMConfig struct {
 	RecordTo string // path to write JSONL recording (empty = no recording)
 }
 
+// PostTurnFunc is called after each LLM turn completes.
+// It receives the turn number (1-based). If it returns a non-empty string,
+// that string is appended as a user message and another turn is initiated.
+// Return "" to accept the generation and stop iterating.
+type PostTurnFunc func(turn int) string
+
 type actionPayload struct {
 	SurfaceID string
 	Event     *protocol.EventDef
@@ -60,6 +66,11 @@ type LLMTransport struct {
 	// OnInitialTurnDone is called after the first doTurn completes.
 	// Use this to finalize cache files.
 	OnInitialTurnDone func()
+
+	// PostTurnHook is called after each generation turn (including retries).
+	// If it returns a non-empty string, the transport appends it as a user
+	// message and initiates another turn. Use this for eval-driven retry loops.
+	PostTurnHook PostTurnFunc
 
 	// TestResultCh receives test results from the consumer goroutine.
 	// When the transport sends an a2ui_test message, it waits on this channel
@@ -146,6 +157,13 @@ func (t *LLMTransport) recordLine(line []byte) {
 	t.recorder.Write([]byte("\n"))
 }
 
+// SyncRecorder flushes the recording file to disk without closing it.
+func (t *LLMTransport) SyncRecorder() {
+	if t.recorder != nil {
+		t.recorder.Sync()
+	}
+}
+
 // CloseRecorder closes the recording file if open.
 func (t *LLMTransport) CloseRecorder() {
 	if t.recorder != nil {
@@ -169,7 +187,7 @@ func (t *LLMTransport) run() {
 		{Role: anyllm.RoleUser, Content: t.config.Prompt},
 	}
 
-	firstTurn := true
+	turnNum := 0
 	for {
 		select {
 		case <-t.done:
@@ -181,12 +199,26 @@ func (t *LLMTransport) run() {
 		if history == nil {
 			return
 		}
+		turnNum++
 
-		if firstTurn {
-			firstTurn = false
+		if turnNum == 1 {
 			if t.OnInitialTurnDone != nil {
 				t.OnInitialTurnDone()
 			}
+		}
+
+		// Post-turn evaluation hook (eval-driven retry loop)
+		if t.PostTurnHook != nil {
+			feedback := t.PostTurnHook(turnNum)
+			if feedback != "" {
+				jlog.Infof("transport", "", "post-turn hook returned feedback (turn %d), retrying", turnNum)
+				history = append(history, anyllm.Message{
+					Role:    anyllm.RoleUser,
+					Content: feedback,
+				})
+				continue
+			}
+			jlog.Infof("transport", "", "post-turn hook accepted generation (turn %d)", turnNum)
 		}
 
 		// Wait for a user action to trigger the next turn

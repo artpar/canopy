@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"jview/engine"
+	"jview/eval"
 	"jview/jlog"
 	"jview/mcp"
 	"jview/platform/darwin"
@@ -78,6 +79,12 @@ func main() {
 		return
 	}
 
+	// Handle "jview eval <file.jsonl> [flags]" — evaluation
+	if len(os.Args) >= 2 && os.Args[1] == "eval" {
+		runEval(os.Args[2:])
+		return
+	}
+
 	ffiConfigPath := flag.String("ffi-config", "", "Path to FFI convention file (JSON) for native function calls")
 	llmProvider := flag.String("llm", "anthropic", "LLM provider: anthropic, openai, gemini, ollama, deepseek, groq, mistral")
 	model := flag.String("model", "claude-opus-4-6", "Model name (default: claude-opus-4-6)")
@@ -87,6 +94,10 @@ func main() {
 	promptFile := flag.String("prompt-file", "", "Read prompt from file (overrides --prompt)")
 	regenerate := flag.Bool("regenerate", false, "Force fresh LLM call, ignore cache")
 	generateOnly := flag.Bool("generate-only", false, "Generate JSONL and exit without opening a window")
+	evalRef := flag.String("eval-ref", "", "Reference JSONL for eval loop (enables eval after generation)")
+	evalThreshold := flag.Float64("eval-threshold", 0.85, "Minimum overall score to accept generation")
+	evalMaxAttempts := flag.Int("eval-max-attempts", 3, "Maximum generation attempts in eval loop")
+	evalReportDir := flag.String("eval-report-dir", "", "Directory for eval reports (default: <app>/eval/)")
 	flag.Parse()
 
 	if *promptFile != "" {
@@ -144,6 +155,8 @@ func main() {
 
 			lt := transport.NewLLMTransport(cfg)
 
+			evalEnabled := *evalRef != "" && *promptFile != ""
+
 			// Finalize cache on first turn completion
 			if *promptFile != "" {
 				jsonlPath, _, tmpPath := transport.CachePaths(*promptFile)
@@ -151,7 +164,11 @@ func main() {
 					generateDone = make(chan struct{})
 				}
 				lt.OnInitialTurnDone = func() {
-					lt.CloseRecorder()
+					// When eval loop is active, keep recording open for retries.
+					// The PostTurnHook will finalize after the loop completes.
+					if !evalEnabled {
+						lt.CloseRecorder()
+					}
 					if err := os.Rename(tmpPath, jsonlPath); err != nil {
 						jlog.Errorf("main", "", "cache: rename failed: %v", err)
 					} else {
@@ -160,11 +177,13 @@ func main() {
 					if err := transport.WriteHashFile(*promptFile); err != nil {
 						jlog.Errorf("main", "", "cache: write hash failed: %v", err)
 					}
-					if generateDone != nil {
-						close(generateDone)
+					if !evalEnabled {
+						if generateDone != nil {
+							close(generateDone)
+						}
+						// Re-enable user callbacks now that generation is complete
+						darwin.SetSuppressCallbacks(false)
 					}
-					// Re-enable user callbacks now that generation is complete
-					darwin.SetSuppressCallbacks(false)
 				}
 			}
 
@@ -172,6 +191,66 @@ func main() {
 			if lt.OnInitialTurnDone == nil {
 				lt.OnInitialTurnDone = func() {
 					darwin.SetSuppressCallbacks(false)
+				}
+			}
+
+			// Wire eval loop hook
+			if evalEnabled {
+				jsonlPath, _, _ := transport.CachePaths(*promptFile)
+				maxAttempts := *evalMaxAttempts
+				threshold := *evalThreshold
+				refPath := *evalRef
+				promptForEval := *prompt
+				reportDirVal := *evalReportDir
+				if reportDirVal == "" {
+					reportDirVal = filepath.Join(filepath.Dir(*promptFile), "eval")
+				}
+
+				lt.PostTurnHook = func(turn int) string {
+					// Sync recorder to disk before evaluating
+					lt.SyncRecorder()
+
+					scorer := eval.NewScorer(jsonlPath, refPath, promptForEval)
+					report, err := scorer.Evaluate()
+					if err != nil {
+						jlog.Errorf("main", "", "eval error on turn %d: %v", turn, err)
+						return ""
+					}
+					report.Attempt = turn
+
+					// Write report
+					os.MkdirAll(reportDirVal, 0755)
+					reportPath := filepath.Join(reportDirVal, fmt.Sprintf("attempt_%d.json", turn))
+					if err := eval.WriteReport(report, reportPath); err != nil {
+						jlog.Errorf("main", "", "write eval report: %v", err)
+					}
+
+					jlog.Infof("main", "", "eval turn %d: overall=%.2f (threshold=%.2f) tests=%.0f%%",
+						turn, report.Overall, threshold, report.Scores.TestPassRate*100)
+
+					if report.Overall >= threshold {
+						jlog.Infof("main", "", "eval: accepted (score %.2f >= %.2f)", report.Overall, threshold)
+						lt.CloseRecorder()
+						darwin.SetSuppressCallbacks(false)
+						if generateDone != nil {
+							close(generateDone)
+						}
+						return ""
+					}
+
+					if turn >= maxAttempts {
+						jlog.Warnf("main", "", "eval: max attempts reached (%d), accepting score %.2f", turn, report.Overall)
+						lt.CloseRecorder()
+						darwin.SetSuppressCallbacks(false)
+						if generateDone != nil {
+							close(generateDone)
+						}
+						return ""
+					}
+
+					feedback := eval.GenerateFeedback(report)
+					jlog.Infof("main", "", "eval: requesting retry (turn %d, score %.2f)", turn, report.Overall)
+					return feedback
 				}
 			}
 
@@ -513,6 +592,73 @@ func runMCP(args []string) {
 	}()
 
 	darwin.AppRun()
+}
+
+func runEval(args []string) {
+	evalFlags := flag.NewFlagSet("eval", flag.ExitOnError)
+	refFile := evalFlags.String("ref", "", "Reference JSONL file for comparison")
+	threshold := evalFlags.Float64("threshold", 0.85, "Minimum overall score to pass")
+	reportDir := evalFlags.String("report-dir", "", "Directory to write eval reports (default: <app>/eval/)")
+	aggregate := evalFlags.Bool("aggregate", false, "Run cross-app aggregate analysis on sample_apps/")
+	promptText := evalFlags.String("prompt-text", "", "Prompt text for feature extraction (auto-detected from prompt.txt)")
+	evalFlags.Parse(args)
+
+	if *aggregate {
+		analysis, err := eval.AggregateReports("sample_apps")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "aggregate error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(eval.FormatAggregate(analysis))
+		return
+	}
+
+	remaining := evalFlags.Args()
+	if len(remaining) == 0 {
+		fmt.Fprintf(os.Stderr, "usage: jview eval <prompt.jsonl> [--ref <ref.jsonl>] [--threshold 0.85]\n")
+		fmt.Fprintf(os.Stderr, "       jview eval --aggregate\n")
+		os.Exit(1)
+	}
+
+	genPath := remaining[0]
+
+	// Auto-detect prompt text from sibling prompt.txt
+	prompt := *promptText
+	if prompt == "" {
+		dir := filepath.Dir(genPath)
+		txtPath := filepath.Join(dir, "prompt.txt")
+		if data, err := os.ReadFile(txtPath); err == nil {
+			prompt = string(data)
+		}
+	}
+
+	scorer := eval.NewScorer(genPath, *refFile, prompt)
+	report, err := scorer.Evaluate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "eval error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(eval.FormatReport(report))
+
+	// Write report JSON
+	outDir := *reportDir
+	if outDir == "" {
+		outDir = filepath.Join(filepath.Dir(genPath), "eval")
+	}
+	os.MkdirAll(outDir, 0755)
+	reportPath := filepath.Join(outDir, fmt.Sprintf("attempt_%d.json", report.Attempt))
+	if err := eval.WriteReport(report, reportPath); err != nil {
+		fmt.Fprintf(os.Stderr, "write report error: %v\n", err)
+	} else {
+		fmt.Printf("\nReport written to: %s\n", reportPath)
+	}
+
+	if report.Overall < *threshold {
+		fmt.Fprintf(os.Stderr, "\nFAIL: overall score %.2f < threshold %.2f\n", report.Overall, *threshold)
+		os.Exit(1)
+	}
+	fmt.Printf("\nPASS: overall score %.2f >= threshold %.2f\n", report.Overall, *threshold)
 }
 
 func runTests(path string) {
