@@ -14,8 +14,9 @@ import (
 
 // ClaudeCodeConfig configures the Claude Code transport.
 type ClaudeCodeConfig struct {
-	Prompt string // UI building prompt
-	Model  string // optional model override
+	Prompt       string // UI building prompt
+	Model        string // optional model override
+	LibraryBlock string // optional library component listing for system prompt
 }
 
 // MCPServerHandle is returned by StartHTTPMCP — an abstraction so transport/
@@ -43,6 +44,10 @@ type ClaudeCodeTransport struct {
 	// Must be set before Start(). main.go provides this closure with
 	// access to session/renderer/dispatcher.
 	StartMCP StartHTTPMCPFunc
+
+	// OnDone is called after the Claude process exits. Use this to
+	// finalize cache files.
+	OnDone func()
 
 	// Runtime state
 	mcpHandle *MCPServerHandle
@@ -165,7 +170,7 @@ func (t *ClaudeCodeTransport) writeRefFile() (string, error) {
 		return "", err
 	}
 	t.tmpFiles = append(t.tmpFiles, f.Name())
-	f.WriteString(ComponentReference())
+	f.WriteString(ComponentReference(t.config.LibraryBlock))
 	f.Close()
 	return f.Name(), nil
 }
@@ -226,6 +231,10 @@ func (t *ClaudeCodeTransport) spawnClaude(mcpConfigPath, refPath, prompt string)
 		jlog.Infof("transport", "", "claude-code: process exited with: %v", err)
 	} else {
 		jlog.Infof("transport", "", "claude-code: process exited normally")
+	}
+
+	if t.OnDone != nil {
+		t.OnDone()
 	}
 }
 

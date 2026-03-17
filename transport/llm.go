@@ -9,7 +9,6 @@ import (
 	"jview/jlog"
 	"jview/protocol"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +18,11 @@ import (
 
 // LLMConfig configures the LLM transport.
 type LLMConfig struct {
-	Provider anyllm.Provider
-	Model    string
-	Prompt   string
-	Mode     string // "tools" (default) or "raw"
-	RecordTo string // path to write JSONL recording (empty = no recording)
+	Provider     anyllm.Provider
+	Model        string
+	Prompt       string
+	Mode         string // "tools" (default) or "raw"
+	LibraryBlock string // optional library component listing for system prompt
 }
 
 // PostTurnFunc is called after each LLM turn completes.
@@ -62,9 +61,11 @@ type LLMTransport struct {
 	stopOnce sync.Once
 	cancel   context.CancelFunc
 
-	recorder *os.File // lazily opened JSONL recorder
-	// OnInitialTurnDone is called after the first doTurn completes.
-	// Use this to finalize cache files.
+	// OnInitialTurnDone is called when the consumer processes the first-turn-done
+	// sentinel. The transport sends a nil message through the messages channel after
+	// the first turn completes; when the consumer sees nil, it calls this callback.
+	// This ensures all messages from the first turn have been processed (recorded)
+	// before cache finalization occurs.
 	OnInitialTurnDone func()
 
 	// PostTurnHook is called after each generation turn (including retries).
@@ -140,37 +141,6 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// recordLine writes a JSONL line to the recorder file. No-op if no RecordTo path.
-func (t *LLMTransport) recordLine(line []byte) {
-	if t.config.RecordTo == "" {
-		return
-	}
-	if t.recorder == nil {
-		f, err := os.Create(t.config.RecordTo)
-		if err != nil {
-			jlog.Errorf("transport", "", "failed to open recorder: %v", err)
-			return
-		}
-		t.recorder = f
-	}
-	t.recorder.Write(line)
-	t.recorder.Write([]byte("\n"))
-}
-
-// SyncRecorder flushes the recording file to disk without closing it.
-func (t *LLMTransport) SyncRecorder() {
-	if t.recorder != nil {
-		t.recorder.Sync()
-	}
-}
-
-// CloseRecorder closes the recording file if open.
-func (t *LLMTransport) CloseRecorder() {
-	if t.recorder != nil {
-		t.recorder.Close()
-		t.recorder = nil
-	}
-}
 
 func (t *LLMTransport) run() {
 	defer close(t.messages)
@@ -183,7 +153,7 @@ func (t *LLMTransport) run() {
 	jlog.Infof("transport", "", "starting conversation with provider, model=%s mode=%s", t.config.Model, t.config.Mode)
 
 	history := []anyllm.Message{
-		{Role: anyllm.RoleSystem, Content: systemPrompt(t.config.Prompt)},
+		{Role: anyllm.RoleSystem, Content: SystemPrompt(t.config.Prompt) + t.config.LibraryBlock},
 		{Role: anyllm.RoleUser, Content: t.config.Prompt},
 	}
 
@@ -201,9 +171,13 @@ func (t *LLMTransport) run() {
 		}
 		turnNum++
 
-		if turnNum == 1 {
-			if t.OnInitialTurnDone != nil {
-				t.OnInitialTurnDone()
+		if turnNum == 1 && t.OnInitialTurnDone != nil {
+			// Send nil sentinel through messages channel so the consumer
+			// processes it AFTER all first-turn messages have been consumed.
+			select {
+			case t.messages <- nil:
+			case <-t.done:
+				return
 			}
 		}
 
@@ -338,7 +312,7 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 					continue
 				}
 
-				msg, rawBytes, err := toolCallToMessage(tc)
+				msg, _, err := toolCallToMessage(tc)
 				if err != nil {
 					jlog.Warnf("transport", "", "tool call parse error: %v", err)
 					// Send error as tool result so the LLM knows
@@ -349,8 +323,6 @@ func (t *LLMTransport) doTurnTools(ctx context.Context, history []anyllm.Message
 					})
 					continue
 				}
-
-				t.recordLine(rawBytes)
 
 				// Handle test messages: send to consumer, wait for real results
 				if msg.Type == protocol.MsgTest {
@@ -471,7 +443,7 @@ func (t *LLMTransport) doTurnRaw(ctx context.Context, history []anyllm.Message) 
 				jlog.Debugf("transport", "", "raw parse skip: %v", err)
 				continue
 			}
-			t.recordLine([]byte(line))
+
 			select {
 			case t.messages <- msg:
 			case <-t.done:

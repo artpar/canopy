@@ -23,6 +23,7 @@ type Message struct {
 	Type      MessageType
 	SurfaceID string
 	Body      interface{} // one of CreateSurface, DeleteSurface, UpdateComponents, UpdateDataModel, SetTheme
+	RawLine   json.RawMessage
 }
 
 // Next reads the next JSONL line and returns a parsed Message.
@@ -53,6 +54,7 @@ func ParseLine(line []byte) (*Message, error) {
 	msg := &Message{
 		Type:      env.Type,
 		SurfaceID: env.SurfaceID,
+		RawLine:   append(json.RawMessage(nil), line...),
 	}
 
 	switch env.Type {

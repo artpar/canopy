@@ -620,12 +620,17 @@ func functionDocsForPrompt() string {
 
 // ComponentReference returns the A2UI protocol reference text (the system prompt
 // without a user request appended). Used as MCP resource for Claude Code transport.
-func ComponentReference() string {
-	return systemPrompt("")
+// If libraryBlock is non-empty, it is appended to the reference text.
+func ComponentReference(libraryBlock ...string) string {
+	ref := SystemPrompt("")
+	if len(libraryBlock) > 0 && libraryBlock[0] != "" {
+		ref += "\n" + libraryBlock[0]
+	}
+	return ref
 }
 
-// systemPrompt returns the system message that teaches the LLM about A2UI.
-func systemPrompt(userPrompt string) string {
+// SystemPrompt returns the system message that teaches the LLM about A2UI.
+func SystemPrompt(userPrompt string) string {
 	return `You are a UI builder. You create native macOS user interfaces using the A2UI protocol via tool calls.
 
 AVAILABLE COMPONENTS:

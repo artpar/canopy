@@ -586,3 +586,112 @@ func (c *countingMockProvider) CompletionStream(ctx context.Context, params anyl
 	return c.mockProvider.CompletionStream(ctx, params)
 }
 
+// TestLLMTransportNilSentinelOrdering verifies that OnInitialTurnDone fires
+// AFTER all first-turn messages have been consumed (via nil sentinel through
+// the messages channel), not concurrently with message processing.
+func TestLLMTransportNilSentinelOrdering(t *testing.T) {
+	mock := &mockProvider{
+		name: "mock",
+		responses: []anyllm.ChatCompletion{
+			// Turn 1: createSurface + updateComponents
+			{
+				Choices: []anyllm.Choice{{
+					FinishReason: anyllm.FinishReasonToolCalls,
+					Message: anyllm.Message{
+						Role: anyllm.RoleAssistant,
+						ToolCalls: []anyllm.ToolCall{
+							{
+								ID:   "call_1",
+								Type: "function",
+								Function: anyllm.FunctionCall{
+									Name:      "a2ui_createSurface",
+									Arguments: `{"surfaceId":"s1","title":"Test"}`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			{
+				Choices: []anyllm.Choice{{
+					FinishReason: anyllm.FinishReasonToolCalls,
+					Message: anyllm.Message{
+						Role: anyllm.RoleAssistant,
+						ToolCalls: []anyllm.ToolCall{
+							{
+								ID:   "call_2",
+								Type: "function",
+								Function: anyllm.FunctionCall{
+									Name:      "a2ui_updateComponents",
+									Arguments: `{"surfaceId":"s1","components":[{"componentId":"t1","type":"Text","props":{"content":"Hello"}}]}`,
+								},
+							},
+						},
+					},
+				}},
+			},
+			// Stop → ends first turn
+			{
+				Choices: []anyllm.Choice{{
+					FinishReason: anyllm.FinishReasonStop,
+					Message:      anyllm.Message{Role: anyllm.RoleAssistant, Content: "Done."},
+				}},
+			},
+		},
+	}
+
+	tr := NewLLMTransport(LLMConfig{
+		Provider: mock,
+		Model:    "test-model",
+		Prompt:   "Build a test",
+		Mode:     "tools",
+	})
+
+	// Track ordering: messages consumed vs OnInitialTurnDone called
+	var order []string
+	tr.OnInitialTurnDone = func() {
+		order = append(order, "finalized")
+	}
+
+	tr.Start()
+
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+
+	// Consume all messages until nil sentinel or channel close
+	for {
+		select {
+		case msg, ok := <-tr.Messages():
+			if !ok {
+				goto done
+			}
+			if msg == nil {
+				// Nil sentinel: all messages consumed, now call callback
+				order = append(order, "sentinel")
+				if tr.OnInitialTurnDone != nil {
+					tr.OnInitialTurnDone()
+				}
+				goto done
+			}
+			order = append(order, string(msg.Type))
+		case <-timer.C:
+			t.Fatal("timeout waiting for messages")
+		}
+	}
+done:
+	tr.Stop()
+	for range tr.Messages() {
+	}
+
+	// Verify ordering: messages before sentinel before finalization
+	expected := []string{"createSurface", "updateComponents", "sentinel", "finalized"}
+	if len(order) != len(expected) {
+		t.Fatalf("order = %v, want %v", order, expected)
+	}
+	for i, v := range expected {
+		if order[i] != v {
+			t.Errorf("order[%d] = %q, want %q (full: %v)", i, order[i], v, order)
+		}
+	}
+}
+

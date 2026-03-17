@@ -13,10 +13,13 @@ import (
 	"jview/renderer"
 	"jview/transport"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	anyllm "github.com/mozilla-ai/any-llm-go"
 	"github.com/mozilla-ai/any-llm-go/providers/deepseek"
@@ -100,38 +103,70 @@ func main() {
 		*prompt = string(data)
 	}
 
-	if *generateOnly && *promptFile == "" {
-		fmt.Fprintf(os.Stderr, "error: --generate-only requires --prompt-file\n")
+	if *generateOnly && *promptFile == "" && *claudeCode == "" && *prompt == "" {
+		fmt.Fprintf(os.Stderr, "error: --generate-only requires --prompt-file, --prompt, or --claude-code\n")
 		os.Exit(1)
 	}
+
+	// Load component library (persists across sessions)
+	lib := engine.NewLibrary()
+	lib.Load()
+	componentRef := transport.ComponentReference(lib.ComponentListForPrompt())
 
 	var tr transport.Transport
 	var llmTr *transport.LLMTransport        // non-nil when using LLM transport
 	var ccTr *transport.ClaudeCodeTransport   // non-nil when using Claude Code transport
 	var generateDone chan struct{}            // closed when generate-only can exit
+	var cacheFinalized chan struct{}          // closed when cache finalization completes
+
+	// Cache state — set when a generative transport needs caching
+	var cachePrompt string
+	var cacheJsonl, cacheHash, cacheTmp string
+	var recorder *engine.Recorder
 
 	args := flag.Args()
 	if *claudeCode != "" {
-		// Claude Code mode — StartMCP set after session/renderer creation
-		ccTr = transport.NewClaudeCodeTransport(
-			transport.ClaudeCodeConfig{Prompt: *claudeCode, Model: *model},
-		)
-		tr = ccTr
+		// Determine cache paths for Claude Code prompt
+		cachePrompt = *claudeCode
+		cacheJsonl, cacheHash, cacheTmp = engine.CachePathsForPrompt(cachePrompt, componentRef)
+
+		if !*regenerate && engine.CacheValid(cacheJsonl, cacheHash, cachePrompt, componentRef) {
+			if *generateOnly {
+				jlog.Infof("main", "", "cache hit: %s (up to date)", cacheJsonl)
+				os.Exit(0)
+			}
+			jlog.Infof("main", "", "cache hit: using %s", cacheJsonl)
+			tr = transport.NewFileTransport(cacheJsonl)
+		} else {
+			// Claude Code mode — StartMCP set after session/renderer creation
+			ccTr = transport.NewClaudeCodeTransport(
+				transport.ClaudeCodeConfig{Prompt: *claudeCode, Model: *model, LibraryBlock: lib.ComponentListForPrompt()},
+			)
+			tr = ccTr
+		}
 	} else if len(args) > 0 && *prompt == "" {
 		// File or directory mode: positional arg with no --prompt
 		tr = createFileTransport(args[0])
 	} else if *prompt != "" {
-		// Check cache for prompt-file mode
-		if *promptFile != "" && !*regenerate && transport.CacheValid(*promptFile) {
-			jsonlPath, _, _ := transport.CachePaths(*promptFile)
+		// Determine cache paths
+		if *promptFile != "" {
+			cachePrompt = *prompt
+			cacheJsonl, cacheHash, cacheTmp = engine.CachePathsForFile(*promptFile)
+		} else {
+			cachePrompt = *prompt
+			cacheJsonl, cacheHash, cacheTmp = engine.CachePathsForPrompt(cachePrompt, componentRef)
+		}
+
+		// Unified cache check
+		if !*regenerate && cachePrompt != "" && engine.CacheValid(cacheJsonl, cacheHash, cachePrompt, componentRef) {
 			if *generateOnly {
-				jlog.Infof("main", "", "cache hit: %s (up to date)", jsonlPath)
+				jlog.Infof("main", "", "cache hit: %s (up to date)", cacheJsonl)
 				os.Exit(0)
 			}
-			jlog.Infof("main", "", "cache hit: using %s", jsonlPath)
-			tr = transport.NewFileTransport(jsonlPath)
+			jlog.Infof("main", "", "cache hit: using %s", cacheJsonl)
+			tr = transport.NewFileTransport(cacheJsonl)
 		} else {
-			// LLM mode (cache miss or no prompt-file)
+			// LLM mode (cache miss)
 			provider, err := createProvider(*llmProvider, *apiKey)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -139,51 +174,14 @@ func main() {
 			}
 
 			cfg := transport.LLMConfig{
-				Provider: provider,
-				Model:    *model,
-				Prompt:   *prompt,
-				Mode:     *mode,
-			}
-
-			// Set up recording if using prompt-file
-			if *promptFile != "" {
-				_, _, tmpPath := transport.CachePaths(*promptFile)
-				cfg.RecordTo = tmpPath
+				Provider:     provider,
+				Model:        *model,
+				Prompt:       *prompt,
+				Mode:         *mode,
+				LibraryBlock: lib.ComponentListForPrompt(),
 			}
 
 			lt := transport.NewLLMTransport(cfg)
-
-			// Finalize cache on first turn completion
-			if *promptFile != "" {
-				jsonlPath, _, tmpPath := transport.CachePaths(*promptFile)
-				if *generateOnly {
-					generateDone = make(chan struct{})
-				}
-				lt.OnInitialTurnDone = func() {
-					lt.CloseRecorder()
-					if err := os.Rename(tmpPath, jsonlPath); err != nil {
-						jlog.Errorf("main", "", "cache: rename failed: %v", err)
-					} else {
-						jlog.Infof("main", "", "cache: wrote %s", jsonlPath)
-					}
-					if err := transport.WriteHashFile(*promptFile); err != nil {
-						jlog.Errorf("main", "", "cache: write hash failed: %v", err)
-					}
-					if generateDone != nil {
-						close(generateDone)
-					}
-					// Re-enable user callbacks now that generation is complete
-					darwin.SetSuppressCallbacks(false)
-				}
-			}
-
-			// For non-prompt-file LLM mode, still re-enable callbacks after generation
-			if lt.OnInitialTurnDone == nil {
-				lt.OnInitialTurnDone = func() {
-					darwin.SetSuppressCallbacks(false)
-				}
-			}
-
 			tr = lt
 			llmTr = lt
 		}
@@ -198,19 +196,101 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Generate-only mode: drain messages without AppKit
+	// Set up recorder for generative transports (LLM or Claude Code) when caching
+	if cachePrompt != "" && cacheTmp != "" && (llmTr != nil || ccTr != nil) {
+		if err := os.MkdirAll(filepath.Dir(cacheTmp), 0755); err != nil {
+			jlog.Errorf("main", "", "cache: mkdir failed: %v", err)
+		} else {
+			f, err := os.Create(cacheTmp)
+			if err != nil {
+				jlog.Errorf("main", "", "cache: create tmp failed: %v", err)
+			} else {
+				recorder = engine.NewRecorder(f)
+			}
+		}
+	}
+
+	// Cache finalization function (shared by LLM and Claude Code)
+	// Called exactly once when generation completes. Closes cacheFinalized channel.
+	cacheFinalized = make(chan struct{})
+	finalizeCache := func() {
+		if recorder == nil {
+			return
+		}
+		recorder.Close()
+		if err := os.Rename(cacheTmp, cacheJsonl); err != nil {
+			jlog.Errorf("main", "", "cache: rename failed: %v", err)
+		} else {
+			jlog.Infof("main", "", "cache: wrote %s", cacheJsonl)
+		}
+		if err := engine.WriteCacheHash(cacheHash, cachePrompt, componentRef); err != nil {
+			jlog.Errorf("main", "", "cache: write hash failed: %v", err)
+		}
+		recorder = nil
+		select {
+		case <-cacheFinalized:
+		default:
+			close(cacheFinalized)
+		}
+	}
+
+	// Wire finalization callbacks
+	if llmTr != nil {
+		if *generateOnly {
+			generateDone = make(chan struct{})
+		}
+		lt := llmTr
+		lt.OnInitialTurnDone = func() {
+			finalizeCache()
+			if generateDone != nil {
+				close(generateDone)
+			}
+			darwin.SetSuppressCallbacks(false)
+		}
+	}
+	if ccTr != nil {
+		if *generateOnly {
+			generateDone = make(chan struct{})
+		}
+		ccTr.OnDone = func() {
+			jlog.Infof("main", "", "claude-code: generation complete, finalizing cache")
+			finalizeCache()
+			if generateDone != nil {
+				close(generateDone)
+			}
+		}
+	}
+
+	// Generate-only mode: route messages through a headless session for recording
 	if *generateOnly {
+		mockRend := &renderer.MockRenderer{}
+		mockDisp := &renderer.MockDispatcher{}
+		goSess := engine.NewSession(mockRend, mockDisp)
+		goSess.SetLibrary(lib)
+		if recorder != nil {
+			goSess.SetRecorder(recorder)
+		}
 		go func() {
 			tr.Start()
+			errCh := tr.Errors()
 			for {
 				select {
-				case _, ok := <-tr.Messages():
+				case msg, ok := <-tr.Messages():
 					if !ok {
+						goSess.FlushPendingComponents()
 						return
 					}
-				case _, ok := <-tr.Errors():
+					if msg == nil {
+						if llmTr != nil && llmTr.OnInitialTurnDone != nil {
+							llmTr.OnInitialTurnDone()
+						}
+						continue
+					}
+					goSess.HandleMessage(msg)
+				case _, ok := <-errCh:
 					if !ok {
-						return
+						errCh = nil
+						continue
 					}
 				}
 			}
@@ -245,6 +325,10 @@ func main() {
 	sess := engine.NewSession(rend, disp)
 	if ffiRegistry != nil {
 		sess.SetFFI(ffiRegistry)
+	}
+	sess.SetLibrary(lib)
+	if recorder != nil {
+		sess.SetRecorder(recorder)
 	}
 
 	// Pre-declare pm and cm so the process factory closure can capture them
@@ -286,7 +370,7 @@ func main() {
 				opts := []mcp.ServerOption{
 					mcp.WithProcessManager(pm),
 					mcp.WithChannelManager(cm),
-					mcp.WithComponentReference(transport.ComponentReference()),
+					mcp.WithComponentReference(transport.ComponentReference(lib.ComponentListForPrompt())),
 				}
 				srv := mcp.NewServer(sess, rend, disp, opts...)
 				port, cleanup, err := srv.ListenHTTP("localhost:0")
@@ -346,7 +430,7 @@ func main() {
 			opts := []mcp.ServerOption{
 				mcp.WithProcessManager(pm),
 				mcp.WithChannelManager(cm),
-				mcp.WithComponentReference(transport.ComponentReference()),
+				mcp.WithComponentReference(transport.ComponentReference(lib.ComponentListForPrompt())),
 			}
 			srv := mcp.NewServer(sess, rend, disp, opts...)
 			port, cleanup, err := srv.ListenHTTP("localhost:0")
@@ -405,6 +489,7 @@ func main() {
 		}()
 
 		tr.Start()
+		errCh := tr.Errors()
 
 		for {
 			select {
@@ -416,6 +501,13 @@ func main() {
 					}
 					jlog.Info("main", "", "transport closed")
 					return
+				}
+				// Nil sentinel = first turn done (all first-turn messages consumed)
+				if msg == nil {
+					if llmTr != nil && llmTr.OnInitialTurnDone != nil {
+						llmTr.OnInitialTurnDone()
+					}
+					continue
 				}
 				// Execute test messages and return real results to the LLM
 				if msg.Type == protocol.MsgTest && llmTr != nil {
@@ -436,9 +528,13 @@ func main() {
 				}
 				sess.HandleMessage(msg)
 
-			case err, ok := <-tr.Errors():
+			case err, ok := <-errCh:
 				if !ok {
-					return
+					// Errors channel closed — nil it out to stop selecting on it.
+					// Keep draining messages (file transport closes both channels
+					// simultaneously; exiting here would lose buffered messages).
+					errCh = nil
+					continue
 				}
 				jlog.Errorf("main", "", "transport error: %v", err)
 
@@ -461,6 +557,37 @@ func main() {
 				}
 			}
 		}
+	}()
+
+	// Handle SIGINT/SIGTERM: clean exit
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		jlog.Info("main", "", "signal received, cleaning up...")
+		// If cache was already finalized (generation complete), just exit
+		select {
+		case <-cacheFinalized:
+			jlog.Info("main", "", "cache already finalized, exiting")
+			os.Exit(0)
+		default:
+		}
+		// Generation still in progress — kill transport, wait briefly for
+		// OnDone to fire and finalize, then exit
+		if ccTr != nil {
+			ccTr.Stop()
+		}
+		select {
+		case <-cacheFinalized:
+			jlog.Info("main", "", "cache finalized after signal, exiting")
+		case <-time.After(2 * time.Second):
+			jlog.Info("main", "", "cache finalization timed out, discarding partial cache")
+			if recorder != nil {
+				recorder.Close()
+				recorder = nil
+			}
+		}
+		os.Exit(0)
 	}()
 
 	// Run the macOS event loop (blocks forever)

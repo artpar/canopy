@@ -19,6 +19,8 @@ type Session struct {
 	compDefs map[string]*protocol.DefineComponent
 	pm       *ProcessManager
 	cm       *ChannelManager
+	recorder *Recorder
+	library  *Library
 
 	// OnAction is called when any surface triggers a server-bound event.
 	OnAction func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -31,6 +33,24 @@ func NewSession(rend renderer.Renderer, dispatch renderer.Dispatcher) *Session {
 		dispatch: dispatch,
 		funcDefs: make(map[string]*FuncDef),
 		compDefs: make(map[string]*protocol.DefineComponent),
+	}
+}
+
+// SetRecorder sets the recorder for this session. When set, all recordable
+// messages passing through HandleMessage are written to the recorder.
+func (s *Session) SetRecorder(rec *Recorder) {
+	s.recorder = rec
+}
+
+// SetLibrary loads a component library into this session. All library
+// component definitions are merged into compDefs and propagated to surfaces.
+func (s *Session) SetLibrary(lib *Library) {
+	s.library = lib
+	for name, dc := range lib.Defs() {
+		s.compDefs[name] = dc
+	}
+	for _, surf := range s.surfaces {
+		surf.SetCompDefs(s.compDefs)
 	}
 }
 
@@ -66,6 +86,9 @@ func (s *Session) FlushPendingComponents() {
 func (s *Session) HandleMessage(msg *protocol.Message) {
 	defer logRecover("session", "", "HandleMessage")
 	jlog.Infof("session", msg.SurfaceID, "HandleMessage: type=%s", msg.Type)
+
+	// Record to cache file if a recorder is active
+	s.recorder.Record(msg)
 
 	// Flush buffered components before any non-updateComponents message.
 	// This ensures batched updateComponents calls render as a single pass.
@@ -352,6 +375,12 @@ func (s *Session) handleDefineComponent(dc protocol.DefineComponent) {
 		logWarn("session", "", fmt.Sprintf("redefining component %s", dc.Name))
 	}
 	s.compDefs[dc.Name] = &dc
+	// Persist to library during generation (when recorder is active)
+	if s.recorder != nil && s.library != nil {
+		if err := s.library.Save(&dc); err != nil {
+			logError("session", "", fmt.Sprintf("library save error: %v", err))
+		}
+	}
 	// Propagate to all existing surfaces
 	for _, surf := range s.surfaces {
 		surf.SetCompDefs(s.compDefs)
