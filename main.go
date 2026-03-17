@@ -87,6 +87,8 @@ func main() {
 	promptFile := flag.String("prompt-file", "", "Read prompt from file (overrides --prompt)")
 	regenerate := flag.Bool("regenerate", false, "Force fresh LLM call, ignore cache")
 	generateOnly := flag.Bool("generate-only", false, "Generate JSONL and exit without opening a window")
+	claudeCode := flag.String("claude-code", "", "Prompt for Claude Code to build UI (spawns claude subprocess)")
+	mcpHTTPAddr := flag.String("mcp-http", "", "Also listen for MCP on HTTP (e.g. localhost:8080)")
 	flag.Parse()
 
 	if *promptFile != "" {
@@ -104,11 +106,18 @@ func main() {
 	}
 
 	var tr transport.Transport
-	var llmTr *transport.LLMTransport // non-nil when using LLM transport
-	var generateDone chan struct{}    // closed when generate-only can exit
+	var llmTr *transport.LLMTransport        // non-nil when using LLM transport
+	var ccTr *transport.ClaudeCodeTransport   // non-nil when using Claude Code transport
+	var generateDone chan struct{}            // closed when generate-only can exit
 
 	args := flag.Args()
-	if len(args) > 0 && *prompt == "" {
+	if *claudeCode != "" {
+		// Claude Code mode — StartMCP set after session/renderer creation
+		ccTr = transport.NewClaudeCodeTransport(
+			transport.ClaudeCodeConfig{Prompt: *claudeCode, Model: *model},
+		)
+		tr = ccTr
+	} else if len(args) > 0 && *prompt == "" {
 		// File or directory mode: positional arg with no --prompt
 		tr = createFileTransport(args[0])
 	} else if *prompt != "" {
@@ -184,6 +193,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt\n")
 		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt-file prompt.txt\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt --generate-only\n")
+		fmt.Fprintf(os.Stderr, "       jview --claude-code \"Build a counter with + and - buttons\"\n")
 		fmt.Fprintf(os.Stderr, "       jview --ffi-config libs.json testdata/app.jsonl\n")
 		os.Exit(1)
 	}
@@ -237,8 +247,12 @@ func main() {
 		sess.SetFFI(ffiRegistry)
 	}
 
+	// Pre-declare pm and cm so the process factory closure can capture them
+	var pm *engine.ProcessManager
+	var cm *engine.ChannelManager
+
 	// Set up process manager with transport factory
-	pm := engine.NewProcessManager(sess, func(cfg protocol.ProcessTransportConfig) (engine.ProcessTransport, error) {
+	pm = engine.NewProcessManager(sess, func(cfg protocol.ProcessTransportConfig) (engine.ProcessTransport, error) {
 		switch cfg.Type {
 		case "file":
 			ft := transport.NewFileTransport(cfg.Path)
@@ -263,6 +277,35 @@ func main() {
 				Mode:     "tools",
 			}
 			return transport.NewLLMTransport(llmCfg), nil
+		case "claude-code":
+			cc := transport.NewClaudeCodeTransport(transport.ClaudeCodeConfig{
+				Prompt: cfg.Prompt,
+				Model:  cfg.Model,
+			})
+			cc.StartMCP = func() (*transport.MCPServerHandle, error) {
+				opts := []mcp.ServerOption{
+					mcp.WithProcessManager(pm),
+					mcp.WithChannelManager(cm),
+					mcp.WithComponentReference(transport.ComponentReference()),
+				}
+				srv := mcp.NewServer(sess, rend, disp, opts...)
+				port, cleanup, err := srv.ListenHTTP("localhost:0")
+				if err != nil {
+					return nil, err
+				}
+				return &transport.MCPServerHandle{
+					Port:    port,
+					Cleanup: cleanup,
+					PushAction: func(surfaceID, event string, data map[string]interface{}) {
+						srv.PushAction(mcp.PendingAction{
+							SurfaceID: surfaceID,
+							Event:     event,
+							Data:      data,
+						})
+					},
+				}, nil
+			}
+			return cc, nil
 		default:
 			return nil, fmt.Errorf("unknown process transport type: %q", cfg.Type)
 		}
@@ -270,11 +313,12 @@ func main() {
 	sess.SetProcessManager(pm)
 
 	// Set up channel manager for inter-process communication
-	cm := engine.NewChannelManager(sess)
+	cm = engine.NewChannelManager(sess)
 	sess.SetChannelManager(cm)
 
 	// Start embedded MCP server on stdin/stdout
-	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithProcessManager(pm), mcp.WithChannelManager(cm))
+	mcpOpts := []mcp.ServerOption{mcp.WithProcessManager(pm), mcp.WithChannelManager(cm)}
+	mcpServer := mcp.NewServer(sess, rend, disp, mcpOpts...)
 	toolNames := mcpServer.ToolNames()
 	jlog.Infof("main", "", "mcp: listening on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
 	go func() {
@@ -285,7 +329,46 @@ func main() {
 		}
 	}()
 
-	// Wire action events — route to process transport if ProcessID is set, else main transport
+	// Optional: also listen for MCP on HTTP alongside stdin/stdout
+	if *mcpHTTPAddr != "" {
+		port, cleanup, err := mcpServer.ListenHTTP(*mcpHTTPAddr)
+		if err != nil {
+			jlog.Errorf("main", "", "mcp-http: failed to listen: %v", err)
+		} else {
+			defer cleanup()
+			jlog.Infof("main", "", "mcp-http: listening on localhost:%d", port)
+		}
+	}
+
+	// Wire Claude Code transport's StartMCP now that deps are available
+	if ccTr != nil {
+		ccTr.StartMCP = func() (*transport.MCPServerHandle, error) {
+			opts := []mcp.ServerOption{
+				mcp.WithProcessManager(pm),
+				mcp.WithChannelManager(cm),
+				mcp.WithComponentReference(transport.ComponentReference()),
+			}
+			srv := mcp.NewServer(sess, rend, disp, opts...)
+			port, cleanup, err := srv.ListenHTTP("localhost:0")
+			if err != nil {
+				return nil, err
+			}
+			return &transport.MCPServerHandle{
+				Port:    port,
+				Cleanup: cleanup,
+				PushAction: func(surfaceID, event string, data map[string]interface{}) {
+					srv.PushAction(mcp.PendingAction{
+						SurfaceID: surfaceID,
+						Event:     event,
+						Data:      data,
+					})
+				},
+			}, nil
+		}
+	}
+
+	// Wire action events — route to process transport if ProcessID is set,
+	// also push to MCP server for polling, then forward to main transport.
 	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
 		if event.ProcessID != "" && pm != nil {
 			pm.SendTo(event.ProcessID, &protocol.Message{
@@ -294,6 +377,12 @@ func main() {
 			})
 			return
 		}
+		// Push to MCP action queue for get_pending_actions polling
+		mcpServer.PushAction(mcp.PendingAction{
+			SurfaceID: surfaceID,
+			Event:     event.Name,
+			Data:      data,
+		})
 		tr.SendAction(surfaceID, event, data)
 	}
 
@@ -461,8 +550,16 @@ func runMCP(args []string) {
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
 
-	// No-op action handler — MCP mode has no transport to forward actions to
-	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {}
+	// Set up process manager for MCP mode
+	pm := engine.NewProcessManager(sess, func(cfg protocol.ProcessTransportConfig) (engine.ProcessTransport, error) {
+		switch cfg.Type {
+		case "file":
+			return transport.NewFileTransport(cfg.Path), nil
+		default:
+			return nil, fmt.Errorf("unknown process transport type: %q", cfg.Type)
+		}
+	})
+	sess.SetProcessManager(pm)
 
 	// Set up channel manager
 	cm := engine.NewChannelManager(sess)
@@ -499,8 +596,17 @@ func runMCP(args []string) {
 	}
 
 	mcpTransport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
-	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithChannelManager(cm))
+	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithProcessManager(pm), mcp.WithChannelManager(cm))
 	toolNames := mcpServer.ToolNames()
+
+	// Wire actions to MCP action queue for get_pending_actions polling
+	sess.OnAction = func(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
+		mcpServer.PushAction(mcp.PendingAction{
+			SurfaceID: surfaceID,
+			Event:     event.Name,
+			Data:      data,
+		})
+	}
 	jlog.Infof("main", "", "mcp: server started on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
 
 	// Run MCP server in goroutine; on EOF, quit the app

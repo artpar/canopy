@@ -53,12 +53,46 @@ type ServerInfo struct {
 
 // ServerCapabilities describes what the server supports.
 type ServerCapabilities struct {
-	Tools *ToolsCapability `json:"tools,omitempty"`
+	Tools     *ToolsCapability     `json:"tools,omitempty"`
+	Resources *ResourcesCapability `json:"resources,omitempty"`
 }
 
 // ToolsCapability indicates tools support.
 type ToolsCapability struct {
 	ListChanged bool `json:"listChanged,omitempty"`
+}
+
+// ResourcesCapability indicates resources support.
+type ResourcesCapability struct{}
+
+// Resource describes an MCP resource.
+type Resource struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+// ResourcesListResult is the result of resources/list.
+type ResourcesListResult struct {
+	Resources []Resource `json:"resources"`
+}
+
+// ResourcesReadParams are the parameters for resources/read.
+type ResourcesReadParams struct {
+	URI string `json:"uri"`
+}
+
+// ResourceContent is a single content item in a resources/read response.
+type ResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+}
+
+// ResourcesReadResult is the result of resources/read.
+type ResourcesReadResult struct {
+	Contents []ResourceContent `json:"contents"`
 }
 
 // ClientInfo contains information about the MCP client.
@@ -153,12 +187,14 @@ func ErrorContent(msg string) ContentBlock {
 
 // MCP method names.
 const (
-	MethodInitialize  = "initialize"
-	MethodInitialized = "notifications/initialized"
-	MethodToolsList   = "tools/list"
-	MethodToolsCall   = "tools/call"
-	MethodPing        = "ping"
-	MethodCancelled   = "notifications/cancelled"
+	MethodInitialize    = "initialize"
+	MethodInitialized   = "notifications/initialized"
+	MethodToolsList     = "tools/list"
+	MethodToolsCall     = "tools/call"
+	MethodResourcesList = "resources/list"
+	MethodResourcesRead = "resources/read"
+	MethodPing          = "ping"
+	MethodCancelled     = "notifications/cancelled"
 )
 
 // Protocol version.

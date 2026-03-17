@@ -130,8 +130,13 @@ func (s *Surface) SetCompDefs(defs map[string]*protocol.DefineComponent) {
 // render pass happens when FlushPendingComponents is called — either by the
 // session before processing a non-updateComponents message, or explicitly.
 func (s *Surface) HandleUpdateComponents(msg protocol.UpdateComponents) {
+	jlog.Infof("surface", s.id, "HandleUpdateComponents: %d raw components", len(msg.Components))
+	for i, c := range msg.Components {
+		jlog.Debugf("surface", s.id, "  comp[%d]: id=%s type=%s children=%v", i, c.ComponentID, c.Type, c.Children)
+	}
 	comps := s.expandComponentInstances(msg.Components)
 	expanded := s.expandTemplates(comps)
+	jlog.Infof("surface", s.id, "HandleUpdateComponents: %d expanded → %d pending total", len(expanded), len(s.pendingComponents)+len(expanded))
 	s.pendingComponents = append(s.pendingComponents, expanded...)
 }
 
@@ -149,6 +154,7 @@ func (s *Surface) FlushPendingComponents() {
 	copy(prevRoots, oldRoots)
 	changed := s.tree.Update(pending)
 	removed := s.tree.Prune(prevRoots, changed)
+	jlog.Infof("surface", s.id, "FlushPendingComponents: %d changed, %d removed", len(changed), len(removed))
 	if len(removed) > 0 {
 		s.cleanupComponents(removed)
 	}

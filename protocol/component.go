@@ -59,6 +59,26 @@ type Component struct {
 	Scope        string                 `json:"scope,omitempty"`
 }
 
+// UnmarshalJSON handles both "id" and "componentId" for the component ID field.
+// JSONL files use "componentId" while MCP/external tools use "id".
+func (c *Component) UnmarshalJSON(data []byte) error {
+	type Alias Component
+	aux := &struct {
+		ID string `json:"id"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	// "id" is the alias — use it if componentId was not set
+	if c.ComponentID == "" && aux.ID != "" {
+		c.ComponentID = aux.ID
+	}
+	return nil
+}
+
 // Props holds all possible component properties across types.
 // Only the fields relevant to a component's Type are used.
 type Props struct {

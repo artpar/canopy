@@ -26,6 +26,7 @@ func (s *Server) registerTools() {
 	s.registerWaitFor()
 	s.registerSendMessage()
 	s.registerGetLogs()
+	s.registerGetPendingActions()
 	s.registerListProcesses()
 	s.registerCreateProcess()
 	s.registerStopProcess()
@@ -625,6 +626,53 @@ func (s *Server) registerGetLogs() {
 
 		result := jlog.Query(opts)
 		cb, err := JSONContent(result)
+		if err != nil {
+			return errorResult(err.Error())
+		}
+		return &ToolCallResult{Content: []ContentBlock{cb}}
+	})
+}
+
+// --- Action queue tool ---
+
+func (s *Server) registerGetPendingActions() {
+	s.register("get_pending_actions", "Poll for pending user actions (clicks, inputs). Returns immediately if actions are queued, or waits up to timeout_ms for new actions.", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"timeout_ms": {"type": "integer", "description": "Max wait time in ms for new actions (default 0 = no wait)"}
+		},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		var p struct {
+			TimeoutMS int `json:"timeout_ms"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+
+		// Try immediate drain first
+		actions := s.DrainActions()
+		if len(actions) > 0 {
+			cb, err := JSONContent(actions)
+			if err != nil {
+				return errorResult(err.Error())
+			}
+			return &ToolCallResult{Content: []ContentBlock{cb}}
+		}
+
+		// If timeout requested, wait for signal
+		if p.TimeoutMS > 0 {
+			select {
+			case <-s.actionCh:
+			case <-time.After(time.Duration(p.TimeoutMS) * time.Millisecond):
+			}
+			actions = s.DrainActions()
+		}
+
+		if len(actions) == 0 {
+			actions = []PendingAction{} // return empty array, not null
+		}
+		cb, err := JSONContent(actions)
 		if err != nil {
 			return errorResult(err.Error())
 		}

@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"jview/jlog"
 	"jview/protocol"
 	"jview/renderer"
 )
@@ -64,6 +65,7 @@ func (s *Session) FlushPendingComponents() {
 // HandleMessage routes a parsed A2UI message to the appropriate surface.
 func (s *Session) HandleMessage(msg *protocol.Message) {
 	defer logRecover("session", "", "HandleMessage")
+	jlog.Infof("session", msg.SurfaceID, "HandleMessage: type=%s", msg.Type)
 
 	// Flush buffered components before any non-updateComponents message.
 	// This ensures batched updateComponents calls render as a single pass.

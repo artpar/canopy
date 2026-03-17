@@ -618,6 +618,12 @@ func functionDocsForPrompt() string {
 	return b.String()
 }
 
+// ComponentReference returns the A2UI protocol reference text (the system prompt
+// without a user request appended). Used as MCP resource for Claude Code transport.
+func ComponentReference() string {
+	return systemPrompt("")
+}
+
 // systemPrompt returns the system message that teaches the LLM about A2UI.
 func systemPrompt(userPrompt string) string {
 	return `You are a UI builder. You create native macOS user interfaces using the A2UI protocol via tool calls.
@@ -641,7 +647,7 @@ AVAILABLE COMPONENTS:
 - DateTimeInput: Date/time picker. Props: enableDate (bool), enableTime (bool), dataBinding (JSON pointer)
 - SplitView: Multi-pane resizable layout (NSSplitView). Props: dividerStyle ("thin"|"thick"|"paneSplitter"), vertical (bool, REQUIRED — true for side-by-side panes like a 3-column layout), collapsedPane (number or functionCall, pane index to collapse, -1=none). Children = panes. IMPORTANT: Set style.width on the CHILD pane components (e.g. sidebar Column gets width:200), NOT on the SplitView itself. The SplitView should have NO width — it fills its parent. Always set vertical:true for multi-column layouts.
 - OutlineView: Hierarchical tree view (NSOutlineView). Props: outlineData (path to tree array), labelKey (string, default "name"), childrenKey (string, default "children"), iconKey (string, SF Symbol key), idKey (string, default "id"), selectedId (string or path), badgeKey (string, numeric badge hidden when 0), dataBinding (JSON pointer for selection)
-- RichTextEditor: Rich text editor (NSTextView). Props: richContent (markdown string or path), editable (bool, default true), formatBinding (JSON pointer for cursor format state: bold/italic/underline/strikethrough booleans), dataBinding (JSON pointer for content). CRITICAL: You MUST add an onChange handler to persist edits — without it, all typing is lost. onChange receives the new content at /_input path. Example: "onChange":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/selectedId"},"content",{"path":"/_input"}]}}}]}}}}
+- RichTextEditor: Rich text editor (NSTextView). Props: richContent (markdown string or path), editable (bool, default true), formatBinding (JSON pointer for cursor format state: bold/italic/underline/strikethrough booleans). NEVER use dataBinding on RichTextEditor — it conflicts with richContent+onChange and causes dual-write corruption. CRITICAL: You MUST add an onChange handler to persist edits — without it, all typing is lost. onChange receives the new content at /_input path. Example: "onChange":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"updateItem","args":[{"path":"/notes"},"id",{"path":"/selectedId"},"content",{"path":"/_input"}]}}}]}}}}
 - SearchField: Native search input (NSSearchField). Props: placeholder (string), value (string or path), dataBinding (JSON pointer for search text)
 
 CLIENT-SIDE ACTIONS (Button onClick):
@@ -896,6 +902,7 @@ DATA MODEL PATTERNS (use these instead of defineFunction):
    FOLDER TREE DATA — include noteCount for badge display:
    /folders = [{"id":"icloud","name":"iCloud","icon":"icloud","children":[{"id":"all-icloud","name":"All iCloud","icon":"tray.full.fill","noteCount":4},{"id":"notes","name":"Notes","icon":"folder.fill","noteCount":2,"children":[]},{"id":"work","name":"Work","icon":"folder.fill","noteCount":1,"children":[{"id":"meetings","name":"Meetings","icon":"folder.fill","noteCount":1}]}]},{"id":"mac","name":"On My Mac","icon":"laptopcomputer","children":[{"id":"personal","name":"Personal","icon":"folder.fill","noteCount":1}]},{"id":"trash","name":"Recently Deleted","icon":"trash","children":[]}]
    Every leaf folder MUST have "noteCount" matching the number of notes in that folder (shown as badge via badgeKey:"noteCount").
+   BADGE ACCURACY: When using badgeKey on OutlineView, the badge values in tree data MUST exactly match the count of items that would be shown when that node is selected. Cross-check: sum of leaf node badges under a parent should equal the parent's total. Miscounted badges confuse users and break trust.
 
 2. INLINE FILTERING for note list (full pattern with search + folder + account handling):
    The forEach value should be a single composed functionCall:
@@ -964,7 +971,7 @@ a2ui_updateToolbar({surfaceId:"main",items:[
   {"id":"underline","icon":"underline","label":"Underline","standardAction":"underline:","bordered":true,"selected":{"path":"/format/underline"}},
   {"id":"strikethrough","icon":"strikethrough","label":"Strikethrough","standardAction":"addStrikethrough:","bordered":true,"selected":{"path":"/format/strikethrough"}},
   {"flexible":true},
-  {"id":"search","searchField":true,"dataBinding":"/searchText"}
+  {"id":"search","searchField":true,"label":"Search","dataBinding":"/searchQuery"}
 ]})
 — Custom actions use {"action":{"action":{...}}} (double-nested). standardAction goes directly on the item (no action wrapper needed).
 
@@ -985,6 +992,7 @@ Template (must be in SAME updateComponents call as the noteList above):
 a2ui_updateMenu({surfaceId:"main",items:[
   {"id":"file","label":"File","children":[
     {"id":"newNote","label":"New Note","keyEquivalent":"n","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"append","args":[{"path":"/notes"},{"id":"new","title":"New Note","content":""}]}}}]}}}}},
+    {"id":"deleteNote","label":"Delete Note","keyEquivalent":"\b","action":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/notes","value":{"functionCall":{"name":"remove","args":[{"path":"/notes"},"id",{"path":"/selectedNoteId"}]}}},{"op":"replace","path":"/selectedNoteId","value":""}]}}}}},
     {"separator":true},
     {"id":"close","label":"Close","keyEquivalent":"w","standardAction":"performClose:"}
   ]},
@@ -1122,6 +1130,14 @@ Published values are always written to /channels/{channelId}/value, so component
 
 Subscribers can also specify a targetPath to receive values at a custom data model path.
 When a process stops, its channel subscriptions are automatically cleaned up.
+
+FINAL CONSTRAINTS (verify before finishing — violations break the app):
+1. RichTextEditor: ONLY use richContent + onChange. NEVER add dataBinding (causes dual-write corruption).
+2. Toolbar search items MUST include label and use the SAME dataBinding path as the forEach search filter.
+3. OutlineView badge values MUST match actual data counts. Cross-check before submitting.
+4. Do NOT add data model fields beyond what the app requires. Only add fields that are directly used by the UI.
+5. Every menu item with a keyboard shortcut MUST have keyEquivalent set (e.g. "\b" for backspace/delete).
+6. Component IDs, data model paths, and prop names must be consistent across menus, toolbar, components, and data model. A path mismatch silently breaks binding.
 
 USER REQUEST: ` + userPrompt
 }
