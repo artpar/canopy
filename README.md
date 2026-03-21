@@ -2,6 +2,18 @@
 
 Native macOS renderer for the [A2UI](https://a2ui.org) JSONL protocol. No webview, no Electron — real AppKit widgets driven by declarative JSON. Connect to any LLM and let it build native UIs in real-time.
 
+<p align="center">
+  <img src="docs/screenshots/notes.png" width="700" alt="Notes app built with jview" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/contact_form.png" width="250" alt="Contact form" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/calculator.png" width="160" alt="Calculator" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/tabs.png" width="250" alt="Tabs" />
+</p>
+
 ## What It Does
 
 jview renders A2UI JSONL as native Cocoa widgets. Messages come from static files or live from an LLM — the LLM calls tools to create windows, add components, and update data, producing a native macOS UI. User interactions (button clicks, form input) flow back as conversation turns, so the LLM can update the UI in response. Native libraries can be loaded at runtime via FFI — call any C function with any signature directly from the UI layer.
