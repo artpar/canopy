@@ -244,14 +244,33 @@ The LLM creates a window, initializes the data model, and renders components —
 ]}
 ```
 
+## Platform Support
+
+jview currently targets **macOS** using AppKit/Cocoa via CGo + Objective-C (`platform/darwin/`). The architecture is designed for multi-platform support — the engine, protocol, and transport layers are pure Go with no platform dependencies. Only `platform/darwin/` contains Objective-C code.
+
+The rendering layer is behind a [`Renderer` interface](renderer/renderer.go) that any GUI toolkit can implement. Adding a new platform means writing a single package that satisfies this interface — creating views, updating properties, setting children, handling callbacks, and capturing screenshots. The engine and protocol layers work unchanged.
+
+Potential platform implementations:
+
+| Platform | Toolkit | Package |
+|----------|---------|---------|
+| **macOS** | AppKit (Cocoa) | `platform/darwin/` (current) |
+| Linux | GTK4 | `platform/gtk/` |
+| Windows | WinUI 3 | `platform/windows/` |
+| Cross-platform | Qt | `platform/qt/` |
+
+Each component (Button, TextField, etc.) maps to that toolkit's native widget. The `MockRenderer` in `renderer/mock.go` serves as a reference implementation and enables headless testing on any OS.
+
 ## Project Structure
 
 ```
 protocol/          JSONL parsing, message types, dynamic values
 engine/            Session, Surface, DataModel, BindingTracker, Resolver, Substitution, FFI registry
 renderer/          Platform-agnostic Renderer interface + mock for tests
-platform/darwin/   CGo + Objective-C AppKit implementation
+platform/darwin/   CGo + Objective-C AppKit implementation (macOS)
 transport/         Message sources (file, directory, LLM; future: SSE, WebSocket)
+mcp/               Embedded MCP server (JSON-RPC 2.0 on stdin/stdout)
+docs/              Protocol spec, architecture docs
 testdata/          JSONL fixtures for testing and demos
 sample_apps/       LLM-generated sample applications (prompt.txt -> cached prompt.jsonl)
 ```
@@ -281,7 +300,7 @@ make generate-app A=calculator   # Generate without opening window
 make regen-app A=todo            # Force-regenerate from LLM
 ```
 
-Native e2e tests use `test` messages interleaved in JSONL files. They run with real `darwin.Renderer` and query actual NSView frames, fonts, and colors. See [spec.md](spec.md#test) for the full test message format.
+Native e2e tests use `test` messages interleaved in JSONL files. They run with real `darwin.Renderer` and query actual NSView frames, fonts, and colors. See [spec.md](docs/spec.md#test) for the full test message format.
 
 ## License
 
