@@ -75,7 +75,10 @@ void JVUpdateTextField(void* handle, const char* placeholder, const char* value,
     NSTextField *field = objc_getAssociatedObject(wrapper, kTextFieldInnerFieldKey);
     if (!field) return;
 
-    field.placeholderString = [NSString stringWithUTF8String:placeholder];
+    NSString *newPlaceholder = [NSString stringWithUTF8String:placeholder];
+    if (![field.placeholderString isEqualToString:newPlaceholder]) {
+        field.placeholderString = newPlaceholder;
+    }
 
     // Only update value if it actually changed (avoid cursor jump during typing)
     NSString *newValue = [NSString stringWithUTF8String:value];
@@ -83,7 +86,11 @@ void JVUpdateTextField(void* handle, const char* placeholder, const char* value,
         field.stringValue = newValue;
     }
 
-    field.editable = !readOnly;
+    // Only set editable if changed — setting it while editing causes field editor to resign
+    BOOL wantEditable = !readOnly;
+    if (field.editable != wantEditable) {
+        field.editable = wantEditable;
+    }
 }
 
 void JVSetTextFieldErrors(void* handle, const char** errors, int count) {
@@ -93,6 +100,12 @@ void JVSetTextFieldErrors(void* handle, const char** errors, int count) {
 
     // Remove old error labels (everything after the text field)
     NSMutableArray<NSView*> *errorLabels = objc_getAssociatedObject(wrapper, kTextFieldErrorStackKey);
+
+    // Fast path: no old errors and no new errors — nothing to do
+    if (count == 0 && (errorLabels == nil || errorLabels.count == 0)) {
+        return;
+    }
+
     if (errorLabels) {
         for (NSView *label in errorLabels) {
             [wrapper removeArrangedSubview:label];
