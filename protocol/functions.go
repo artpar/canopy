@@ -78,4 +78,7 @@ var FunctionRegistry = []FuncMeta{
 
 	// Utility functions
 	{Name: "uuid", Args: "", Desc: "generate UUID v4 string", Category: "string"},
+
+	// System functions
+	{Name: "shell", Args: "command", Desc: "execute shell command and return stdout as string", Category: "system"},
 }

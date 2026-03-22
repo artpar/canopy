@@ -1,0 +1,7 @@
+{"type":"createSurface","surfaceId":"main","title":"Shell Test","width":500,"height":300}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/cmd","value":"hello shell"}]}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"col","type":"Column","props":{"gap":10,"padding":20},"children":["field","btn","output"]},{"componentId":"field","type":"TextField","props":{"placeholder":"Enter command","dataBinding":"/cmd"}},{"componentId":"btn","type":"Button","props":{"label":"Run","style":"primary","onClick":{"action":{"functionCall":{"call":"updateDataModel","args":{"ops":[{"op":"replace","path":"/result","value":{"functionCall":{"name":"shell","args":[{"functionCall":{"name":"concat","args":["echo ",{"path":"/cmd"}]}}]}}}]}}}}}},{"componentId":"output","type":"Text","props":{"content":{"path":"/result"},"variant":"body"}}]}
+{"type":"test","surfaceId":"main","assert":"dataModel","path":"/cmd","expected":"hello shell"}
+{"type":"test","surfaceId":"main","assert":"component","componentId":"btn","props":{"label":"Run"}}
+{"type":"test","surfaceId":"main","event":"click","componentId":"btn"}
+{"type":"test","surfaceId":"main","assert":"dataModel","path":"/result","expected":"hello shell"}

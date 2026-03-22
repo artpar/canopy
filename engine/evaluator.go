@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"jview/protocol"
 	"math"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -86,6 +87,7 @@ func init() {
 		"uuid":                (*Evaluator).fnUUID,
 		"appendToTree":        (*Evaluator).fnAppendToTree,
 		"removeFromTree":      (*Evaluator).fnRemoveFromTree,
+		"shell":               (*Evaluator).fnShell,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa
@@ -1091,6 +1093,18 @@ func (e *Evaluator) fnRemoveFromTree(args []any) (any, error) {
 	}
 	targetID := toString(args[1])
 	return removeFromNode(tree, targetID), nil
+}
+
+func (e *Evaluator) fnShell(args []any) (any, error) {
+	if len(args) < 1 {
+		return "", fmt.Errorf("shell requires 1 arg (command)")
+	}
+	cmd := toString(args[0])
+	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("error: %s\n%s", err, strings.TrimSpace(string(out))), nil
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // removeFromNode recursively removes a node by ID from the tree.

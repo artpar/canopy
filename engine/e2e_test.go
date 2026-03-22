@@ -1166,6 +1166,24 @@ func TestE2ESearchFieldTests(t *testing.T) {
 	t.Logf("%d tests passed", len(results))
 }
 
+func TestE2EShellTests(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	results, err := RunTestFile(filepath.Join(fixtureDir(), "shell_test.jsonl"), mock, disp)
+	if err != nil {
+		t.Fatalf("RunTestFile: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("no tests found in shell_test.jsonl")
+	}
+	for _, r := range results {
+		if !r.Passed {
+			t.Errorf("FAIL: %s: %s", r.Name, r.Error)
+		}
+	}
+	t.Logf("%d tests passed", len(results))
+}
+
 func TestE2ENotesAppTests(t *testing.T) {
 	runSampleAppTests(t, "sample_apps/notes/prompt.jsonl")
 }

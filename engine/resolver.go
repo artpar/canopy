@@ -81,7 +81,14 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 
 	case protocol.CompTextField:
 		p.Placeholder = r.resolveString(comp.ComponentID, cp.Placeholder)
-		p.Value = r.resolveString(comp.ComponentID, cp.Value)
+		if cp.Value != nil {
+			p.Value = r.resolveString(comp.ComponentID, cp.Value)
+		} else if cp.DataBinding != "" {
+			// Auto-read from data binding path when value prop is not explicitly set
+			if val, ok := r.dm.Get(cp.DataBinding); ok {
+				p.Value = toString(val)
+			}
+		}
 		p.InputType = cp.InputType
 		if p.InputType == "" {
 			p.InputType = "shortText"
@@ -184,7 +191,13 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 
 	case protocol.CompSearchField:
 		p.Placeholder = r.resolveString(comp.ComponentID, cp.Placeholder)
-		p.Value = r.resolveString(comp.ComponentID, cp.Value)
+		if cp.Value != nil {
+			p.Value = r.resolveString(comp.ComponentID, cp.Value)
+		} else if cp.DataBinding != "" {
+			if val, ok := r.dm.Get(cp.DataBinding); ok {
+				p.Value = toString(val)
+			}
+		}
 		p.DataBinding = cp.DataBinding
 
 	case protocol.CompOutlineView:
@@ -205,6 +218,15 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 		p.SelectedID = r.resolveString(comp.ComponentID, cp.SelectedID)
 		p.BadgeKey = cp.BadgeKey
 		p.DataBinding = cp.DataBinding
+
+	case protocol.CompProgressBar:
+		p.Min = r.resolveNumber(comp.ComponentID, cp.Min)
+		p.Max = r.resolveNumber(comp.ComponentID, cp.Max)
+		if p.Max == 0 && cp.Max == nil {
+			p.Max = 100
+		}
+		p.ProgressValue = r.resolveNumber(comp.ComponentID, cp.ProgressValue)
+		p.Indeterminate = r.resolveBool(comp.ComponentID, cp.Indeterminate)
 
 	case protocol.CompRichTextEditor:
 		p.RichContent = r.resolveString(comp.ComponentID, cp.RichContent)

@@ -49,6 +49,9 @@ type ClaudeCodeTransport struct {
 	// finalize cache files.
 	OnDone func()
 
+	// OnStatus is called with progress updates at key lifecycle points.
+	OnStatus func(status string)
+
 	// Runtime state
 	mcpHandle *MCPServerHandle
 	cmd       *exec.Cmd
@@ -104,6 +107,7 @@ func (t *ClaudeCodeTransport) run() {
 	}
 
 	// Start HTTP MCP server
+	t.emitStatus("Starting MCP server...")
 	handle, err := t.StartMCP()
 	if err != nil {
 		t.errors <- fmt.Errorf("claude-code transport: start HTTP MCP: %w", err)
@@ -126,6 +130,7 @@ func (t *ClaudeCodeTransport) run() {
 	}
 
 	// Spawn claude process
+	t.emitStatus("Launching Claude Code...")
 	jlog.Infof("transport", "", "claude-code: spawning claude -p on port %d", handle.Port)
 	jlog.Infof("transport", "", "claude-code: mcp-config=%s ref=%s", mcpConfigPath, refPath)
 	t.spawnClaude(mcpConfigPath, refPath, t.config.Prompt)
@@ -141,6 +146,12 @@ func filterEnv(env []string, key string) []string {
 		}
 	}
 	return out
+}
+
+func (t *ClaudeCodeTransport) emitStatus(status string) {
+	if t.OnStatus != nil {
+		t.OnStatus(status)
+	}
 }
 
 func (t *ClaudeCodeTransport) writeMCPConfig() (string, error) {
@@ -181,7 +192,11 @@ func (t *ClaudeCodeTransport) spawnClaude(mcpConfigPath, refPath, prompt string)
 			"Read %s for the A2UI protocol reference. "+
 			"Use send_message to create surfaces and components. "+
 			"Use take_screenshot to verify your layout. "+
-			"Use get_pending_actions to poll for user interactions.",
+			"Build SELF-CONTAINED apps: wire all interactivity via client-side actions "+
+			"(onClick with updateDataModel + functionCalls). "+
+			"For apps that need external commands (whois, curl, etc.), use the shell() function "+
+			"in functionCall values — e.g. shell(concat(\"whois \", {path:\"/domain\"})). "+
+			"Do NOT use get_pending_actions or server-side polling — the app must work after you exit.",
 		refPath,
 	)
 
@@ -214,6 +229,7 @@ func (t *ClaudeCodeTransport) spawnClaude(mcpConfigPath, refPath, prompt string)
 	}
 
 	jlog.Infof("transport", "", "claude-code: process started (pid %d)", t.cmd.Process.Pid)
+	t.emitStatus("Claude is thinking...")
 
 	// Read stdout for logging
 	go func() {

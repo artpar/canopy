@@ -565,6 +565,7 @@ var categoryOrder = []struct {
 	{"logic", "Logic functions"},
 	{"array", "Array/list functions"},
 	{"object", "Object functions"},
+	{"system", "System functions"},
 }
 
 // functionDocsForPrompt generates the AVAILABLE FUNCTIONS block from the registry.
@@ -726,7 +727,14 @@ Function call args are POSITIONAL (an array), and each arg can itself be a liter
 
 IMPORTANT: Do NOT invent syntax like {"$fn": ...}, {"$ref": ...}, or named parameters like {"condition": ..., "then": ..., "else": ...}. The ONLY valid object forms in a value are {"path": "..."} and {"functionCall": {"name": "...", "args": [...]}}.
 
-IMPORTANT: Only use functions listed in AVAILABLE FUNCTIONS below. Do NOT invent functions. Common patterns:
+IMPORTANT: Only use functions listed in AVAILABLE FUNCTIONS below. Do NOT invent functions.
+
+SHELL EXECUTION:
+Use shell(command) to run external commands and capture output. The command arg can be a literal or a functionCall (e.g. concat).
+Example — whois lookup: shell(concat("whois ", {path: "/domain"})) runs "whois example.com" and returns the output as a string.
+This makes apps self-contained: buttons can run curl, whois, dig, etc. without server-side polling.
+
+Common patterns:
 - Count matching items: countWhere(list, key, value) or length(filter(list, key, value))
 - Truncate string: substring(str, 0, 80) — substring safely handles strings shorter than the limit, no min/if needed
 - Get nested field from found item: getField(find(list, idKey, idValue), fieldName)
