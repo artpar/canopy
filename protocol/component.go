@@ -28,6 +28,7 @@ const (
 	CompSearchField   ComponentType = "SearchField"
 	CompOutlineView   ComponentType = "OutlineView"
 	CompRichTextEditor ComponentType = "RichTextEditor"
+	CompProgressBar    ComponentType = "ProgressBar"
 )
 
 // DynamicStyleProps holds visual styling overrides applicable to any component.
@@ -59,8 +60,21 @@ type Component struct {
 	Scope        string                 `json:"scope,omitempty"`
 }
 
-// UnmarshalJSON handles both "id" and "componentId" for the component ID field.
-// JSONL files use "componentId" while MCP/external tools use "id".
+// componentTypeAliases maps common LLM-hallucinated type names to valid types.
+var componentTypeAliases = map[ComponentType]ComponentType{
+	"ScrollView": CompList,
+	"Scroll":     CompList,
+	"Stack":      CompColumn,
+	"VStack":     CompColumn,
+	"HStack":     CompRow,
+	"Label":      CompText,
+	"Input":      CompTextField,
+	"TextInput":  CompTextField,
+	"Separator":  CompDivider,
+}
+
+// UnmarshalJSON handles both "id" and "componentId" for the component ID field,
+// and normalizes hallucinated component type names to valid types.
 func (c *Component) UnmarshalJSON(data []byte) error {
 	type Alias Component
 	aux := &struct {
@@ -75,6 +89,10 @@ func (c *Component) UnmarshalJSON(data []byte) error {
 	// "id" is the alias — use it if componentId was not set
 	if c.ComponentID == "" && aux.ID != "" {
 		c.ComponentID = aux.ID
+	}
+	// Normalize hallucinated type names
+	if mapped, ok := componentTypeAliases[c.Type]; ok {
+		c.Type = mapped
 	}
 	return nil
 }
@@ -184,6 +202,10 @@ type Props struct {
 	Editable      *DynamicBoolean `json:"editable,omitempty"`      // default true
 	OnRichChange  *EventAction    `json:"onRichChange,omitempty"`  // fired on content change
 	FormatBinding string          `json:"formatBinding,omitempty"` // JSON Pointer for cursor format state
+
+	// ProgressBar
+	ProgressValue   *DynamicNumber  `json:"progressValue,omitempty"`
+	Indeterminate   *DynamicBoolean `json:"indeterminate,omitempty"`
 
 	// Universal props
 	ContextMenu json.RawMessage `json:"contextMenu,omitempty"` // []MenuItem for right-click menu
