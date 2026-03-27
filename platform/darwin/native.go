@@ -82,7 +82,10 @@ func (n *NativeProvider) Notify(title, body, subtitle string) error {
 	defer C.free(unsafe.Pointer(cTitle))
 	defer C.free(unsafe.Pointer(cBody))
 	defer C.free(unsafe.Pointer(cSubtitle))
-	C.JVSendNotification(cTitle, cBody, cSubtitle)
+	rc := C.JVSendNotification(cTitle, cBody, cSubtitle)
+	if rc != 0 {
+		return fmt.Errorf("notifications unavailable (no app bundle)")
+	}
 	return nil
 }
 

@@ -27,21 +27,34 @@ type CapturedAction struct {
 	Data      map[string]interface{}
 }
 
+// TestOption configures the test runner.
+type TestOption func(*Session)
+
+// WithNativeProvider injects a NativeProvider into the test session.
+func WithNativeProvider(np renderer.NativeProvider) TestOption {
+	return func(s *Session) { s.SetNativeProvider(np) }
+}
+
 // RunTestFile reads a JSONL file and executes all test messages using the given
 // renderer and dispatcher. For e2e tests, pass real darwin.Renderer+Dispatcher.
-func RunTestFile(path string, rend renderer.Renderer, disp renderer.Dispatcher) ([]TestResult, error) {
+func RunTestFile(path string, rend renderer.Renderer, disp renderer.Dispatcher, opts ...TestOption) ([]TestResult, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return RunTests(f, rend, disp)
+	return RunTests(f, rend, disp, opts...)
 }
 
 // RunTests reads JSONL from r, builds app state from non-test messages,
 // then executes test messages in order.
-func RunTests(r io.Reader, rend renderer.Renderer, disp renderer.Dispatcher) ([]TestResult, error) {
+func RunTests(r io.Reader, rend renderer.Renderer, disp renderer.Dispatcher, opts ...TestOption) ([]TestResult, error) {
 	sess := NewSession(rend, disp)
+
+	// Apply options
+	for _, opt := range opts {
+		opt(sess)
+	}
 
 	// Attach channel manager so channel messages work in tests
 	cm := NewChannelManager(sess)

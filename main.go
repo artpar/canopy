@@ -845,7 +845,7 @@ func runTests(path string) {
 	disp := &renderer.MockDispatcher{}
 	rend := darwin.NewRenderer()
 
-	results, err := engine.RunTestFile(path, rend, disp)
+	results, err := engine.RunTestFile(path, rend, disp, engine.WithNativeProvider(darwin.NewNativeProvider()))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

@@ -1,8 +1,8 @@
 #pragma once
 #include <stdint.h>
 
-// Notifications
-void JVSendNotification(const char *title, const char *body, const char *subtitle);
+// Notifications — returns 0 on success, 1 if no app bundle available.
+int JVSendNotification(const char *title, const char *body, const char *subtitle);
 
 // Clipboard
 const char* JVClipboardRead(void);

@@ -13,10 +13,22 @@ extern NSMutableDictionary<NSString*, NSWindow*> *windowMap;
 // --- Notifications ---
 
 static BOOL notificationAuthRequested = NO;
+static BOOL notificationsAvailable = NO;
+
+static BOOL checkNotificationsAvailable(void) {
+    // UNUserNotificationCenter requires a valid app bundle (Info.plist).
+    // When running as a bare binary (e.g. during tests), accessing it crashes.
+    NSBundle *main = [NSBundle mainBundle];
+    if (!main.bundleIdentifier) return NO;
+    return YES;
+}
 
 static void ensureNotificationAuth(void) {
     if (notificationAuthRequested) return;
     notificationAuthRequested = YES;
+
+    if (!checkNotificationsAvailable()) return;
+    notificationsAvailable = YES;
 
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound)
@@ -25,8 +37,11 @@ static void ensureNotificationAuth(void) {
     }];
 }
 
-void JVSendNotification(const char *title, const char *body, const char *subtitle) {
+// Returns 0 on success, 1 if notifications unavailable (no bundle).
+int JVSendNotification(const char *title, const char *body, const char *subtitle) {
     ensureNotificationAuth();
+
+    if (!notificationsAvailable) return 1;
 
     NSString *nsTitle = title ? [NSString stringWithUTF8String:title] : @"";
     NSString *nsBody = body ? [NSString stringWithUTF8String:body] : @"";
@@ -46,6 +61,7 @@ void JVSendNotification(const char *title, const char *body, const char *subtitl
                                                                           trigger:nil]; // Deliver immediately
     [[UNUserNotificationCenter currentNotificationCenter] addNotificationRequest:request
                                                            withCompletionHandler:nil];
+    return 0;
 }
 
 // --- Clipboard ---

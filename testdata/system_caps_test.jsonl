@@ -1,0 +1,8 @@
+{"type":"createSurface","surfaceId":"main","title":"System Caps Test","width":400,"height":200}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"padding":10},"children":["t1"]},{"componentId":"t1","type":"Text","props":{"content":"test"}}]}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/writeResult","value":{"functionCall":{"name":"clipboardWrite","args":["jview_test_clipboard_42"]}}}]}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/readResult","value":{"functionCall":{"name":"clipboardRead","args":[]}}}]}
+{"type":"test","surfaceId":"main","name":"clipboard write returns copied","steps":[{"assert":"dataModel","path":"/writeResult","value":"copied"}]}
+{"type":"test","surfaceId":"main","name":"clipboard roundtrip","steps":[{"assert":"dataModel","path":"/readResult","value":"jview_test_clipboard_42"}]}
+{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"add","path":"/notifyResult","value":{"functionCall":{"name":"notify","args":["Test","jview system caps test"]}}}]}
+{"type":"test","surfaceId":"main","name":"notify returns result","steps":[{"assert":"dataModel","path":"/notifyResult","value":"unavailable"}]}

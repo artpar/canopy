@@ -24,7 +24,7 @@ func (e *Evaluator) fnNotify(args []any) (any, error) {
 		subtitle = toString(args[2])
 	}
 	if err := e.Native.Notify(title, body, subtitle); err != nil {
-		return nil, err
+		return "unavailable", nil
 	}
 	return "sent", nil
 }
