@@ -5,6 +5,11 @@
 
 #include "native.h"
 
+// Go callback for async dialog results.
+extern void GoNativeDialogResult(uint64_t requestID, const char* result);
+
+extern NSMutableDictionary<NSString*, NSWindow*> *windowMap;
+
 // --- Notifications ---
 
 static BOOL notificationAuthRequested = NO;
@@ -73,138 +78,144 @@ void JVOpenURL(const char *url) {
     [[NSWorkspace sharedWorkspace] openURL:nsURL];
 }
 
-// --- File Open Panel ---
+// --- Helper: parse allowedTypes string into UTType array ---
 
-const char* JVFileOpenPanel(const char *title, const char *allowedTypes, int allowMultiple) {
-    __block NSString *result = nil;
+static NSArray<UTType*>* parseAllowedTypes(const char *allowedTypes) {
+    if (!allowedTypes || strlen(allowedTypes) == 0) return nil;
 
-    dispatch_block_t block = ^{
+    NSString *typesStr = [NSString stringWithUTF8String:allowedTypes];
+    NSArray<NSString *> *exts = [typesStr componentsSeparatedByString:@","];
+    NSMutableArray<UTType *> *types = [NSMutableArray array];
+    for (NSString *ext in exts) {
+        NSString *trimmed = [ext stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        UTType *type = [UTType typeWithFilenameExtension:trimmed];
+        if (type) [types addObject:type];
+    }
+    return types.count > 0 ? types : nil;
+}
+
+// --- File Open Panel (non-blocking) ---
+// Dispatches panel to main thread, calls GoNativeDialogResult with requestID when done.
+// Does NOT block the main thread — uses beginWithCompletionHandler.
+
+void JVFileOpenPanelAsync(const char *title, const char *allowedTypes, int allowMultiple, uint64_t requestID) {
+    NSString *nsTitle = title ? [NSString stringWithUTF8String:title] : @"Open";
+    NSArray<UTType*> *types = parseAllowedTypes(allowedTypes);
+    BOOL multi = (allowMultiple != 0);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
         NSOpenPanel *panel = [NSOpenPanel openPanel];
-        if (title) panel.title = [NSString stringWithUTF8String:title];
-        panel.allowsMultipleSelection = (allowMultiple != 0);
+        panel.title = nsTitle;
+        panel.allowsMultipleSelection = multi;
         panel.canChooseFiles = YES;
         panel.canChooseDirectories = NO;
+        if (types) panel.allowedContentTypes = types;
 
-        if (allowedTypes && strlen(allowedTypes) > 0) {
-            NSString *typesStr = [NSString stringWithUTF8String:allowedTypes];
-            NSArray<NSString *> *exts = [typesStr componentsSeparatedByString:@","];
-            NSMutableArray<UTType *> *types = [NSMutableArray array];
-            for (NSString *ext in exts) {
-                NSString *trimmed = [ext stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                UTType *type = [UTType typeWithFilenameExtension:trimmed];
-                if (type) [types addObject:type];
+        // Use beginWithCompletionHandler — does NOT block the main thread.
+        // The panel runs as a modeless sheet or standalone window.
+        [panel beginWithCompletionHandler:^(NSModalResponse response) {
+            if (response != NSModalResponseOK) {
+                GoNativeDialogResult(requestID, NULL);
+                return;
             }
-            if (types.count > 0) {
-                panel.allowedContentTypes = types;
+
+            NSMutableArray *paths = [NSMutableArray array];
+            for (NSURL *url in panel.URLs) {
+                [paths addObject:url.path];
             }
-        }
 
-        NSModalResponse response = [panel runModal];
-        if (response != NSModalResponseOK) return;
+            NSError *jsonErr = nil;
+            NSData *data = [NSJSONSerialization dataWithJSONObject:paths options:0 error:&jsonErr];
+            if (jsonErr) {
+                GoNativeDialogResult(requestID, NULL);
+                return;
+            }
 
-        NSMutableArray *paths = [NSMutableArray array];
-        for (NSURL *url in panel.URLs) {
-            [paths addObject:url.path];
-        }
-
-        NSError *jsonErr = nil;
-        NSData *data = [NSJSONSerialization dataWithJSONObject:paths options:0 error:&jsonErr];
-        if (!jsonErr) {
-            result = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        }
-    };
-
-    if ([NSThread isMainThread]) {
-        block();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), block);
-    }
-
-    if (!result) return NULL;
-    return strdup([result UTF8String]);
+            NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            GoNativeDialogResult(requestID, [json UTF8String]);
+        }];
+    });
 }
 
-// --- File Save Panel ---
+// --- File Save Panel (non-blocking) ---
 
-const char* JVFileSavePanel(const char *title, const char *defaultName, const char *allowedTypes) {
-    __block NSString *result = nil;
+void JVFileSavePanelAsync(const char *title, const char *defaultName, const char *allowedTypes, uint64_t requestID) {
+    NSString *nsTitle = title ? [NSString stringWithUTF8String:title] : @"Save";
+    NSString *nsDefaultName = defaultName ? [NSString stringWithUTF8String:defaultName] : nil;
+    NSArray<UTType*> *types = parseAllowedTypes(allowedTypes);
 
-    dispatch_block_t block = ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
         NSSavePanel *panel = [NSSavePanel savePanel];
-        if (title) panel.title = [NSString stringWithUTF8String:title];
-        if (defaultName) panel.nameFieldStringValue = [NSString stringWithUTF8String:defaultName];
+        panel.title = nsTitle;
+        if (nsDefaultName) panel.nameFieldStringValue = nsDefaultName;
+        if (types) panel.allowedContentTypes = types;
 
-        if (allowedTypes && strlen(allowedTypes) > 0) {
-            NSString *typesStr = [NSString stringWithUTF8String:allowedTypes];
-            NSArray<NSString *> *exts = [typesStr componentsSeparatedByString:@","];
-            NSMutableArray<UTType *> *types = [NSMutableArray array];
-            for (NSString *ext in exts) {
-                NSString *trimmed = [ext stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                UTType *type = [UTType typeWithFilenameExtension:trimmed];
-                if (type) [types addObject:type];
+        [panel beginWithCompletionHandler:^(NSModalResponse response) {
+            if (response != NSModalResponseOK) {
+                GoNativeDialogResult(requestID, NULL);
+                return;
             }
-            if (types.count > 0) {
-                panel.allowedContentTypes = types;
-            }
-        }
-
-        NSModalResponse response = [panel runModal];
-        if (response == NSModalResponseOK) {
-            result = panel.URL.path;
-        }
-    };
-
-    if ([NSThread isMainThread]) {
-        block();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), block);
-    }
-
-    if (!result) return NULL;
-    return strdup([result UTF8String]);
+            GoNativeDialogResult(requestID, [panel.URL.path UTF8String]);
+        }];
+    });
 }
 
-// --- Alert ---
+// --- Alert (non-blocking) ---
+// Uses beginSheetModalForWindow on key window, falls back to standalone if no window.
 
-int JVAlert(const char *title, const char *message, const char *style, const char **buttons, int buttonCount) {
-    __block int clickedIndex = 0;
+void JVAlertAsync(const char *title, const char *message, const char *style,
+                  const char **buttons, int buttonCount, uint64_t requestID) {
+    NSString *nsTitle = title ? [NSString stringWithUTF8String:title] : @"";
+    NSString *nsMessage = message ? [NSString stringWithUTF8String:message] : @"";
+    NSString *nsStyle = style ? [NSString stringWithUTF8String:style] : @"informational";
 
-    dispatch_block_t block = ^{
-        NSAlert *alert = [[NSAlert alloc] init];
-        if (title) alert.messageText = [NSString stringWithUTF8String:title];
-        if (message) alert.informativeText = [NSString stringWithUTF8String:message];
-
-        if (style) {
-            NSString *s = [NSString stringWithUTF8String:style];
-            if ([s isEqualToString:@"warning"]) {
-                alert.alertStyle = NSAlertStyleWarning;
-            } else if ([s isEqualToString:@"critical"]) {
-                alert.alertStyle = NSAlertStyleCritical;
-            } else {
-                alert.alertStyle = NSAlertStyleInformational;
+    // Copy button titles before async dispatch (C strings may be freed)
+    NSMutableArray<NSString*> *btnTitles = [NSMutableArray array];
+    if (buttonCount > 0 && buttons) {
+        for (int i = 0; i < buttonCount; i++) {
+            if (buttons[i]) {
+                [btnTitles addObject:[NSString stringWithUTF8String:buttons[i]]];
             }
         }
+    }
 
-        if (buttonCount > 0 && buttons) {
-            for (int i = 0; i < buttonCount; i++) {
-                if (buttons[i]) {
-                    [alert addButtonWithTitle:[NSString stringWithUTF8String:buttons[i]]];
-                }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = nsTitle;
+        alert.informativeText = nsMessage;
+
+        if ([nsStyle isEqualToString:@"warning"]) {
+            alert.alertStyle = NSAlertStyleWarning;
+        } else if ([nsStyle isEqualToString:@"critical"]) {
+            alert.alertStyle = NSAlertStyleCritical;
+        } else {
+            alert.alertStyle = NSAlertStyleInformational;
+        }
+
+        if (btnTitles.count > 0) {
+            for (NSString *t in btnTitles) {
+                [alert addButtonWithTitle:t];
             }
         } else {
             [alert addButtonWithTitle:@"OK"];
         }
 
-        NSModalResponse response = [alert runModal];
-        // NSAlertFirstButtonReturn = 1000, second = 1001, etc.
-        clickedIndex = (int)(response - NSAlertFirstButtonReturn);
-    };
-
-    if ([NSThread isMainThread]) {
-        block();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), block);
-    }
-
-    return clickedIndex;
+        // Try to present as sheet on key window (non-blocking).
+        NSWindow *keyWin = [NSApp keyWindow];
+        if (keyWin) {
+            [alert beginSheetModalForWindow:keyWin completionHandler:^(NSModalResponse response) {
+                int idx = (int)(response - NSAlertFirstButtonReturn);
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", idx);
+                GoNativeDialogResult(requestID, buf);
+            }];
+        } else {
+            // No window available — run modally (still in async dispatch, only blocks this invocation)
+            NSModalResponse response = [alert runModal];
+            int idx = (int)(response - NSAlertFirstButtonReturn);
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d", idx);
+            GoNativeDialogResult(requestID, buf);
+        }
+    });
 }

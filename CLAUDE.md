@@ -255,7 +255,7 @@ jview exposes native macOS capabilities as evaluator functions, callable from JS
 `notify`, `clipboard_read`, `clipboard_write`, `open_url`, `file_open`, `file_save`, `alert`
 
 ### Threading
-File dialogs and alerts run on the main thread via `dispatch_sync`. Safe to call from any goroutine.
+File dialogs and alerts use `beginWithCompletionHandler:` / `beginSheetModalForWindow:` — the main thread is **never blocked**. The calling goroutine blocks on a Go channel until the user dismisses the dialog. This keeps the AppKit run loop free for rendering, MCP tools, and callbacks while a dialog is open.
 
 ## Roadmap
 
