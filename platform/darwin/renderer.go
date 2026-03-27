@@ -120,6 +120,8 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 		handle = createOutlineView(node, surfaceID)
 	case protocol.CompRichTextEditor:
 		handle = createRichTextEditorView(node, surfaceID)
+	case protocol.CompProgressBar:
+		handle = createProgressBarView(node)
 	default:
 		jlog.Warnf("darwin", surfaceID, "unsupported component type %s", node.Type)
 		return 0
@@ -196,6 +198,8 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 		updateOutlineView(handle, node)
 	case protocol.CompRichTextEditor:
 		updateRichTextEditorView(handle, node)
+	case protocol.CompProgressBar:
+		updateProgressBarView(handle, node)
 	default:
 		jlog.Warnf("darwin", surfaceID, "unsupported update for component type %s", node.Type)
 	}

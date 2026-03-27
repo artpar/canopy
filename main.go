@@ -91,6 +91,7 @@ func main() {
 	regenerate := flag.Bool("regenerate", false, "Force fresh LLM call, ignore cache")
 	generateOnly := flag.Bool("generate-only", false, "Generate JSONL and exit without opening a window")
 	claudeCode := flag.String("claude-code", "", "Prompt for Claude Code to build UI (spawns claude subprocess)")
+	watch := flag.Bool("watch", false, "Watch JSONL files for changes and reload automatically")
 	mcpHTTPAddr := flag.String("mcp-http", "", "Also listen for MCP on HTTP (e.g. localhost:8080)")
 	flag.Parse()
 
@@ -146,7 +147,11 @@ func main() {
 		}
 	} else if len(args) > 0 && *prompt == "" {
 		// File or directory mode: positional arg with no --prompt
-		tr = createFileTransport(args[0])
+		if *watch {
+			tr = transport.NewWatchTransport(args[0])
+		} else {
+			tr = createFileTransport(args[0])
+		}
 	} else if *prompt != "" {
 		// Determine cache paths
 		if *promptFile != "" {
@@ -192,6 +197,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt-file prompt.txt\n")
 		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt --generate-only\n")
 		fmt.Fprintf(os.Stderr, "       jview --claude-code \"Build a counter with + and - buttons\"\n")
+		fmt.Fprintf(os.Stderr, "       jview --watch testdata/contact_form.jsonl\n")
 		fmt.Fprintf(os.Stderr, "       jview --ffi-config libs.json testdata/app.jsonl\n")
 		os.Exit(1)
 	}
@@ -320,6 +326,7 @@ func main() {
 
 	// Interactive mode: initialize platform and engine
 	darwin.AppInit()
+	darwin.ShowSplashWindow("jview", 400, 200)
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
@@ -424,6 +431,13 @@ func main() {
 		}
 	}
 
+	// Wire Claude Code transport status updates to splash window
+	if ccTr != nil {
+		ccTr.OnStatus = func(status string) {
+			disp.RunOnMain(func() { darwin.UpdateSplashStatus(status) })
+		}
+	}
+
 	// Wire Claude Code transport's StartMCP now that deps are available
 	if ccTr != nil {
 		ccTr.StartMCP = func() (*transport.MCPServerHandle, error) {
@@ -433,6 +447,24 @@ func main() {
 				mcp.WithComponentReference(transport.ComponentReference(lib.ComponentListForPrompt())),
 			}
 			srv := mcp.NewServer(sess, rend, disp, opts...)
+			srv.OnToolCall = func(toolName string) {
+				var status string
+				switch toolName {
+				case "send_message":
+					status = "Building UI..."
+				case "take_screenshot":
+					status = "Verifying layout..."
+				case "get_tree", "get_component":
+					status = "Inspecting components..."
+				case "get_data_model", "set_data_model":
+					status = "Updating data..."
+				case "click", "fill", "toggle", "interact":
+					status = "Testing interactions..."
+				default:
+					return
+				}
+				disp.RunOnMain(func() { darwin.UpdateSplashStatus(status) })
+			}
 			port, cleanup, err := srv.ListenHTTP("localhost:0")
 			if err != nil {
 				return nil, err
@@ -488,8 +520,18 @@ func main() {
 			}
 		}()
 
+		// Update splash status based on transport type
+		if llmTr != nil {
+			disp.RunOnMain(func() { darwin.UpdateSplashStatus("Connecting to " + *llmProvider + "...") })
+		} else if ccTr != nil {
+			disp.RunOnMain(func() { darwin.UpdateSplashStatus("Starting Claude Code...") })
+		} else {
+			disp.RunOnMain(func() { darwin.UpdateSplashStatus("Loading file...") })
+		}
+
 		tr.Start()
 		errCh := tr.Errors()
+		firstMessage := true
 
 		for {
 			select {
@@ -508,6 +550,10 @@ func main() {
 						llmTr.OnInitialTurnDone()
 					}
 					continue
+				}
+				if firstMessage {
+					firstMessage = false
+					disp.RunOnMain(func() { darwin.UpdateSplashStatus("Building UI...") })
 				}
 				// Execute test messages and return real results to the LLM
 				if msg.Type == protocol.MsgTest && llmTr != nil {
@@ -595,7 +641,8 @@ func main() {
 }
 
 // createFileTransport handles both single file and directory mode.
-// Directory mode: reads all *.jsonl files sorted lexicographically.
+// Directory mode prefers app.jsonl or main.jsonl as the entry point.
+// Falls back to reading all *.jsonl files sorted lexicographically.
 func createFileTransport(path string) transport.Transport {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -606,7 +653,15 @@ func createFileTransport(path string) transport.Transport {
 		return transport.NewFileTransport(path)
 	}
 
-	// Directory mode: create a virtual main.jsonl that includes all files
+	// Directory mode: prefer a canonical entry point
+	for _, entry := range []string{"app.jsonl", "main.jsonl"} {
+		ep := filepath.Join(path, entry)
+		if _, err := os.Stat(ep); err == nil {
+			return transport.NewFileTransport(ep)
+		}
+	}
+
+	// Fallback: read all .jsonl files sorted lexicographically
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error reading directory: %v\n", err)

@@ -16,7 +16,7 @@ Native macOS renderer for the [A2UI](https://a2ui.org) JSONL protocol. No webvie
 
 ## What It Does
 
-jview renders A2UI JSONL as native Cocoa widgets. Messages come from static files or live from an LLM — the LLM calls tools to create windows, add components, and update data, producing a native macOS UI. User interactions (button clicks, form input) flow back as conversation turns, so the LLM can update the UI in response. Native libraries can be loaded at runtime via FFI — call any C function with any signature directly from the UI layer.
+jview renders A2UI JSONL as native Cocoa widgets. Messages come from static files, live from an LLM, or programmatically via MCP tools — the LLM calls tools to create windows, add components, and update data, producing a native macOS UI. User interactions (button clicks, form input) flow back as conversation turns, so the LLM can update the UI in response. Native libraries can be loaded at runtime via FFI.
 
 ```
 LLM / File  -->  Transport  -->  Engine (Go)  -->  CGo bridge  -->  AppKit (Obj-C)  -->  Native UI
@@ -27,27 +27,33 @@ LLM / File  -->  Transport  -->  Engine (Go)  -->  CGo bridge  -->  AppKit (Obj-
 
 ## Quick Start
 
-**Requirements:** macOS, Go 1.25+
+**Requirements:** macOS 13+, Go 1.25+
 
 ```bash
 # Build
 make build
 
-# LLM mode (default: anthropic / claude-haiku-4-5-20251001)
+# Run a static JSONL file
+build/jview testdata/hello.jsonl
+
+# Run an app directory (prefers app.jsonl or main.jsonl as entry point)
+build/jview testdata/calculator_v2/
+
+# Watch mode — auto-reload on file changes
+build/jview --watch testdata/contact_form.jsonl
+
+# LLM mode (default: anthropic / claude-opus-4-6)
 ANTHROPIC_API_KEY=... build/jview --prompt "Build a todo app"
 
-# Prompt from file (for longer prompts)
+# Prompt from file
 build/jview --prompt-file prompt.txt
 
-# With a different provider/model
+# Different provider/model
 build/jview --llm openai --model gpt-4o --prompt "Build a calculator"
 build/jview --llm ollama --model llama3 --prompt-file app-spec.txt --mode raw
 
-# File mode (static JSONL fixtures)
-build/jview testdata/hello.jsonl
-
-# Directory mode (reads all *.jsonl sorted)
-build/jview testdata/calculator_v2/
+# Claude Code mode (spawns claude subprocess with MCP tools)
+build/jview --claude-code "Build a notes app with sidebar"
 
 # Load native libraries via FFI config
 build/jview --ffi-config libs.json testdata/app.jsonl
@@ -55,16 +61,10 @@ build/jview --ffi-config libs.json testdata/app.jsonl
 # Run a sample app (from cache or LLM)
 make run-app A=sysinfo
 
+# Build macOS .app bundle
+make app
+
 # Run all tests
-make test
-
-# Run native e2e tests (real AppKit rendering)
-build/jview test testdata/contact_form_test.jsonl
-
-# MCP server is always on (stdin/stdout); dedicated mode:
-build/jview mcp testdata/hello.jsonl
-
-# Full gate (tests + screenshot verification)
 make check
 ```
 
@@ -73,7 +73,7 @@ make check
 A2UI JSONL defines surfaces (windows), components (widgets), and a data model (reactive state). jview processes these through a layered architecture:
 
 ```
-Transport (goroutine)          <- LLM tool calls or file JSONL
+Transport (goroutine)          <- LLM tool calls, file JSONL, or MCP
     |
 engine.Session (goroutine)     <- routes messages to surfaces
     |
@@ -86,17 +86,20 @@ darwin.Renderer (main thread)  <- CGo -> ObjC -> NSView creation/updates
 Native Cocoa widgets           <- visible on screen
 ```
 
-### LLM Transport
+### Transport Modes
 
-In LLM mode, jview connects to any supported provider via [any-llm-go](https://github.com/mozilla-ai/any-llm-go) and gives the LLM 11 A2UI tools (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`, `setTheme`, `test`, `loadAssets`, `loadLibrary`, `inspectLibrary`, `defineFunction`, `defineComponent`). The LLM calls these tools to build the UI, define reusable abstractions, load native libraries, and define inline tests. When the user clicks a button with `dataRefs`, the referenced data model values are resolved and sent back to the LLM as a new conversation turn.
+| Mode | Flag | Description |
+|------|------|-------------|
+| File | `<file.jsonl>` | Read static JSONL |
+| Directory | `<dir/>` | Load app directory (prefers `app.jsonl`/`main.jsonl`) |
+| Watch | `--watch <path>` | File/dir mode with live reload on changes |
+| LLM | `--prompt "..."` | Generate UI via LLM tool calls |
+| Claude Code | `--claude-code "..."` | Spawn claude subprocess with MCP tools |
+| MCP | `mcp [file]` | Dedicated MCP server mode (stdin/stdout) |
 
-Supported providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral.
+Supported LLM providers: Anthropic, OpenAI, Gemini, Ollama, DeepSeek, Groq, Mistral.
 
-Two modes:
-- **tools** (default) — LLM uses tool calling. Preferred for models that support it.
-- **raw** — LLM outputs JSONL directly in text. Fallback for models without tool support.
-
-### Supported Components
+### Components (23)
 
 | Component | Description |
 |-----------|-------------|
@@ -122,10 +125,9 @@ Two modes:
 | OutlineView | Hierarchical tree sidebar with SF Symbol icons |
 | SearchField | Native search input with cancel button |
 | RichTextEditor | Rich text with markdown storage |
+| ProgressBar | Determinate or indeterminate progress indicator |
 
 ### Reusable Abstractions
-
-jview supports `defineFunction`, `defineComponent`, and `include` to reduce verbosity and enable composition.
 
 **defineFunction** — reusable parametric expressions:
 ```json
@@ -154,9 +156,25 @@ Use with: `{"componentId":"btn7","useComponent":"DigitButton","args":{"digit":"7
 
 See `testdata/calculator_v2/` for a full example using all four features.
 
+### Component Library
+
+Components defined via `defineComponent` are saved to `~/.jview/library/` and persist across sessions. They're automatically included in LLM system prompts so the LLM can reuse them via `useComponent`.
+
+### Data Binding
+
+Components bind to the data model using JSON Pointers. When a user types in a TextField bound to `/name`, any Text component displaying `{"path": "/name"}` updates automatically.
+
+### Flex Layout
+
+Components support `flexGrow` in their `style` to fill available space in a parent Row or Column:
+
+```json
+{"componentId": "info", "type": "Column", "style": {"flexGrow": 1}}
+```
+
 ### Native FFI
 
-Load any native dynamic library at runtime and call its functions directly from component expressions — no C wrappers needed. Uses libffi for generic function invocation with full type support.
+Load any native dynamic library at runtime and call its functions directly from component expressions — no C wrappers needed:
 
 ```json
 {"type":"loadLibrary","path":"libcurl.dylib","prefix":"curl","functions":[
@@ -166,34 +184,20 @@ Load any native dynamic library at runtime and call its functions directly from 
 
 Then use in components: `"content": {"functionCall": {"name": "curl.version", "args": []}}`
 
-Supported types: void, int, uint32, int64, uint64, float, double, pointer, string, bool. Pointer returns are managed via a handle table — pass handle IDs back to functions expecting pointer args.
-
-### Data Binding
-
-Components can bind to the data model using JSON Pointers. When a user types in a TextField bound to `/name`, any Text component displaying `{"path": "/name"}` updates automatically.
-
-### Flex Layout
-
-Components support `flexGrow` in their `style` to expand and fill available space in a parent Row or Column, similar to CSS flex-grow:
-
-```json
-{"componentId": "info", "type": "Column", "style": {"flexGrow": 1}}
-```
-
 ### Process Model
 
-jview supports background processes — named goroutines with their own transports that route messages through the shared session. Processes enable timers, background LLM conversations, and async file loading.
+Background processes — named goroutines with their own transports that route messages through the shared session. Three transport types: `file`, `interval` (timer), `llm` (new LLM conversation), `claude-code` (subprocess). Process status is written to `/processes/{id}/status` in the data model.
 
 ```json
-{"type":"createProcess","processId":"ticker","transport":{"type":"interval","interval":1000,"message":{"type":"updateDataModel","surfaceId":"main","ops":[{"op":"replace","path":"/counter","value":{"functionCall":{"name":"add","args":[{"path":"/counter"},1]}}}]}}}
-{"type":"stopProcess","processId":"ticker"}
+{"type":"createProcess","processId":"ticker","transport":{"type":"interval","interval":1000,
+ "message":{"type":"updateDataModel","surfaceId":"main","ops":[
+   {"op":"replace","path":"/counter","value":{"functionCall":{"name":"add","args":[{"path":"/counter"},1]}}}
+ ]}}}
 ```
-
-Three transport types: `file` (async JSONL), `interval` (timer with fixed message), `llm` (new LLM conversation). Process status is written to `/processes/{id}/status` in the data model, enabling reactive UI via binding.
 
 ### Channel Primitives
 
-Named channels enable inter-process communication with broadcast and queue semantics. Published values integrate directly into the data model at `/channels/{id}/value`, so existing `dataBinding` works automatically.
+Named channels enable inter-process communication with broadcast and queue semantics. Published values integrate into the data model at `/channels/{id}/value`.
 
 ```json
 {"type":"createChannel","channelId":"notifications","mode":"broadcast"}
@@ -201,36 +205,55 @@ Named channels enable inter-process communication with broadcast and queue seman
 {"type":"publish","channelId":"notifications","value":{"text":"Build complete"}}
 ```
 
-**Broadcast mode:** All subscribers receive every published value. **Queue mode:** Values are delivered round-robin to one subscriber at a time. Subscribers specify a `targetPath` for custom delivery to any data model path.
-
 ### Embedded MCP Server
 
-The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 26 tools for programmatic UI control — query component trees, read/write data models, simulate interactions (click, fill, toggle), perform AppKit responder chain actions (selectAll:, toggleBoldface:, etc.), take screenshots (to disk or base64), send A2UI messages, manage processes, and manage channels. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
+The MCP server starts automatically on stdin/stdout (JSON-RPC 2.0) in all modes with 26+ tools for programmatic UI control — query trees, read/write data models, simulate interactions, take screenshots, manage processes and channels. Claude Code connects via `.mcp.json` for interactive development.
 
 ```bash
 # Normal mode (MCP available alongside UI)
-build/jview testdata/reminders.jsonl
+build/jview testdata/hello.jsonl
 
 # Dedicated MCP mode
-build/jview mcp testdata/reminders.jsonl
+build/jview mcp testdata/hello.jsonl
 
-# Empty MCP server (create UI via send_message tool)
-build/jview mcp
+# MCP also available on HTTP
+build/jview --mcp-http localhost:8080 testdata/hello.jsonl
 ```
 
-## Example
+### Caching
 
-### LLM-generated UI
+LLM-generated UIs are cached automatically. The cache key covers the prompt content and component library state. Use `--regenerate` to force a fresh LLM call.
 
 ```bash
-# Inline prompt
-build/jview --prompt "Build a simple counter with increment and decrement buttons"
+# First run: calls LLM, caches output
+build/jview --prompt-file prompt.txt
 
-# Or from a file
-build/jview --prompt-file my-app-spec.txt
+# Second run: instant from cache
+build/jview --prompt-file prompt.txt
+
+# Force regeneration
+build/jview --prompt-file prompt.txt --regenerate
+
+# Generate without opening a window
+build/jview --prompt-file prompt.txt --generate-only
 ```
 
-The LLM creates a window, initializes the data model, and renders components — all via tool calls.
+## App Structure
+
+A jview app is a directory with JSONL files. The recommended structure:
+
+```
+myapp/
+  app.jsonl          # entry point (or main.jsonl)
+  components.jsonl   # defineComponent definitions (optional)
+  functions.jsonl    # defineFunction definitions (optional)
+  assets/            # images, fonts, audio (optional)
+  prompt.txt         # LLM prompt for regeneration (optional)
+```
+
+When running `jview myapp/`, it looks for `app.jsonl` or `main.jsonl` as the entry point. These can use `include` to pull in other files. If neither exists, all `.jsonl` files are loaded in alphabetical order.
+
+## Example
 
 ### Static fixture
 
@@ -244,63 +267,63 @@ The LLM creates a window, initializes the data model, and renders components —
 ]}
 ```
 
+### LLM-generated UI
+
+```bash
+build/jview --prompt "Build a simple counter with increment and decrement buttons"
+build/jview --claude-code "Build a notes app with three-pane layout"
+```
+
 ## Platform Support
 
-jview currently targets **macOS** using AppKit/Cocoa via CGo + Objective-C (`platform/darwin/`). The architecture is designed for multi-platform support — the engine, protocol, and transport layers are pure Go with no platform dependencies. Only `platform/darwin/` contains Objective-C code.
+jview currently targets **macOS** using AppKit/Cocoa via CGo + Objective-C (`platform/darwin/`). The architecture supports multi-platform — engine, protocol, and transport layers are pure Go. Only `platform/darwin/` contains Objective-C.
 
-The rendering layer is behind a [`Renderer` interface](renderer/renderer.go) that any GUI toolkit can implement. Adding a new platform means writing a single package that satisfies this interface — creating views, updating properties, setting children, handling callbacks, and capturing screenshots. The engine and protocol layers work unchanged.
-
-Potential platform implementations:
+The rendering layer is behind a [`Renderer` interface](renderer/renderer.go) that any GUI toolkit can implement.
 
 | Platform | Toolkit | Package |
 |----------|---------|---------|
 | **macOS** | AppKit (Cocoa) | `platform/darwin/` (current) |
 | Linux | GTK4 | `platform/gtk/` |
 | Windows | WinUI 3 | `platform/windows/` |
-| Cross-platform | Qt | `platform/qt/` |
-
-Each component (Button, TextField, etc.) maps to that toolkit's native widget. The `MockRenderer` in `renderer/mock.go` serves as a reference implementation and enables headless testing on any OS.
 
 ## Project Structure
 
 ```
 protocol/          JSONL parsing, message types, dynamic values
-engine/            Session, Surface, DataModel, BindingTracker, Resolver, Substitution, FFI registry
+engine/            Session, Surface, DataModel, BindingTracker, Resolver, Library, Cache, FFI
 renderer/          Platform-agnostic Renderer interface + mock for tests
-platform/darwin/   CGo + Objective-C AppKit implementation (macOS)
-transport/         Message sources (file, directory, LLM; future: SSE, WebSocket)
-mcp/               Embedded MCP server (JSON-RPC 2.0 on stdin/stdout)
+platform/darwin/   CGo + Objective-C AppKit implementation (23 native components)
+transport/         Message sources (file, directory, watch, LLM, Claude Code, interval)
+mcp/               Embedded MCP server (JSON-RPC 2.0, stdin/stdout + HTTP)
+packaging/         macOS .app bundle resources (Info.plist)
 docs/              Protocol spec, architecture docs
 testdata/          JSONL fixtures for testing and demos
-sample_apps/       LLM-generated sample applications (prompt.txt -> cached prompt.jsonl)
+sample_apps/       LLM-generated sample applications
 ```
 
 ## Testing
 
-Four layers:
+Five layers:
 
-- **Unit tests** — pure Go, no display needed: protocol parsing, data model, bindings, resolver
-- **Integration tests** — engine with mock renderer: component creation, data binding, callbacks
-- **Native e2e tests** — real AppKit rendering with assertions on computed layout, style, data model, and actions
-- **Screenshot verification** — builds real binary, launches fixtures, captures screenshots
-
-All tests run with `-race` detection enabled.
+1. **Unit tests** — pure Go, no display: protocol parsing, data model, bindings, resolver, channels
+2. **Integration tests** — engine with mock renderer: component creation, data binding, callbacks
+3. **Screenshot verification** — builds binary, launches fixtures, captures screenshots
+4. **Native e2e tests** — real AppKit rendering with assertions on layout, style, data model
+5. **MCP interactive tests** — Claude Code drives the running app via MCP tools
 
 ```bash
-make test          # Headless unit + integration tests (350+ tests)
-make verify        # Build + screenshot capture for all fixtures (42+ fixtures)
+make test          # Headless unit + integration tests (387 tests)
+make verify        # Build + screenshot capture for all fixtures (48 fixtures)
 make check         # Both (the gate)
 
-# Native e2e tests (real AppKit, no display needed)
+# Native e2e tests
 build/jview test testdata/contact_form_test.jsonl
 
 # Sample apps
-make run-app A=sysinfo           # Run from cache or LLM
-make generate-app A=calculator   # Generate without opening window
-make regen-app A=todo            # Force-regenerate from LLM
+make run-app A=sysinfo
+make generate-app A=calculator
+make regen-app A=todo
 ```
-
-Native e2e tests use `test` messages interleaved in JSONL files. They run with real `darwin.Renderer` and query actual NSView frames, fonts, and colors. See [spec.md](docs/spec.md#test) for the full test message format.
 
 ## License
 

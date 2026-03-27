@@ -6,7 +6,8 @@ SNAP_WAIT := 2
 GO        ?= $(shell command -v go1.25.0 2>/dev/null || echo go)
 
 .PHONY: build test verify verify-fixture check clean \
-       generate-apps generate-app run-app regen-app clean-apps
+       generate-apps generate-app run-app regen-app clean-apps \
+       app clean-app
 
 # ── Build ───────────────────────────────────────────
 build:
@@ -86,6 +87,26 @@ regen-app: build
 # Remove all cached JSONL and hash files
 clean-apps:
 	rm -f sample_apps/*/*.jsonl sample_apps/*/*.jsonl.tmp sample_apps/*/.*.hash
+
+# ── App Bundle ─────────────────────────────────────
+APP_NAME   := jview.app
+APP_DIR    := $(BUILD_DIR)/$(APP_NAME)
+CONTENTS   := $(APP_DIR)/Contents
+MACOS_DIR  := $(CONTENTS)/MacOS
+RES_DIR    := $(CONTENTS)/Resources
+
+# Build macOS .app bundle
+app: build
+	@mkdir -p $(MACOS_DIR) $(RES_DIR)
+	cp $(BUILD_DIR)/$(BINARY) $(MACOS_DIR)/$(BINARY)
+	cp packaging/Info.plist $(CONTENTS)/Info.plist
+	@if [ -f packaging/AppIcon.icns ]; then \
+		cp packaging/AppIcon.icns $(RES_DIR)/AppIcon.icns; \
+	fi
+	@echo "Built $(APP_DIR)"
+
+clean-app:
+	rm -rf $(APP_DIR)
 
 # ── Clean ───────────────────────────────────────────
 clean:

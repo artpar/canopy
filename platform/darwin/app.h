@@ -13,4 +13,8 @@ void JVSetWindowTheme(const char* surfaceID, const char* theme);
 void JVRemoveView(void* view);
 void JVUpdateWindow(const char* surfaceID, const char* title, int minWidth, int minHeight);
 
+void JVShowSplashWindow(const char* title, int width, int height);
+void JVUpdateSplashStatus(const char* status);
+void JVDismissSplash(void);
+
 #endif

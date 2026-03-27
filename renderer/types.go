@@ -131,6 +131,10 @@ type ResolvedProps struct {
 	Editable      bool   `json:"editable,omitempty"`
 	FormatBinding string `json:"formatBinding,omitempty"`
 
+	// ProgressBar
+	ProgressValue float64 `json:"progressValue,omitempty"`
+	Indeterminate bool    `json:"indeterminate,omitempty"`
+
 	// Universal
 	ContextMenu string `json:"contextMenu,omitempty"` // serialized []MenuItemSpec JSON
 }

@@ -30,6 +30,10 @@ type Server struct {
 	// Component reference text for resources/read
 	componentRef string
 
+	// OnToolCall is called whenever a tool is invoked, with the tool name.
+	// Used to update splash status during Claude Code generation.
+	OnToolCall func(toolName string)
+
 	// Action queue for external transports (e.g. Claude Code)
 	actionMu sync.Mutex
 	actions  []PendingAction
@@ -188,6 +192,10 @@ func (s *Server) handleToolsCall(req *Request) *Response {
 	}
 
 	jlog.Infof("mcp", "", "tools/call: name=%s args=%s", params.Name, truncate(string(params.Arguments), 200))
+
+	if s.OnToolCall != nil {
+		s.OnToolCall(params.Name)
+	}
 
 	th, ok := s.tools[params.Name]
 	if !ok {

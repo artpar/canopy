@@ -49,8 +49,9 @@ func CachePathsForPrompt(prompt, componentRef string) (jsonl, hash, tmp string) 
 // CacheValid returns true if the cached JSONL exists and its hash file
 // matches the current prompt+componentRef hash.
 func CacheValid(jsonlPath, hashPath, prompt, componentRef string) bool {
-	// JSONL must exist
-	if _, err := os.Stat(jsonlPath); err != nil {
+	// JSONL must exist and have content
+	info, err := os.Stat(jsonlPath)
+	if err != nil || info.Size() == 0 {
 		return false
 	}
 	// Hash file must exist and match

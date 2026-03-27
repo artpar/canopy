@@ -96,6 +96,7 @@ static NSColor* jvColorFromHex(NSString *hex) {
 }
 
 void* JVCreateWindow(const char* title, int width, int height, const char* surfaceID, const char* backgroundColor) {
+    JVDismissSplash();
     NSString *sid = [NSString stringWithUTF8String:surfaceID];
     NSString *windowTitle = [NSString stringWithUTF8String:title];
 
@@ -241,6 +242,75 @@ void JVUpdateWindow(const char* surfaceID, const char* title, int minWidth, int 
         CGFloat h = (minHeight > 0) ? (CGFloat)minHeight : window.minSize.height;
         window.minSize = NSMakeSize(w, h);
     }
+}
+
+// --- Splash window ---
+
+static NSWindow *splashWindow = nil;
+static NSTextField *splashStatusLabel = nil;
+
+void JVShowSplashWindow(const char* title, int width, int height) {
+    NSString *windowTitle = [NSString stringWithUTF8String:title];
+    NSRect frame = NSMakeRect(0, 0, width, height);
+    NSWindowStyleMask styleMask = NSWindowStyleMaskTitled |
+                                   NSWindowStyleMaskClosable |
+                                   NSWindowStyleMaskFullSizeContentView;
+
+    splashWindow = [[NSWindow alloc] initWithContentRect:frame
+                                               styleMask:styleMask
+                                                 backing:NSBackingStoreBuffered
+                                                   defer:NO];
+    [splashWindow setTitle:windowTitle];
+    splashWindow.titlebarAppearsTransparent = YES;
+    splashWindow.titleVisibility = NSWindowTitleHidden;
+    [splashWindow center];
+    [splashWindow makeKeyAndOrderFront:nil];
+
+    NSView *contentView = splashWindow.contentView;
+
+    NSProgressIndicator *spinner = [[NSProgressIndicator alloc] init];
+    spinner.style = NSProgressIndicatorStyleSpinning;
+    spinner.controlSize = NSControlSizeRegular;
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    [spinner startAnimation:nil];
+
+    splashStatusLabel = [NSTextField labelWithString:@"Initializing..."];
+    splashStatusLabel.textColor = [NSColor secondaryLabelColor];
+    splashStatusLabel.font = [NSFont systemFontOfSize:14];
+    splashStatusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    NSView *container = [[NSView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    [container addSubview:spinner];
+    [container addSubview:splashStatusLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [spinner.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [spinner.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [splashStatusLabel.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+        [splashStatusLabel.topAnchor constraintEqualToAnchor:spinner.bottomAnchor constant:12],
+        [splashStatusLabel.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+    ]];
+
+    [contentView addSubview:container];
+    [NSLayoutConstraint activateConstraints:@[
+        [container.centerXAnchor constraintEqualToAnchor:contentView.centerXAnchor],
+        [container.centerYAnchor constraintEqualToAnchor:contentView.centerYAnchor],
+    ]];
+}
+
+void JVUpdateSplashStatus(const char* status) {
+    if (!splashStatusLabel) return;
+    NSString *str = [NSString stringWithUTF8String:status];
+    [splashStatusLabel setStringValue:str];
+}
+
+void JVDismissSplash(void) {
+    if (!splashWindow) return;
+    [splashWindow orderOut:nil];
+    [splashWindow close];
+    splashWindow = nil;
+    splashStatusLabel = nil;
 }
 
 void JVSetWindowRootView(const char* surfaceID, void* view, int padding) {
