@@ -363,6 +363,7 @@ func main() {
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
+	sess.SetNativeProvider(darwin.NewNativeProvider())
 	if ffiRegistry != nil {
 		sess.SetFFI(ffiRegistry)
 	}
@@ -764,6 +765,7 @@ func runMCP(args []string) {
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
+	sess.SetNativeProvider(darwin.NewNativeProvider())
 
 	// Set up process manager for MCP mode
 	pm := engine.NewProcessManager(sess, func(cfg protocol.ProcessTransportConfig) (engine.ProcessTransport, error) {

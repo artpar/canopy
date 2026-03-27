@@ -227,6 +227,36 @@ Native Cocoa widgets           ← visible on screen
 7. Add callback registration in `engine/surface.go` if interactive
 8. Add testdata fixture, `make verify-fixture F=testdata/new.jsonl`, read screenshot
 
+## System Capabilities (Native macOS APIs)
+
+jview exposes native macOS capabilities as evaluator functions, callable from JSONL expressions and MCP tools.
+
+### Architecture
+- Interface: `renderer.NativeProvider` (in `renderer/native.go`)
+- Implementation: `platform/darwin/native.go` + `.h` + `.m` (CGo → ObjC)
+- Injection: `main.go` → `Session.SetNativeProvider()` → `Surface` → `Evaluator.Native`
+- All functions also available as MCP tools (`mcp/tools_system.go`)
+
+### Available Functions
+
+| Function | Args | Returns | Description |
+|---|---|---|---|
+| `notify` | title, body, subtitle? | "sent" | macOS notification (UNUserNotificationCenter) |
+| `clipboardRead` | — | text | Read system clipboard |
+| `clipboardWrite` | text | "copied" | Write to system clipboard |
+| `openURL` | url | "opened" | Open URL/file in default app (NSWorkspace) |
+| `fileOpen` | title?, types?, multi? | path(s) or "" | Native file open dialog (NSOpenPanel) |
+| `fileSave` | title?, name?, types? | path or "" | Native file save dialog (NSSavePanel) |
+| `alert` | title, msg, style?, buttons? | button index | Native alert dialog (NSAlert) |
+| `httpGet` | url | response body | HTTP GET (pure Go, 30s timeout) |
+| `httpPost` | url, body, type? | response body | HTTP POST (pure Go, 30s timeout) |
+
+### MCP Tools (7 system tools)
+`notify`, `clipboard_read`, `clipboard_write`, `open_url`, `file_open`, `file_save`, `alert`
+
+### Threading
+File dialogs and alerts run on the main thread via `dispatch_sync`. Safe to call from any goroutine.
+
 ## Roadmap
 
 Full roadmap tracked in planning MCP (plan: `jview Roadmap`). Summary:

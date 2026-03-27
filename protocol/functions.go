@@ -81,4 +81,13 @@ var FunctionRegistry = []FuncMeta{
 
 	// System functions
 	{Name: "shell", Args: "command", Desc: "execute shell command and return stdout as string", Category: "system"},
+	{Name: "notify", Args: "title, body, subtitle?", Desc: "send macOS notification", Category: "system"},
+	{Name: "clipboardRead", Args: "", Desc: "read clipboard text", Category: "system"},
+	{Name: "clipboardWrite", Args: "text", Desc: "write text to clipboard", Category: "system"},
+	{Name: "openURL", Args: "url", Desc: "open URL or file in default app", Category: "system"},
+	{Name: "fileOpen", Args: "title?, allowedTypes?, allowMultiple?", Desc: "show file open dialog, returns selected path(s)", Category: "system"},
+	{Name: "fileSave", Args: "title?, defaultName?, allowedTypes?", Desc: "show file save dialog, returns selected path", Category: "system"},
+	{Name: "alert", Args: "title, message, style?, buttons?", Desc: "show alert dialog, returns button index (0-based)", Category: "system"},
+	{Name: "httpGet", Args: "url", Desc: "HTTP GET request, returns response body as string", Category: "system"},
+	{Name: "httpPost", Args: "url, body, contentType?", Desc: "HTTP POST request, returns response body as string", Category: "system"},
 }

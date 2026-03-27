@@ -19,6 +19,7 @@ type Surface struct {
 	rend      renderer.Renderer
 	dispatch  renderer.Dispatcher
 	ffi       *FFIRegistry
+	native    renderer.NativeProvider
 	assets    *AssetRegistry
 
 	// activeCallbacks tracks registered callbacks: componentID → eventType → CallbackID
@@ -64,6 +65,7 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher,
 	resolver := NewResolver(dm, tracker, evaluator)
 	resolver.assets = assets
 	return &Surface{
+
 		id:               id,
 		tree:             NewTree(),
 		dm:               dm,
@@ -106,6 +108,12 @@ func (s *Surface) Resolver() *Resolver {
 func (s *Surface) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi
 	s.resolver.evaluator.FFI = ffi
+}
+
+// SetNativeProvider updates the native capabilities provider for this surface.
+func (s *Surface) SetNativeProvider(np renderer.NativeProvider) {
+	s.native = np
+	s.resolver.evaluator.Native = np
 }
 
 // SetAssets updates the asset registry for this surface and its resolver.
@@ -218,6 +226,7 @@ func (s *Surface) CleanupAll() {
 func (s *Surface) HandleUpdateDataModel(msg protocol.UpdateDataModel) {
 	evaluator := NewEvaluator(s.dm)
 	evaluator.FFI = s.ffi
+	evaluator.Native = s.native
 	evaluator.customFuncs = s.funcDefs
 	var allChanged []string
 	for _, op := range msg.Ops {
@@ -646,6 +655,7 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 
 	evaluator := NewEvaluator(s.dm)
 	evaluator.FFI = s.ffi
+	evaluator.Native = s.native
 	evaluator.customFuncs = s.funcDefs
 	var allChanged []string
 
@@ -704,6 +714,7 @@ func (s *Surface) executeUpdateWindow(args interface{}) {
 	}
 	evaluator := NewEvaluator(s.dm)
 	evaluator.FFI = s.ffi
+	evaluator.Native = s.native
 	evaluator.customFuncs = s.funcDefs
 	title := ""
 	if titleRaw, ok := argsMap["title"]; ok {
@@ -1376,6 +1387,7 @@ func (s *Surface) expandTemplates(comps []protocol.Component) []protocol.Compone
 		if tmpl.ForEachFunc != nil {
 			evaluator := NewEvaluator(s.dm)
 			evaluator.FFI = s.ffi
+			evaluator.Native = s.native
 			evaluator.customFuncs = s.funcDefs
 			val, err := evaluator.Eval(tmpl.ForEachFunc.Name, tmpl.ForEachFunc.Args)
 			if err != nil {

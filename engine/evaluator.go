@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"jview/protocol"
+	"jview/renderer"
 	"math"
 	"os/exec"
 	"sort"
@@ -22,6 +23,7 @@ type FuncDef struct {
 type Evaluator struct {
 	dm          *DataModel
 	FFI         *FFIRegistry
+	Native      renderer.NativeProvider
 	customFuncs map[string]*FuncDef
 }
 
@@ -88,6 +90,15 @@ func init() {
 		"appendToTree":        (*Evaluator).fnAppendToTree,
 		"removeFromTree":      (*Evaluator).fnRemoveFromTree,
 		"shell":               (*Evaluator).fnShell,
+		"notify":               (*Evaluator).fnNotify,
+		"clipboardRead":        (*Evaluator).fnClipboardRead,
+		"clipboardWrite":       (*Evaluator).fnClipboardWrite,
+		"openURL":              (*Evaluator).fnOpenURL,
+		"fileOpen":             (*Evaluator).fnFileOpen,
+		"fileSave":             (*Evaluator).fnFileSave,
+		"alert":                (*Evaluator).fnAlert,
+		"httpGet":              (*Evaluator).fnHttpGet,
+		"httpPost":             (*Evaluator).fnHttpPost,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa

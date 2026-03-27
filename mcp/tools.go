@@ -37,6 +37,7 @@ func (s *Server) registerTools() {
 	s.registerPublish()
 	s.registerSubscribe()
 	s.registerUnsubscribe()
+	s.registerSystemTools()
 }
 
 // --- Query tools ---

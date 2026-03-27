@@ -14,6 +14,7 @@ type Session struct {
 	rend     renderer.Renderer
 	dispatch renderer.Dispatcher
 	ffi      *FFIRegistry
+	native   renderer.NativeProvider
 	assets   *AssetRegistry
 	funcDefs map[string]*FuncDef
 	compDefs map[string]*protocol.DefineComponent
@@ -57,6 +58,16 @@ func (s *Session) SetLibrary(lib *Library) {
 // SetFFI sets the FFI registry for all surfaces created by this session.
 func (s *Session) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi
+}
+
+// SetNativeProvider sets the native capabilities provider for all surfaces.
+func (s *Session) SetNativeProvider(np renderer.NativeProvider) {
+	s.native = np
+}
+
+// NativeProvider returns the native capabilities provider, or nil.
+func (s *Session) NativeProvider() renderer.NativeProvider {
+	return s.native
 }
 
 // SetProcessManager attaches a process manager to this session.
@@ -274,6 +285,7 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 	}
 
 	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch, s.ffi, s.assets)
+	surf.SetNativeProvider(s.native)
 	surf.ActionHandler = s.OnAction
 	surf.SetFuncDefs(s.funcDefs)
 	surf.SetCompDefs(s.compDefs)
