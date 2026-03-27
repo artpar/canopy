@@ -1,3 +1,3 @@
-{"type":"setAppMode","mode":"menubar","icon":"bolt.fill","title":"jview"}
 {"type":"createSurface","surfaceId":"main","title":"Menubar App","width":300,"height":200}
 {"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"padding":16,"spacing":12},"children":["heading","status","quit_btn"]},{"componentId":"heading","type":"Text","props":{"content":"Menubar App","variant":"h2"}},{"componentId":"status","type":"Text","props":{"content":"Running in menubar mode. Click the bolt icon in the menu bar to toggle this window."}},{"componentId":"quit_btn","type":"Button","props":{"label":"Quit","style":"destructive","onClick":{"action":{"standardAction":"terminate:"}}}}]}
+{"type":"setAppMode","mode":"menubar","icon":"bolt.fill","title":"jview"}

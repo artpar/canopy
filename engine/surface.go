@@ -1187,13 +1187,29 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 	if comp.Props.OnDrop != nil && comp.Props.OnDrop.Action != nil {
 		action := comp.Props.OnDrop.Action
 		compIDForLog := comp.ComponentID
+		binding := comp.Props.DataBinding
 		cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "drop", func(data string) {
 			jlog.Infof("drop", s.id, "onDrop: %s data=%s", compIDForLog, data)
+
+			// Parse drop data
+			var dropData map[string]interface{}
+			json.Unmarshal([]byte(data), &dropData)
+
+			// Write to data binding path if specified
+			if binding != "" && dropData != nil {
+				changed, err := s.dm.Set(binding, dropData)
+				if err == nil {
+					affected := s.tracker.Affected(changed)
+					if len(affected) > 0 {
+						s.renderComponents(affected)
+					}
+				}
+			}
+
+			// Fire action
 			if action.Event != nil {
-				// Merge drop data into event context
 				resolved := s.resolveDataRefs(action.Event)
-				var dropData map[string]interface{}
-				if err := json.Unmarshal([]byte(data), &dropData); err == nil {
+				if dropData != nil {
 					for k, v := range dropData {
 						resolved[k] = v
 					}
