@@ -106,6 +106,7 @@ type CreateSurface struct {
 	Height          int         `json:"height,omitempty"`
 	BackgroundColor string      `json:"backgroundColor,omitempty"`
 	Padding         int         `json:"padding,omitempty"`
+	Theme           string      `json:"theme,omitempty"`
 }
 
 // DeleteSurface removes a surface.

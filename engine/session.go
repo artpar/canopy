@@ -335,8 +335,14 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 		Padding:         cs.Padding,
 	}
 
+	theme := cs.Theme
+	if theme == "" {
+		theme = "light"
+	}
+
 	s.dispatch.RunOnMain(func() {
 		s.rend.CreateWindow(spec)
+		s.rend.SetTheme(cs.SurfaceID, theme)
 	})
 }
 
