@@ -131,6 +131,7 @@ void* JVCreateWindow(const char* title, int width, int height, const char* surfa
                                                    styleMask:styleMask
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
+    window.releasedWhenClosed = NO; // prevent double-release under ARC
     [window setTitle:windowTitle];
     window.titlebarAppearsTransparent = YES;
     window.titleVisibility = NSWindowTitleHidden;

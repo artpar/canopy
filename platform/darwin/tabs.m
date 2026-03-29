@@ -134,7 +134,7 @@ void JVTabsSetChildren(void* handle, void** children, int count) {
             [childView.topAnchor constraintEqualToAnchor:container.topAnchor],
             [childView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
             [childView.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
-            [childView.bottomAnchor constraintLessThanOrEqualToAnchor:container.bottomAnchor],
+            [childView.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
         ]];
 
         item.view = container;
