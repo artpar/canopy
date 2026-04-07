@@ -3,7 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"jview/protocol"
+	"canopy/protocol"
 	"os"
 )
 

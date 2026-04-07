@@ -3,8 +3,8 @@ package transport
 import (
 	"fmt"
 	"io"
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"os"
 	"path/filepath"
 	"sync"

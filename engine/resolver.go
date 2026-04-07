@@ -3,8 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/protocol"
+	"canopy/renderer"
 	"strings"
 )
 

@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"jview/protocol"
+	"canopy/protocol"
 	"sync"
 )
 
@@ -183,6 +183,7 @@ func (p *Process) run(sess *Session, pm *ProcessManager) {
 	defer logRecover("process", "", p.ID)
 
 	p.transport.Start()
+	errCh := p.transport.Errors()
 
 	for {
 		select {
@@ -190,6 +191,7 @@ func (p *Process) run(sess *Session, pm *ProcessManager) {
 			return
 		case msg, ok := <-p.transport.Messages():
 			if !ok {
+				sess.FlushPendingComponents()
 				pm.mu.Lock()
 				p.status = "stopped"
 				pm.mu.Unlock()
@@ -200,9 +202,12 @@ func (p *Process) run(sess *Session, pm *ProcessManager) {
 				return
 			}
 			sess.HandleMessage(msg)
-		case err, ok := <-p.transport.Errors():
+		case err, ok := <-errCh:
 			if !ok {
-				return
+				// Errors channel closed — nil it out to stop selecting on it.
+				// Keep draining messages so FlushPendingComponents runs.
+				errCh = nil
+				continue
 			}
 			logError("process", "", fmt.Sprintf("process %s error: %v", p.ID, err))
 		}

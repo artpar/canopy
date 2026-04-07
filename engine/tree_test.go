@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"jview/protocol"
+	"canopy/protocol"
 	"sort"
 	"testing"
 )

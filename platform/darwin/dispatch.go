@@ -8,7 +8,7 @@ package darwin
 */
 import "C"
 import (
-	"jview/jlog"
+	"canopy/jlog"
 	"runtime"
 	"runtime/cgo"
 )

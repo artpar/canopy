@@ -238,10 +238,11 @@ type UpdateWindow struct {
 // Mode: "normal" (default, dock icon + windows), "menubar" (status bar item, no dock icon),
 // "accessory" (no dock icon, no menu bar, background only).
 type SetAppMode struct {
-	Type  MessageType `json:"type"`
-	Mode  string      `json:"mode"`            // "normal", "menubar", "accessory"
-	Icon  string      `json:"icon,omitempty"`   // SF Symbol name for menubar icon (menubar mode)
-	Title string      `json:"title,omitempty"`  // status item title (menubar mode)
+	Type      MessageType `json:"type"`
+	Mode      string      `json:"mode"`                    // "normal", "menubar", "accessory"
+	Icon      string      `json:"icon,omitempty"`           // SF Symbol name for menubar icon (menubar mode)
+	Title     string      `json:"title,omitempty"`          // status item title (menubar mode)
+	MenuItems []MenuItem  `json:"menuItems,omitempty"`      // dynamic items for status bar menu (menubar mode)
 }
 
 // MenuItem is a single menu or menu item.

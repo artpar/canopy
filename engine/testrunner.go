@@ -7,8 +7,8 @@ import (
 	"os"
 	"reflect"
 
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/protocol"
+	"canopy/renderer"
 )
 
 // TestResult holds the outcome of a single test.

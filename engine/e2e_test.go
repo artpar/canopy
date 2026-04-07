@@ -1,9 +1,9 @@
 package engine
 
 import (
-	"jview/protocol"
-	"jview/renderer"
-	"jview/transport"
+	"canopy/protocol"
+	"canopy/renderer"
+	"canopy/transport"
 	"path/filepath"
 	"runtime"
 	"strings"

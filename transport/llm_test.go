@@ -3,7 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
-	"jview/protocol"
+	"canopy/protocol"
 	"testing"
 	"time"
 

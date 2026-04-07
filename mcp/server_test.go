@@ -3,8 +3,8 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
-	"jview/engine"
-	"jview/renderer"
+	"canopy/engine"
+	"canopy/renderer"
 	"strings"
 	"testing"
 )

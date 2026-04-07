@@ -9,7 +9,9 @@ package darwin
 */
 import "C"
 import (
-	"jview/jlog"
+	"encoding/json"
+	"canopy/jlog"
+	"canopy/renderer"
 	"unsafe"
 )
 
@@ -108,4 +110,59 @@ func SetFollowUpEnabled(enabled bool) {
 		e = C.int(1)
 	}
 	C.JVSetFollowUpEnabled(e)
+}
+
+// SetStatusMenuDynamic sets the dynamic items section in the status bar menu.
+func SetStatusMenuDynamic(items []renderer.MenuItemSpec) {
+	jsonItems := specToJSON(items)
+	data, err := json.Marshal(jsonItems)
+	if err != nil {
+		return
+	}
+	cJSON := C.CString(string(data))
+	defer C.free(unsafe.Pointer(cJSON))
+	C.JVSetStatusMenuDynamic(cJSON)
+}
+
+// StatusMenuApp represents a sample app entry for the status bar Apps submenu.
+type StatusMenuApp struct {
+	Label string `json:"label"`
+	Path  string `json:"path"`
+	Icon  string `json:"icon,omitempty"`
+}
+
+// SetStatusMenuApps sets the Apps submenu in the status bar menu.
+func SetStatusMenuApps(apps []StatusMenuApp) {
+	data, err := json.Marshal(apps)
+	if err != nil {
+		return
+	}
+	cJSON := C.CString(string(data))
+	defer C.free(unsafe.Pointer(cJSON))
+	C.JVSetStatusMenuApps(cJSON)
+}
+
+// OnStatusMenuAppClicked is called when user clicks an app in the Apps submenu.
+var OnStatusMenuAppClicked func(appPath string)
+
+//export GoStatusMenuAppClicked
+func GoStatusMenuAppClicked(appPath *C.char) {
+	path := C.GoString(appPath)
+	if OnStatusMenuAppClicked != nil {
+		OnStatusMenuAppClicked(path)
+	} else {
+		jlog.Infof("app", "", "app menu clicked but no handler: %s", path)
+	}
+}
+
+// OnStatusMenuSettingsClicked is called when user clicks Settings.
+var OnStatusMenuSettingsClicked func()
+
+//export GoStatusMenuSettingsClicked
+func GoStatusMenuSettingsClicked() {
+	if OnStatusMenuSettingsClicked != nil {
+		OnStatusMenuSettingsClicked()
+	} else {
+		jlog.Infof("app", "", "settings clicked but no handler registered")
+	}
 }

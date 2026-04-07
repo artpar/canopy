@@ -2,8 +2,8 @@ package transport
 
 import (
 	"io"
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"os"
 	"path/filepath"
 	"sync"

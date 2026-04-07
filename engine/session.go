@@ -3,9 +3,9 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"jview/jlog"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/jlog"
+	"canopy/protocol"
+	"canopy/renderer"
 	"sync"
 )
 
@@ -295,13 +295,48 @@ func (s *Session) handleMessageLocked(msg *protocol.Message) {
 
 	case protocol.MsgSetAppMode:
 		sam := msg.Body.(protocol.SetAppMode)
+		var menuItems []renderer.MenuItemSpec
+		if len(sam.MenuItems) > 0 {
+			menuItems = s.buildStatusMenuSpecs(sam.MenuItems)
+		}
 		s.dispatch.RunOnMain(func() {
-			s.rend.SetAppMode(sam.Mode, sam.Icon, sam.Title, 0)
+			s.rend.SetAppMode(sam.Mode, sam.Icon, sam.Title, 0, menuItems)
 		})
 
 	default:
 		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}
+}
+
+// buildStatusMenuSpecs converts protocol MenuItems to renderer MenuItemSpecs,
+// registering callbacks for action items at the session level.
+func (s *Session) buildStatusMenuSpecs(items []protocol.MenuItem) []renderer.MenuItemSpec {
+	specs := make([]renderer.MenuItemSpec, len(items))
+	for i, item := range items {
+		spec := renderer.MenuItemSpec{
+			ID:             item.ID,
+			Label:          item.Label,
+			KeyEquivalent:  item.KeyEquivalent,
+			KeyModifiers:   item.KeyModifiers,
+			Separator:      item.Separator,
+			StandardAction: item.StandardAction,
+			Icon:           item.Icon,
+		}
+		if item.Action != nil && item.Action.Action != nil {
+			action := item.Action.Action
+			cbID := s.rend.RegisterCallback("__status__", "__statusmenu_"+item.ID, "click", func(data string) {
+				if action.Event != nil && s.OnAction != nil {
+					s.OnAction("__status__", action.Event, nil)
+				}
+			})
+			spec.CallbackID = cbID
+		}
+		if len(item.Children) > 0 {
+			spec.Children = s.buildStatusMenuSpecs(item.Children)
+		}
+		specs[i] = spec
+	}
+	return specs
 }
 
 func (s *Session) createSurface(cs protocol.CreateSurface) {

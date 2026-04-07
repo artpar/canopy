@@ -1,8 +1,8 @@
 package mcp
 
 import (
-	"jview/jlog"
-	"jview/renderer"
+	"canopy/jlog"
+	"canopy/renderer"
 	"runtime"
 )
 

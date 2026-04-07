@@ -1,7 +1,7 @@
 package darwin
 
 import (
-	"jview/jlog"
+	"canopy/jlog"
 	"runtime"
 	"sync"
 )

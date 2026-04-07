@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"jview/renderer"
+	"canopy/renderer"
 	"os"
 	"strings"
 	"testing"

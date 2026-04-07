@@ -10,8 +10,8 @@ package darwin
 */
 import "C"
 import (
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/protocol"
+	"canopy/renderer"
 	"unsafe"
 )
 

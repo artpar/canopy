@@ -10,7 +10,7 @@ package darwin
 import "C"
 import (
 	"encoding/json"
-	"jview/renderer"
+	"canopy/renderer"
 	"unsafe"
 )
 

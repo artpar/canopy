@@ -1,7 +1,7 @@
 package renderer
 
 import (
-	"jview/protocol"
+	"canopy/protocol"
 	"sync"
 )
 
@@ -351,7 +351,7 @@ func (m *MockRenderer) UpdateToolbar(surfaceID string, items []ToolbarItemSpec) 
 // UpdateWindow is a no-op for the mock renderer.
 func (m *MockRenderer) UpdateWindow(surfaceID string, title string, minWidth, minHeight int) {}
 
-func (m *MockRenderer) SetAppMode(mode, icon, title string, callbackID CallbackID) {}
+func (m *MockRenderer) SetAppMode(mode, icon, title string, callbackID CallbackID, menuItems []MenuItemSpec) {}
 
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}

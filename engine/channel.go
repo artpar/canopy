@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"jview/protocol"
+	"canopy/protocol"
 	"sync"
 )
 

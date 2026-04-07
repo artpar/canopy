@@ -1,4 +1,4 @@
-module jview
+module canopy
 
 go 1.25.0
 

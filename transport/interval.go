@@ -2,8 +2,8 @@ package transport
 
 import (
 	"encoding/json"
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"time"
 )
 

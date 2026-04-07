@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"jview/engine"
-	"jview/jlog"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/engine"
+	"canopy/jlog"
+	"canopy/protocol"
+	"canopy/renderer"
 	"sync"
 )
 

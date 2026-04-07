@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
 #include "app.h"
+#include "menu.h"
 
 // Map from surfaceID → NSWindow (non-static so screenshot.m can access via extern)
 NSMutableDictionary<NSString*, NSWindow*> *windowMap = nil;
@@ -9,17 +10,20 @@ NSMutableDictionary<NSString*, NSWindow*> *windowMap = nil;
 static NSStatusItem *statusItem = nil;
 static NSMenuItem *refineMenuItem = nil;
 
-@interface JVAppDelegate : NSObject <NSApplicationDelegate>
+@interface JVAppDelegate : NSObject <NSApplicationDelegate> {
+    BOOL _forceQuit;
+}
+- (void)jvForceQuit:(id)sender;
 @end
 
 extern void GoFollowUpTriggered(void);
+extern void GoStatusMenuAppClicked(const char* appPath);
+extern void GoStatusMenuSettingsClicked(void);
 
 @implementation JVAppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
-    // Activate the app and bring to front
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-    [NSApp activateIgnoringOtherApps:YES];
+    // Don't set activation policy here — it's set by JVSetAppMode
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
@@ -28,8 +32,72 @@ extern void GoFollowUpTriggered(void);
     return YES;
 }
 
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+    // In menubar mode, Cmd+Q hides all windows instead of quitting.
+    // Only the explicit "Quit jview" menu item (terminate:) bypasses this
+    // because we set a flag before calling terminate:.
+    if (statusItem != nil && !_forceQuit) {
+        // Hide all windows
+        for (NSString *sid in windowMap) {
+            [windowMap[sid] orderOut:nil];
+        }
+        return NSTerminateCancel;
+    }
+    return NSTerminateNow;
+}
+
 - (void)refineUI:(id)sender {
     GoFollowUpTriggered();
+}
+
+// Show all jview windows and activate the app
+- (void)jvShowAllWindows:(id)sender {
+    for (NSString *sid in windowMap) {
+        NSWindow *w = windowMap[sid];
+        [w makeKeyAndOrderFront:nil];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+}
+
+// Handle "Settings..." menu item click
+- (void)jvSettingsClicked:(id)sender {
+    GoStatusMenuSettingsClicked();
+}
+
+// Handle app launch from Apps submenu
+- (void)jvLaunchApp:(id)sender {
+    NSString *path = [sender representedObject];
+    if (path && [path length] > 0) {
+        GoStatusMenuAppClicked([path UTF8String]);
+    }
+}
+
+// Show customized About panel
+- (void)jvShowAbout:(id)sender {
+    [NSApp activateIgnoringOtherApps:YES];
+    [NSApp orderFrontStandardAboutPanelWithOptions:@{
+        @"ApplicationName": @"Canopy",
+        @"ApplicationVersion": @"0.1",
+        @"Version": @"1",
+        @"Copyright": @"Native macOS UI renderer for A2UI protocol.\nNo webview. No Electron. Pure AppKit.",
+    }];
+}
+
+// Force quit — called by the Quit menu item in the status bar menu
+- (void)jvForceQuit:(id)sender {
+    _forceQuit = YES;
+    [NSApp terminate:nil];
+}
+
+// Validate menu items: enable responder-chain actions that this delegate handles
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+    if ([menuItem action] == @selector(jvShowAllWindows:)) return [windowMap count] > 0;
+    if ([menuItem action] == @selector(jvSettingsClicked:)) return YES;
+    if ([menuItem action] == @selector(jvLaunchApp:)) return YES;
+    if ([menuItem action] == @selector(jvShowAbout:)) return YES;
+    if ([menuItem action] == @selector(jvForceQuit:)) return YES;
+    if ([menuItem action] == @selector(refineUI:)) return menuItem.enabled;
+    return YES;
 }
 
 @end
@@ -56,7 +124,7 @@ void JVAppInit(void) {
     [appMenu addItem:refineMenuItem];
     [appMenu addItem:[NSMenuItem separatorItem]];
 
-    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit jview"
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit Canopy"
                                                       action:@selector(terminate:)
                                                keyEquivalent:@"q"];
     [appMenu addItem:quitItem];
@@ -306,36 +374,72 @@ void JVUpdateWindow(const char* surfaceID, const char* title, int minWidth, int 
 
 extern void GoCallbackInvoke(uint64_t callbackID, const char* data);
 
-static uint64_t statusItemCallbackID = 0;
+// Tag used to identify the dynamic items section in the status menu.
+// Items between two separators with this tag are replaced on update.
+static const NSInteger kDynamicSectionTag = 9999;
 
-@interface JVStatusItemTarget : NSObject
-@end
+// Retained targets for dynamic menu item callbacks
+static NSMutableArray *statusMenuTargets = nil;
 
-@implementation JVStatusItemTarget
-- (void)statusItemClicked:(id)sender {
-    if (statusItemCallbackID != 0) {
-        GoCallbackInvoke(statusItemCallbackID, "");
-    } else {
-        // Default: toggle visibility of all windows
-        BOOL anyVisible = NO;
-        for (NSString *sid in windowMap) {
-            NSWindow *w = windowMap[sid];
-            if ([w isVisible]) { anyVisible = YES; break; }
-        }
-        for (NSString *sid in windowMap) {
-            NSWindow *w = windowMap[sid];
-            if (anyVisible) {
-                [w orderOut:nil];
-            } else {
-                [w makeKeyAndOrderFront:nil];
-                [NSApp activateIgnoringOtherApps:YES];
-            }
+// Build the permanent portion of the status menu (apps submenu, settings, about, quit).
+// Called once; dynamic items are inserted later via JVSetStatusMenuDynamic.
+static void rebuildStatusMenu(void) {
+    if (!statusItem) return;
+
+    NSMenu *menu = statusItem.menu;
+    if (!menu) {
+        menu = [[NSMenu alloc] init];
+        [menu setAutoenablesItems:NO];
+        statusItem.menu = menu;
+    }
+
+    [menu removeAllItems];
+
+    // --- Show Windows ---
+    NSMenuItem *showItem = [[NSMenuItem alloc] initWithTitle:@"Show Windows"
+                                                       action:@selector(jvShowAllWindows:)
+                                                keyEquivalent:@""];
+    showItem.target = nil; // responder chain
+    [menu addItem:showItem];
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    // --- Dynamic section placeholder ---
+    // A tagged separator marks where dynamic items will be inserted
+    NSMenuItem *dynStart = [NSMenuItem separatorItem];
+    dynStart.tag = kDynamicSectionTag;
+    [menu addItem:dynStart];
+
+    // --- Settings ---
+    NSMenuItem *settingsItem = [[NSMenuItem alloc] initWithTitle:@"Settings..."
+                                                           action:@selector(jvSettingsClicked:)
+                                                    keyEquivalent:@","];
+    settingsItem.target = nil; // responder chain — handled by app delegate
+    if (@available(macOS 11.0, *)) {
+        NSImage *gearImg = [NSImage imageWithSystemSymbolName:@"gearshape" accessibilityDescription:@"Settings"];
+        if (gearImg) {
+            gearImg.size = NSMakeSize(16, 16);
+            settingsItem.image = gearImg;
         }
     }
-}
-@end
+    [menu addItem:settingsItem];
 
-static JVStatusItemTarget *statusItemTarget = nil;
+    // --- About ---
+    NSMenuItem *aboutItem = [[NSMenuItem alloc] initWithTitle:@"About Canopy"
+                                                        action:@selector(jvShowAbout:)
+                                                 keyEquivalent:@""];
+    aboutItem.target = nil; // responder chain → app delegate
+    [menu addItem:aboutItem];
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    // --- Quit ---
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit Canopy"
+                                                       action:@selector(jvForceQuit:)
+                                                keyEquivalent:@"q"];
+    quitItem.target = nil; // responder chain → app delegate
+    [menu addItem:quitItem];
+}
 
 void JVSetAppMode(const char* mode, const char* icon, const char* title, uint64_t callbackID) {
     NSString *modeStr = [NSString stringWithUTF8String:mode];
@@ -346,11 +450,8 @@ void JVSetAppMode(const char* mode, const char* icon, const char* title, uint64_
         // Create status item if not exists
         if (!statusItem) {
             statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
-            statusItemTarget = [[JVStatusItemTarget alloc] init];
-            statusItem.button.action = @selector(statusItemClicked:);
-            statusItem.button.target = statusItemTarget;
+            rebuildStatusMenu();
         }
-        statusItemCallbackID = callbackID;
 
         // Set icon (SF Symbol) or title
         if (icon && strlen(icon) > 0) {
@@ -360,28 +461,22 @@ void JVSetAppMode(const char* mode, const char* icon, const char* title, uint64_
                 statusItem.button.image = img;
                 statusItem.button.title = @"";
             } else {
-                // Fallback to title if symbol not found
                 statusItem.button.image = nil;
                 statusItem.button.title = (title && strlen(title) > 0)
-                    ? [NSString stringWithUTF8String:title] : @"jview";
+                    ? [NSString stringWithUTF8String:title] : @"Canopy";
             }
         } else {
             statusItem.button.image = nil;
             statusItem.button.title = (title && strlen(title) > 0)
-                ? [NSString stringWithUTF8String:title] : @"jview";
+                ? [NSString stringWithUTF8String:title] : @"Canopy";
         }
-
-        // Don't terminate when last window closes in menubar mode
-        // (handled by checking mode in delegate)
 
     } else if ([modeStr isEqualToString:@"accessory"]) {
         [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
-        // Remove status item if exists
         if (statusItem) {
             [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
             statusItem = nil;
-            statusItemTarget = nil;
         }
 
     } else {
@@ -389,13 +484,128 @@ void JVSetAppMode(const char* mode, const char* icon, const char* title, uint64_
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp activateIgnoringOtherApps:YES];
 
-        // Remove status item if exists
         if (statusItem) {
             [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
             statusItem = nil;
-            statusItemTarget = nil;
         }
     }
+}
+
+// Insert or replace dynamic items in the status menu.
+// Items are placed right after the tagged separator (kDynamicSectionTag)
+// and before the Settings item.
+void JVSetStatusMenuDynamic(const char* itemsJSON) {
+    if (!statusItem || !statusItem.menu) return;
+
+    NSMenu *menu = statusItem.menu;
+
+    // Find the tagged separator
+    NSInteger dynIdx = -1;
+    for (NSInteger i = 0; i < [menu numberOfItems]; i++) {
+        if ([[menu itemAtIndex:i] tag] == kDynamicSectionTag) {
+            dynIdx = i;
+            break;
+        }
+    }
+    if (dynIdx < 0) return;
+
+    // Remove old dynamic items (everything between dynIdx+1 and next separator/Settings)
+    NSInteger removeStart = dynIdx + 1;
+    while (removeStart < [menu numberOfItems]) {
+        NSMenuItem *item = [menu itemAtIndex:removeStart];
+        // Stop at Settings or About or Quit (permanent items)
+        if ([[item title] isEqualToString:@"Settings..."] ||
+            [[item title] isEqualToString:@"About Canopy"] ||
+            [[item title] isEqualToString:@"Quit Canopy"]) {
+            break;
+        }
+        [menu removeItemAtIndex:removeStart];
+    }
+
+    // Parse and insert new dynamic items
+    if (!itemsJSON || strlen(itemsJSON) == 0) return;
+
+    NSData *data = [NSData dataWithBytes:itemsJSON length:strlen(itemsJSON)];
+    NSArray *items = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (!items) return;
+
+    statusMenuTargets = [[NSMutableArray alloc] init];
+
+    NSInteger insertIdx = dynIdx + 1;
+    for (NSDictionary *spec in items) {
+        NSMenuItem *item = JVBuildMenuItem(spec, statusMenuTargets);
+        if (item) {
+            [menu insertItem:item atIndex:insertIdx];
+            insertIdx++;
+        }
+    }
+
+    // Add separator after dynamic items if any were added
+    if ([items count] > 0) {
+        [menu insertItem:[NSMenuItem separatorItem] atIndex:insertIdx];
+    }
+}
+
+// Set the "Apps" submenu items in the status menu.
+// Inserts an "Apps" submenu at the top of the menu (index 0).
+void JVSetStatusMenuApps(const char* itemsJSON) {
+    if (!statusItem || !statusItem.menu) return;
+
+    NSMenu *menu = statusItem.menu;
+
+    // Remove existing Apps submenu if present (always at index 0 if it exists)
+    if ([menu numberOfItems] > 0 && [[[menu itemAtIndex:0] title] isEqualToString:@"Apps"]) {
+        [menu removeItemAtIndex:0];
+        // Also remove the separator after it if present
+        if ([menu numberOfItems] > 0 && [[menu itemAtIndex:0] isSeparatorItem]) {
+            // The "Show Windows" item follows — don't remove the separator before it
+        }
+    }
+
+    if (!itemsJSON || strlen(itemsJSON) == 0) return;
+
+    NSData *data = [NSData dataWithBytes:itemsJSON length:strlen(itemsJSON)];
+    NSArray *items = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (!items || [items count] == 0) return;
+
+    NSMenu *appsSubmenu = [[NSMenu alloc] initWithTitle:@"Apps"];
+    [appsSubmenu setAutoenablesItems:NO];
+
+    for (NSDictionary *spec in items) {
+        NSString *label = spec[@"label"] ?: @"";
+        NSString *path = spec[@"path"] ?: @"";
+
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:label
+                                                       action:@selector(jvLaunchApp:)
+                                                keyEquivalent:@""];
+        item.target = nil; // responder chain — handled by app delegate
+        item.representedObject = path;
+
+        // SF Symbol icon
+        NSString *iconName = spec[@"icon"];
+        if (iconName && [iconName length] > 0) {
+            NSImage *image = [NSImage imageWithSystemSymbolName:iconName accessibilityDescription:label];
+            if (image) {
+                image.size = NSMakeSize(16, 16);
+                item.image = image;
+            }
+        }
+
+        [appsSubmenu addItem:item];
+    }
+
+    NSMenuItem *appsItem = [[NSMenuItem alloc] initWithTitle:@"Apps"
+                                                       action:nil
+                                                keyEquivalent:@""];
+    if (@available(macOS 11.0, *)) {
+        NSImage *appsImg = [NSImage imageWithSystemSymbolName:@"square.grid.2x2" accessibilityDescription:@"Apps"];
+        if (appsImg) {
+            appsImg.size = NSMakeSize(16, 16);
+            appsItem.image = appsImg;
+        }
+    }
+    [appsItem setSubmenu:appsSubmenu];
+    [menu insertItem:appsItem atIndex:0];
 }
 
 // --- Splash window ---

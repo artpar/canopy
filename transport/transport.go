@@ -1,6 +1,6 @@
 package transport
 
-import "jview/protocol"
+import "canopy/protocol"
 
 // Transport delivers A2UI messages to the engine.
 type Transport interface {

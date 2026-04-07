@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"jview/jlog"
+	"canopy/jlog"
 	"net"
 	"net/http"
 	"sync"

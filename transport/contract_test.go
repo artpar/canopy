@@ -1,7 +1,7 @@
 package transport
 
 import (
-	"jview/protocol"
+	"canopy/protocol"
 	"path/filepath"
 	"testing"
 	"time"

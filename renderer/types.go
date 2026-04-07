@@ -1,6 +1,6 @@
 package renderer
 
-import "jview/protocol"
+import "canopy/protocol"
 
 // ViewHandle is an opaque pointer to a native view.
 type ViewHandle uintptr

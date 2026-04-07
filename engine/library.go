@@ -3,8 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,16 +12,16 @@ import (
 )
 
 // Library manages a persistent collection of defineComponent definitions
-// in ~/.jview/library/. Components saved here are available across sessions.
+// in ~/.canopy/library/. Components saved here are available across sessions.
 type Library struct {
 	dir  string
 	defs map[string]*protocol.DefineComponent
 }
 
-// NewLibrary creates a library backed by ~/.jview/library/.
+// NewLibrary creates a library backed by ~/.canopy/library/.
 func NewLibrary() *Library {
 	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".jview", "library")
+	dir := filepath.Join(home, ".canopy", "library")
 	return &Library{
 		dir:  dir,
 		defs: make(map[string]*protocol.DefineComponent),

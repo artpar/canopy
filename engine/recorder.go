@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"os"
 )
 

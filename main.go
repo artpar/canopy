@@ -5,13 +5,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"jview/engine"
-	"jview/jlog"
-	"jview/mcp"
-	"jview/platform/darwin"
-	"jview/protocol"
-	"jview/renderer"
-	"jview/transport"
+	"canopy/engine"
+	"canopy/jlog"
+	"canopy/mcp"
+	"canopy/platform/darwin"
+	"canopy/protocol"
+	"canopy/renderer"
+	"canopy/transport"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -65,7 +65,7 @@ func main() {
 	jlog.Init(jlog.Config{
 		MaxEntries: 10000,
 		MinLevel:   jlog.LevelInfo,
-		LogDir:     "~/.jview/logs",
+		LogDir:     "~/.canopy/logs",
 	})
 	defer jlog.Close()
 
@@ -212,16 +212,8 @@ func main() {
 			llmTr = lt
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "usage: jview <file.jsonl>\n")
-		fmt.Fprintf(os.Stderr, "       jview --prompt \"Build a todo app\"\n")
-		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt\n")
-		fmt.Fprintf(os.Stderr, "       jview --llm openai --model gpt-4o --prompt-file prompt.txt\n")
-		fmt.Fprintf(os.Stderr, "       jview --prompt-file prompt.txt --generate-only\n")
-		fmt.Fprintf(os.Stderr, "       jview --claude-code \"Build a counter with + and - buttons\"\n")
-		fmt.Fprintf(os.Stderr, "       jview --claude-code \"keyboard\" --save-component keyboard\n")
-		fmt.Fprintf(os.Stderr, "       jview --watch testdata/contact_form.jsonl\n")
-		fmt.Fprintf(os.Stderr, "       jview --ffi-config libs.json testdata/app.jsonl\n")
-		os.Exit(1)
+		// No arguments — start as tray-only app (no transport)
+		tr = nil
 	}
 
 	// Set up recorder for generative transports (LLM or Claude Code) when caching
@@ -367,7 +359,21 @@ func main() {
 
 	// Interactive mode: initialize platform and engine
 	darwin.AppInit()
-	darwin.ShowSplashWindow("jview", 400, 200)
+
+	// Always start in menubar mode (system tray)
+	darwin.SetAppMode("menubar", "app.dashed", "Canopy", 0)
+
+	// Scan sample_apps/ for the Apps submenu
+	sampleApps := scanSampleApps()
+	if len(sampleApps) > 0 {
+		darwin.SetStatusMenuApps(sampleApps)
+	}
+
+	// Show splash only when loading a fixture/prompt (not bare startup)
+	hasForegroundWork := tr != nil
+	if hasForegroundWork {
+		darwin.ShowSplashWindow("Canopy", 400, 200)
+	}
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
@@ -388,8 +394,7 @@ func main() {
 	pm = engine.NewProcessManager(sess, func(cfg protocol.ProcessTransportConfig) (engine.ProcessTransport, error) {
 		switch cfg.Type {
 		case "file":
-			ft := transport.NewFileTransport(cfg.Path)
-			return ft, nil
+			return createFileTransportOrError(cfg.Path)
 		case "interval":
 			if cfg.Interval <= 0 {
 				return nil, fmt.Errorf("interval transport requires interval > 0")
@@ -448,6 +453,25 @@ func main() {
 	// Set up channel manager for inter-process communication
 	cm = engine.NewChannelManager(sess)
 	sess.SetChannelManager(cm)
+
+	// Wire status bar menu handlers
+	darwin.OnStatusMenuAppClicked = func(appPath string) {
+		jlog.Infof("main", "", "launching app: %s", appPath)
+		processID := "app_" + filepath.Base(appPath)
+		err := pm.Create(protocol.CreateProcess{
+			ProcessID: processID,
+			Transport: protocol.ProcessTransportConfig{
+				Type: "file",
+				Path: appPath,
+			},
+		})
+		if err != nil {
+			jlog.Errorf("main", "", "failed to launch app %s: %v", appPath, err)
+		}
+	}
+	darwin.OnStatusMenuSettingsClicked = func() {
+		jlog.Infof("main", "", "settings clicked (not yet implemented)")
+	}
 
 	// Start embedded MCP server on stdin/stdout
 	mcpOpts := []mcp.ServerOption{mcp.WithProcessManager(pm), mcp.WithChannelManager(cm)}
@@ -570,7 +594,9 @@ func main() {
 			Event:     event.Name,
 			Data:      data,
 		})
-		tr.SendAction(surfaceID, event, data)
+		if tr != nil {
+			tr.SendAction(surfaceID, event, data)
+		}
 	}
 
 	// Process messages in a goroutine
@@ -581,6 +607,11 @@ func main() {
 	if llmTr != nil {
 		screenshotCh = llmTr.ScreenshotReqCh
 		darwin.SetSuppressCallbacks(true)
+	}
+
+	if tr == nil {
+		// No transport — tray-only mode. Skip to the run loop.
+		goto runLoop
 	}
 
 	go func() {
@@ -676,6 +707,7 @@ func main() {
 		}
 	}()
 
+runLoop:
 	// Handle SIGINT/SIGTERM: clean exit
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -715,32 +747,30 @@ func main() {
 	darwin.AppRun()
 }
 
-// createFileTransport handles both single file and directory mode.
-// Directory mode prefers app.jsonl or main.jsonl as the entry point.
-// Falls back to reading all *.jsonl files sorted lexicographically.
-func createFileTransport(path string) transport.Transport {
+// createFileTransportOrError resolves a file or directory path to a Transport.
+// Returns an error instead of calling os.Exit, so callers can handle gracefully.
+func createFileTransportOrError(path string) (transport.Transport, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		// Let FileTransport handle the error
-		return transport.NewFileTransport(path)
+		return transport.NewFileTransport(path), nil
 	}
 	if !info.IsDir() {
-		return transport.NewFileTransport(path)
+		return transport.NewFileTransport(path), nil
 	}
 
 	// Directory mode: prefer a canonical entry point
 	for _, entry := range []string{"app.jsonl", "main.jsonl"} {
 		ep := filepath.Join(path, entry)
 		if _, err := os.Stat(ep); err == nil {
-			return transport.NewFileTransport(ep)
+			return transport.NewFileTransport(ep), nil
 		}
 	}
 
 	// Fallback: read all .jsonl files sorted lexicographically
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error reading directory: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("error reading directory: %w", err)
 	}
 
 	var files []string
@@ -752,11 +782,20 @@ func createFileTransport(path string) transport.Transport {
 	sort.Strings(files)
 
 	if len(files) == 0 {
-		fmt.Fprintf(os.Stderr, "no .jsonl files found in %s\n", path)
-		os.Exit(1)
+		return nil, fmt.Errorf("no .jsonl files found in %s", path)
 	}
 
-	return transport.NewDirTransport(path, files)
+	return transport.NewDirTransport(path, files), nil
+}
+
+// createFileTransport wraps createFileTransportOrError for CLI startup (fatal on error).
+func createFileTransport(path string) transport.Transport {
+	tr, err := createFileTransportOrError(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	return tr
 }
 
 func createProvider(name string, apiKey string) (anyllm.Provider, error) {
@@ -803,6 +842,7 @@ func dispatchSyncMain[T any](disp renderer.Dispatcher, fn func() T) T {
 
 func runMCP(args []string) {
 	darwin.AppInit()
+	darwin.SetAppMode("menubar", "app.dashed", "Canopy", 0)
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
@@ -913,4 +953,48 @@ func runTests(path string) {
 	if failed > 0 {
 		os.Exit(1)
 	}
+}
+
+// scanSampleApps scans the sample_apps/ directory and returns entries for the status bar Apps submenu.
+func scanSampleApps() []darwin.StatusMenuApp {
+	// Look for sample_apps relative to the executable, then current dir
+	dirs := []string{"sample_apps"}
+	exePath, err := os.Executable()
+	if err == nil {
+		dirs = append([]string{filepath.Join(filepath.Dir(exePath), "sample_apps")}, dirs...)
+	}
+
+	var apps []darwin.StatusMenuApp
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			absPath, _ := filepath.Abs(filepath.Join(dir, name))
+			// Title-case the directory name for display
+			label := strings.ReplaceAll(name, "_", " ")
+			// Capitalize first letter of each word
+			words := strings.Fields(label)
+			for j, w := range words {
+				if len(w) > 0 {
+					words[j] = strings.ToUpper(w[:1]) + w[1:]
+				}
+			}
+			label = strings.Join(words, " ")
+			apps = append(apps, darwin.StatusMenuApp{
+				Label: label,
+				Path:  absPath,
+				Icon:  "app",
+			})
+		}
+		if len(apps) > 0 {
+			break // found sample_apps in one location, don't double-scan
+		}
+	}
+	return apps
 }

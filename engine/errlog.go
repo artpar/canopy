@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"jview/jlog"
+	"canopy/jlog"
 	"runtime"
 )
 

@@ -19,7 +19,7 @@ static const void *kMenuTargetKey = &kMenuTargetKey;
 
 @end
 
-static NSMenuItem* buildMenuItem(NSDictionary *spec, NSMutableArray *targets) {
+NSMenuItem* JVBuildMenuItem(NSDictionary *spec, NSMutableArray *targets) {
     // Separator
     if ([spec[@"separator"] boolValue]) {
         return [NSMenuItem separatorItem];
@@ -95,7 +95,7 @@ static NSMenuItem* buildMenuItem(NSDictionary *spec, NSMutableArray *targets) {
         NSMenu *submenu = [[NSMenu alloc] initWithTitle:label];
         [submenu setAutoenablesItems:NO];
         for (NSDictionary *child in children) {
-            NSMenuItem *childItem = buildMenuItem(child, targets);
+            NSMenuItem *childItem = JVBuildMenuItem(child, targets);
             if (childItem) {
                 [submenu addItem:childItem];
             }
@@ -130,7 +130,7 @@ void JVUpdateMenu(const char* surfaceID, const char* itemsJSON) {
     }
 
     for (NSDictionary *spec in items) {
-        NSMenuItem *item = buildMenuItem(spec, targets);
+        NSMenuItem *item = JVBuildMenuItem(spec, targets);
         if (item) {
             [mainMenu addItem:item];
         }

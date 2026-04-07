@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/protocol"
+	"canopy/renderer"
 	"strings"
 	"testing"
 )

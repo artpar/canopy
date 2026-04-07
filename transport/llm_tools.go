@@ -3,8 +3,8 @@ package transport
 import (
 	"encoding/json"
 	"fmt"
-	"jview/jlog"
-	"jview/protocol"
+	"canopy/jlog"
+	"canopy/protocol"
 	"os/exec"
 	"runtime"
 	"sort"

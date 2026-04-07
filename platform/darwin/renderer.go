@@ -9,9 +9,9 @@ package darwin
 */
 import "C"
 import (
-	"jview/jlog"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/jlog"
+	"canopy/protocol"
+	"canopy/renderer"
 	"sync"
 	"unsafe"
 )
@@ -428,8 +428,11 @@ func (r *DarwinRenderer) UpdateWindow(surfaceID string, title string, minWidth, 
 	C.JVUpdateWindow(cSID, cTitle, C.int(minWidth), C.int(minHeight))
 }
 
-func (r *DarwinRenderer) SetAppMode(mode, icon, title string, callbackID renderer.CallbackID) {
+func (r *DarwinRenderer) SetAppMode(mode, icon, title string, callbackID renderer.CallbackID, menuItems []renderer.MenuItemSpec) {
 	SetAppMode(mode, icon, title, uint64(callbackID))
+	if len(menuItems) > 0 {
+		SetStatusMenuDynamic(menuItems)
+	}
 }
 
 // removeView removes an NSView from its superview.

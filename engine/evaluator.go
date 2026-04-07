@@ -3,8 +3,8 @@ package engine
 import (
 	"crypto/rand"
 	"fmt"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/protocol"
+	"canopy/renderer"
 	"math"
 	"os/exec"
 	"sort"

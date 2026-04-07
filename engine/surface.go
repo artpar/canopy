@@ -3,9 +3,9 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"jview/jlog"
-	"jview/protocol"
-	"jview/renderer"
+	"canopy/jlog"
+	"canopy/protocol"
+	"canopy/renderer"
 )
 
 // Surface manages a single A2UI surface: its component tree, data model, and bindings.

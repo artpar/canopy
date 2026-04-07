@@ -1,6 +1,6 @@
 package renderer
 
-import "jview/protocol"
+import "canopy/protocol"
 
 // Renderer is the platform-specific rendering interface.
 // All methods are called on the main thread via the Dispatcher.
@@ -74,5 +74,6 @@ type Renderer interface {
 
 	// SetAppMode switches the app activation mode.
 	// mode: "normal", "menubar", "accessory"
-	SetAppMode(mode, icon, title string, callbackID CallbackID)
+	// menuItems: dynamic items for the status bar dropdown menu (menubar mode)
+	SetAppMode(mode, icon, title string, callbackID CallbackID, menuItems []MenuItemSpec)
 }

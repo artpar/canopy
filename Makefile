@@ -1,4 +1,4 @@
-BINARY    := jview
+BINARY    := canopy
 BUILD_DIR := build
 SNAP_DIR  := $(BUILD_DIR)/screenshots
 FIXTURES  := $(wildcard testdata/*.jsonl)
@@ -89,7 +89,7 @@ clean-apps:
 	rm -f sample_apps/*/*.jsonl sample_apps/*/*.jsonl.tmp sample_apps/*/.*.hash
 
 # ── App Bundle ─────────────────────────────────────
-APP_NAME   := jview.app
+APP_NAME   := Canopy.app
 APP_DIR    := $(BUILD_DIR)/$(APP_NAME)
 CONTENTS   := $(APP_DIR)/Contents
 MACOS_DIR  := $(CONTENTS)/MacOS

@@ -1,6 +1,6 @@
 package engine
 
-import "jview/protocol"
+import "canopy/protocol"
 
 // Tree maintains the component hierarchy for a surface.
 // Components are stored in a flat map; the tree structure is derived from ParentID + Children.
