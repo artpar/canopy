@@ -59,8 +59,8 @@ func TestToolsList(t *testing.T) {
 	var result ToolsListResult
 	json.Unmarshal(resp.Result, &result)
 
-	if len(result.Tools) != 26 {
-		t.Errorf("tools count = %d, want 26", len(result.Tools))
+	if len(result.Tools) != 42 {
+		t.Errorf("tools count = %d, want 42", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  tool: %s", tool.Name)
 		}
@@ -72,10 +72,17 @@ func TestToolsList(t *testing.T) {
 		"take_screenshot": true, "perform_action": true, "click": true, "fill": true,
 		"toggle": true, "interact": true, "set_data_model": true,
 		"wait_for": true, "send_message": true, "get_logs": true,
+		"get_pending_actions": true,
 		"list_processes": true, "create_process": true, "stop_process": true,
 		"send_to_process": true, "list_channels": true, "create_channel": true,
 		"delete_channel": true, "publish": true, "subscribe": true,
-		"unsubscribe": true,
+		"unsubscribe": true, "camera_capture": true, "audio_recorder_toggle": true,
+		// System tools
+		"notify": true, "clipboard_read": true, "clipboard_write": true,
+		"open_url": true, "file_open": true, "file_save": true, "alert": true,
+		"camera_capture_headless": true, "audio_record_start": true,
+		"audio_record_stop": true, "screen_capture": true,
+		"screen_record_start": true, "screen_record_stop": true,
 	}
 	for _, tool := range result.Tools {
 		if !expected[tool.Name] {
@@ -339,8 +346,8 @@ func TestEndToEndJSONRPC(t *testing.T) {
 	json.Unmarshal([]byte(lines[1]), &toolsResp)
 	var toolsResult ToolsListResult
 	json.Unmarshal(toolsResp.Result, &toolsResult)
-	if len(toolsResult.Tools) != 26 {
-		t.Errorf("tools count = %d, want 26", len(toolsResult.Tools))
+	if len(toolsResult.Tools) != 42 {
+		t.Errorf("tools count = %d, want 42", len(toolsResult.Tools))
 	}
 
 	// Check ping response

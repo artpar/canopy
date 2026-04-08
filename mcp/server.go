@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"canopy/engine"
 	"canopy/jlog"
+	"canopy/pkg/registry"
 	"canopy/protocol"
 	"canopy/renderer"
 	"sync"
@@ -21,12 +22,13 @@ type PendingAction struct {
 
 // Server is an MCP server that wraps a jview Session and Renderer.
 type Server struct {
-	sess  *engine.Session
-	rend  renderer.Renderer
-	disp  renderer.Dispatcher
-	pm    *engine.ProcessManager
-	cm    *engine.ChannelManager
-	tools map[string]toolHandler
+	sess     *engine.Session
+	rend     renderer.Renderer
+	disp     renderer.Dispatcher
+	pm       *engine.ProcessManager
+	cm       *engine.ChannelManager
+	registry *registry.Registry
+	tools    map[string]toolHandler
 
 	// Component reference text for resources/read
 	componentRef string
@@ -57,6 +59,11 @@ func WithProcessManager(pm *engine.ProcessManager) ServerOption {
 // WithChannelManager attaches a channel manager to the MCP server.
 func WithChannelManager(cm *engine.ChannelManager) ServerOption {
 	return func(s *Server) { s.cm = cm }
+}
+
+// WithRegistry attaches a package registry to the MCP server.
+func WithRegistry(reg *registry.Registry) ServerOption {
+	return func(s *Server) { s.registry = reg }
 }
 
 // WithComponentReference sets the A2UI protocol reference text

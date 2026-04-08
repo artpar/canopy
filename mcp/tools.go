@@ -40,6 +40,7 @@ func (s *Server) registerTools() {
 	s.registerCameraCapture()
 	s.registerAudioRecorderToggle()
 	s.registerSystemTools()
+	s.registerPackageTools()
 }
 
 // --- Query tools ---

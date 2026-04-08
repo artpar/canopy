@@ -3,11 +3,14 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"canopy/cmd"
 	"canopy/engine"
 	"canopy/jlog"
 	"canopy/mcp"
+	"canopy/pkg/registry"
 	"canopy/platform/darwin"
 	"canopy/protocol"
 	"canopy/renderer"
@@ -78,6 +81,12 @@ func main() {
 	// Handle "jview mcp [file.jsonl]" — embedded MCP server
 	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
 		runMCP(os.Args[2:])
+		return
+	}
+
+	// Handle "canopy pkg <subcommand>" — package management (pure Go, no AppKit)
+	if len(os.Args) >= 2 && os.Args[1] == "pkg" {
+		cmd.RunPkg(os.Args[2:])
 		return
 	}
 
@@ -473,8 +482,17 @@ func main() {
 		jlog.Infof("main", "", "settings clicked (not yet implemented)")
 	}
 
+	// Initialize package registry
+	pkgRegistry, err := registry.New()
+	if err != nil {
+		jlog.Errorf("main", "", "failed to init package registry: %v", err)
+	}
+
 	// Start embedded MCP server on stdin/stdout
 	mcpOpts := []mcp.ServerOption{mcp.WithProcessManager(pm), mcp.WithChannelManager(cm)}
+	if pkgRegistry != nil {
+		mcpOpts = append(mcpOpts, mcp.WithRegistry(pkgRegistry))
+	}
 	mcpServer := mcp.NewServer(sess, rend, disp, mcpOpts...)
 	toolNames := mcpServer.ToolNames()
 	jlog.Infof("main", "", "mcp: listening on stdin/stdout (%d tools: %s)", len(toolNames), strings.Join(toolNames, ", "))
@@ -516,6 +534,9 @@ func main() {
 				mcp.WithProcessManager(pm),
 				mcp.WithChannelManager(cm),
 				mcp.WithComponentReference(transport.ComponentReference(lib.ComponentListForPrompt())),
+			}
+			if pkgRegistry != nil {
+				opts = append(opts, mcp.WithRegistry(pkgRegistry))
 			}
 			srv := mcp.NewServer(sess, rend, disp, opts...)
 			srv.OnToolCall = func(toolName string) {
@@ -894,7 +915,12 @@ func runMCP(args []string) {
 	}
 
 	mcpTransport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
-	mcpServer := mcp.NewServer(sess, rend, disp, mcp.WithProcessManager(pm), mcp.WithChannelManager(cm))
+	mcpPkgRegistry, _ := registry.New()
+	mcpOpts2 := []mcp.ServerOption{mcp.WithProcessManager(pm), mcp.WithChannelManager(cm)}
+	if mcpPkgRegistry != nil {
+		mcpOpts2 = append(mcpOpts2, mcp.WithRegistry(mcpPkgRegistry))
+	}
+	mcpServer := mcp.NewServer(sess, rend, disp, mcpOpts2...)
 	toolNames := mcpServer.ToolNames()
 
 	// Wire actions to MCP action queue for get_pending_actions polling
@@ -955,7 +981,7 @@ func runTests(path string) {
 	}
 }
 
-// scanSampleApps scans the sample_apps/ directory and returns entries for the status bar Apps submenu.
+// scanSampleApps scans sample_apps/ and ~/.canopy/apps/ for the status bar Apps submenu.
 func scanSampleApps() []darwin.StatusMenuApp {
 	// Look for sample_apps relative to the executable, then current dir
 	dirs := []string{"sample_apps"}
@@ -976,18 +1002,8 @@ func scanSampleApps() []darwin.StatusMenuApp {
 			}
 			name := e.Name()
 			absPath, _ := filepath.Abs(filepath.Join(dir, name))
-			// Title-case the directory name for display
-			label := strings.ReplaceAll(name, "_", " ")
-			// Capitalize first letter of each word
-			words := strings.Fields(label)
-			for j, w := range words {
-				if len(w) > 0 {
-					words[j] = strings.ToUpper(w[:1]) + w[1:]
-				}
-			}
-			label = strings.Join(words, " ")
 			apps = append(apps, darwin.StatusMenuApp{
-				Label: label,
+				Label: titleCase(name),
 				Path:  absPath,
 				Icon:  "app",
 			})
@@ -996,5 +1012,61 @@ func scanSampleApps() []darwin.StatusMenuApp {
 			break // found sample_apps in one location, don't double-scan
 		}
 	}
+
+	// Also scan installed packages from ~/.canopy/apps/
+	home, err := os.UserHomeDir()
+	if err == nil {
+		appsDir := filepath.Join(home, ".canopy", "apps")
+		owners, _ := os.ReadDir(appsDir)
+		for _, owner := range owners {
+			if !owner.IsDir() {
+				continue
+			}
+			pkgs, _ := os.ReadDir(filepath.Join(appsDir, owner.Name()))
+			for _, pkg := range pkgs {
+				if !pkg.IsDir() {
+					continue
+				}
+				pkgPath := filepath.Join(appsDir, owner.Name(), pkg.Name())
+				label := titleCase(pkg.Name())
+				icon := "app"
+
+				// Try to read canopy.json for better metadata
+				manifestData, err := os.ReadFile(filepath.Join(pkgPath, "canopy.json"))
+				if err == nil {
+					var m struct {
+						Name string `json:"name"`
+						Icon string `json:"icon"`
+					}
+					if json.Unmarshal(manifestData, &m) == nil {
+						if m.Name != "" {
+							label = m.Name
+						}
+						if m.Icon != "" {
+							icon = m.Icon
+						}
+					}
+				}
+
+				apps = append(apps, darwin.StatusMenuApp{
+					Label: label,
+					Path:  pkgPath,
+					Icon:  icon,
+				})
+			}
+		}
+	}
+
 	return apps
+}
+
+func titleCase(name string) string {
+	label := strings.ReplaceAll(name, "_", " ")
+	words := strings.Fields(label)
+	for j, w := range words {
+		if len(w) > 0 {
+			words[j] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }
