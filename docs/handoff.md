@@ -1,8 +1,8 @@
 # Session Handoff
 
-Last updated after Notes Clone (SplitView, OutlineView, SearchField, RichTextEditor + Notes app). This document gives a new session everything it needs to continue work on jview.
+Last updated after Media Capture (CameraView, AudioRecorder, screen capture). This document gives a new session everything it needs to continue work on Canopy (formerly jview).
 
-## What Is jview
+## What Is Canopy
 
 A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go engine processes messages, CGo bridge talks to Objective-C, native Cocoa views appear on screen. No webview. Connects to LLMs to generate native UIs in real-time — user interactions flow back as conversation turns.
 
@@ -84,7 +84,15 @@ A native macOS app that renders A2UI JSONL protocol as real AppKit widgets. Go e
 - OutlineView: column auto-resizing style set to uniform for proper width fill
 - RichTextEditor: NSTextView scroll configuration (verticallyResizable, widthTracksTextView, containerSize)
 
-**350+ tests pass** across protocol/, engine/, transport/ with race detection. 42+ fixtures screenshot-verified.
+**Media Capture complete.** 2 new components, 6 new evaluator functions, 8 new MCP tools for camera, microphone, and screen capture:
+- CameraView: AVCaptureSession + AVCaptureVideoPreviewLayer for live preview, AVCapturePhotoOutput for stills. Props: devicePosition, mirrored. Callbacks: onCapture (returns JPEG path), onError.
+- AudioRecorder: AVAudioRecorder with native UI — record/stop button (SF Symbol), NSLevelIndicator level meter, monospacedDigit time label. Props: format, sampleRate, recordChannels. Callbacks: onRecordingStarted, onRecordingStopped (path + duration), onLevel (dB).
+- Headless NativeProvider functions: cameraCapture (one-shot photo without preview), audioRecordStart/Stop, screenCapture (ScreenCaptureKit on macOS 14+, CGWindowList fallback on 13).
+- Screen recording stubbed (screenRecordStart/Stop return "not yet implemented").
+- Proper cleanup: sessions remove inputs/outputs before stopRunning, associated objects nil'd, headless camera delegate released after capture, CleanupAll() on NativeProvider for orphaned recordings.
+- Info.plist: NSCameraUsageDescription + NSMicrophoneUsageDescription.
+
+**387+ tests pass** across protocol/, engine/, transport/ with race detection. 50 fixtures screenshot-verified.
 
 ## Repository Layout
 

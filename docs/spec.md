@@ -1,6 +1,6 @@
-# jview A2UI Protocol Specification
+# Canopy A2UI Protocol Specification
 
-This document describes the A2UI JSONL protocol superset implemented by jview and the rendering rules applied by the engine.
+This document describes the A2UI JSONL protocol superset implemented by Canopy and the rendering rules applied by the engine.
 
 ## Wire Format
 
@@ -974,6 +974,39 @@ Rich text editor (NSTextView in NSScrollView) with bidirectional markdown conver
 
 Supported markdown: `# Title`, `## Heading`, `### Subheading`, `**bold**`, `*italic*`, `~~strikethrough~~`, `` `monospace` ``, `- [ ] checklist`, `- [x] checked`, `- bullet`, `1. numbered`. External data model updates are skipped while the user is actively editing to prevent cursor jump.
 
+### CameraView
+
+Live camera preview using AVCaptureSession with AVCaptureVideoPreviewLayer, plus still photo capture via AVCapturePhotoOutput.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| devicePosition | DynamicString | `"front"` | Camera position: `"front"` or `"back"` |
+| mirrored | DynamicBoolean | `true` | Mirror the preview horizontally |
+| onCapture | EventAction | | Fired when a photo is captured. Data: `{"path":"/tmp/canopy_photo_xxx.jpg"}` |
+| onError | EventAction | | Fired on camera error. Data: `{"error":"..."}` |
+
+Size is controlled via `style.width` / `style.height`. The preview layer uses `AVLayerVideoGravityResizeAspectFill` and auto-resizes with the container. Camera permission is requested on first use via `AVCaptureDevice requestAccessForMediaType:`. The capture session runs on a dedicated serial dispatch queue. On cleanup, inputs and outputs are removed from the session before stopping to ensure the camera device is fully released.
+
+Photo capture is triggered via the `camera_capture` MCP tool or programmatically. The `onCapture` callback receives the saved JPEG file path.
+
+### AudioRecorder
+
+Audio recording from the microphone with a native control bar UI (record/stop button, level meter, elapsed time).
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| format | string | `"m4a"` | Audio format: `"m4a"` (AAC) or `"wav"` (PCM) |
+| sampleRate | DynamicNumber | `44100` | Sample rate in Hz |
+| recordChannels | int | `1` | Number of channels: 1 (mono) or 2 (stereo) |
+| onRecordingStarted | EventAction | | Fired when recording begins. Data: `{}` |
+| onRecordingStopped | EventAction | | Fired when recording stops. Data: `{"path":"...","duration":5.2}` |
+| onLevel | EventAction | | Fired at 10Hz during recording. Data: `{"level":-12.5}` (dB) |
+| onError | EventAction | | Fired on mic error. Data: `{"error":"..."}` |
+
+The AudioRecorder renders as a 40pt-tall horizontal bar with a red record button (SF Symbol `circle.fill`), an `NSLevelIndicator` level meter, and a monospaced-digit time label. Clicking the button toggles between recording (icon changes to `stop.fill`) and stopped. Microphone permission is requested on first toggle. Recordings are saved to `NSTemporaryDirectory()`. On cleanup, the recorder is stopped and associated objects are nil'd to break retain cycles.
+
+Recording can also be toggled via the `audio_recorder_toggle` MCP tool.
+
 ---
 
 ## Visual Styling
@@ -1209,19 +1242,21 @@ Path overlap: `/a` and `/a/b` overlap (parent-child). `/a` and `/b` do not.
 
 The MCP server starts automatically on stdin/stdout in all modes using JSON-RPC 2.0. When running `jview file.jsonl`, the MCP server is available alongside the normal UI. `jview mcp [file.jsonl]` is a dedicated MCP-only mode that quits on EOF.
 
-26 tools are available:
+42 tools are available:
 
 | Category | Tools |
 |----------|-------|
 | Query | `list_surfaces`, `get_tree`, `get_component`, `get_data_model`, `get_layout`, `get_style` |
-| Interaction | `click`, `fill`, `toggle`, `interact` |
+| Interaction | `click`, `fill`, `toggle`, `interact`, `camera_capture`, `audio_recorder_toggle` |
 | Actions | `perform_action` (send AppKit selector through responder chain, e.g. `selectAll:`, `toggleBoldface:`) |
 | Data | `set_data_model`, `wait_for` |
 | Transport | `send_message` (send A2UI JSONL messages to create/update surfaces) |
 | Capture | `take_screenshot` (PNG — saves to disk with `filePath`, or returns base64) |
-| Logging | `get_logs` |
+| Logging | `get_logs`, `get_pending_actions` |
 | Processes | `list_processes`, `create_process`, `stop_process`, `send_to_process` |
 | Channels | `list_channels`, `create_channel`, `delete_channel`, `publish`, `subscribe`, `unsubscribe` |
+| System | `notify`, `clipboard_read`, `clipboard_write`, `open_url`, `file_open`, `file_save`, `alert` |
+| Media | `camera_capture_headless`, `audio_record_start`, `audio_record_stop`, `screen_capture`, `screen_record_start`, `screen_record_stop` |
 
 The MCP server enables programmatic UI control, testing, and integration with external agents or tools that speak MCP.
 
@@ -1229,4 +1264,4 @@ The MCP server enables programmatic UI control, testing, and integration with ex
 
 ## Reserved Component Types (Not Yet Implemented)
 
-No reserved component types remain. All components through the Notes Clone phase are implemented (22 total).
+No reserved component types remain. All components through the Media Capture phase are implemented (25 total).
