@@ -25,6 +25,9 @@ var eventMonitorEvents = map[string]bool{
 	"blur":        true,
 	"keyDown":     true,
 	"keyUp":       true,
+	"magnify":     true,
+	"rotate":      true,
+	"scrollWheel": true,
 }
 
 func installEventMonitor(handle renderer.ViewHandle, eventName string, callbackID uint64) {

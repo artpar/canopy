@@ -35,6 +35,18 @@ static const void *kEventMonitorSetKey = &kEventMonitorSetKey;
 @property (nonatomic, assign) uint64_t keyUpCbID;
 @property (nonatomic, strong) id keyDownMonitor;
 @property (nonatomic, strong) id keyUpMonitor;
+
+// Magnify gesture
+@property (nonatomic, strong) NSMagnificationGestureRecognizer *magnifyGesture;
+@property (nonatomic, assign) uint64_t magnifyCbID;
+
+// Rotate gesture
+@property (nonatomic, strong) NSRotationGestureRecognizer *rotateGesture;
+@property (nonatomic, assign) uint64_t rotateCbID;
+
+// Scroll wheel via NSEvent local monitor
+@property (nonatomic, assign) uint64_t scrollWheelCbID;
+@property (nonatomic, strong) id scrollWheelMonitor;
 @end
 
 @implementation JVEventMonitorSet
@@ -45,6 +57,9 @@ static const void *kEventMonitorSetKey = &kEventMonitorSetKey;
     [self removeDoubleClickGesture];
     [self removeRightClickGesture];
     [self removeKeyboardMonitors];
+    [self removeMagnifyGesture];
+    [self removeRotateGesture];
+    [self removeScrollWheelMonitor];
 }
 
 #pragma mark - Mouse Enter/Leave (NSTrackingArea)
@@ -353,6 +368,115 @@ static NSString* keyEventJSON(NSEvent *event) {
     self.keyUpCbID = 0;
 }
 
+#pragma mark - Magnify Gesture
+
+static NSString* gesturePhaseString(NSGestureRecognizerState state) {
+    switch (state) {
+        case NSGestureRecognizerStateBegan: return @"began";
+        case NSGestureRecognizerStateChanged: return @"changed";
+        case NSGestureRecognizerStateEnded: return @"ended";
+        case NSGestureRecognizerStateCancelled: return @"cancelled";
+        default: return @"unknown";
+    }
+}
+
+- (void)installMagnifyGesture {
+    NSView *view = self.view;
+    if (!view) return;
+
+    [self removeMagnifyGesture];
+
+    NSMagnificationGestureRecognizer *gesture = [[NSMagnificationGestureRecognizer alloc]
+        initWithTarget:self action:@selector(handleMagnify:)];
+    [view addGestureRecognizer:gesture];
+    self.magnifyGesture = gesture;
+}
+
+- (void)removeMagnifyGesture {
+    if (self.magnifyGesture && self.view) {
+        [self.view removeGestureRecognizer:self.magnifyGesture];
+    }
+    self.magnifyGesture = nil;
+    self.magnifyCbID = 0;
+}
+
+- (void)handleMagnify:(NSMagnificationGestureRecognizer *)recognizer {
+    if (!self.magnifyCbID) return;
+    NSString *phase = gesturePhaseString(recognizer.state);
+    NSString *json = [NSString stringWithFormat:
+        @"{\"magnification\":%.4f,\"phase\":\"%@\"}", recognizer.magnification, phase];
+    GoCallbackInvoke(self.magnifyCbID, [json UTF8String]);
+}
+
+#pragma mark - Rotate Gesture
+
+- (void)installRotateGesture {
+    NSView *view = self.view;
+    if (!view) return;
+
+    [self removeRotateGesture];
+
+    NSRotationGestureRecognizer *gesture = [[NSRotationGestureRecognizer alloc]
+        initWithTarget:self action:@selector(handleRotate:)];
+    [view addGestureRecognizer:gesture];
+    self.rotateGesture = gesture;
+}
+
+- (void)removeRotateGesture {
+    if (self.rotateGesture && self.view) {
+        [self.view removeGestureRecognizer:self.rotateGesture];
+    }
+    self.rotateGesture = nil;
+    self.rotateCbID = 0;
+}
+
+- (void)handleRotate:(NSRotationGestureRecognizer *)recognizer {
+    if (!self.rotateCbID) return;
+    NSString *phase = gesturePhaseString(recognizer.state);
+    NSString *json = [NSString stringWithFormat:
+        @"{\"rotation\":%.4f,\"phase\":\"%@\"}", recognizer.rotation, phase];
+    GoCallbackInvoke(self.rotateCbID, [json UTF8String]);
+}
+
+#pragma mark - Scroll Wheel (NSEvent local monitor)
+
+- (void)installScrollWheelMonitor {
+    if (self.scrollWheelMonitor) return;
+
+    __weak JVEventMonitorSet *weakSelf = self;
+    self.scrollWheelMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+        handler:^NSEvent *(NSEvent *event) {
+            JVEventMonitorSet *strongSelf = weakSelf;
+            if (!strongSelf || !strongSelf.scrollWheelCbID) return event;
+
+            // Check if the scroll event targets this view
+            NSView *view = strongSelf.view;
+            if (!view || !view.window) return event;
+            NSPoint loc = [view convertPoint:event.locationInWindow fromView:nil];
+            if (![view mouse:loc inRect:view.bounds]) return event;
+
+            NSString *phase = @"none";
+            if (event.phase == NSEventPhaseBegan) phase = @"began";
+            else if (event.phase == NSEventPhaseChanged) phase = @"changed";
+            else if (event.phase == NSEventPhaseEnded) phase = @"ended";
+            else if (event.phase == NSEventPhaseCancelled) phase = @"cancelled";
+
+            NSString *json = [NSString stringWithFormat:
+                @"{\"deltaX\":%.2f,\"deltaY\":%.2f,\"phase\":\"%@\"}",
+                event.scrollingDeltaX, event.scrollingDeltaY, phase];
+            GoCallbackInvoke(strongSelf.scrollWheelCbID, [json UTF8String]);
+            return event;
+        }];
+}
+
+- (void)removeScrollWheelMonitor {
+    if (self.scrollWheelMonitor) {
+        [NSEvent removeMonitor:self.scrollWheelMonitor];
+        self.scrollWheelMonitor = nil;
+    }
+    self.scrollWheelCbID = 0;
+}
+
 #pragma mark - Cleanup
 
 - (void)removeAll {
@@ -361,6 +485,9 @@ static NSString* keyEventJSON(NSEvent *event) {
     [self removeRightClickGesture];
     [self removeFocusMonitor];
     [self removeKeyboardMonitors];
+    [self removeMagnifyGesture];
+    [self removeRotateGesture];
+    [self removeScrollWheelMonitor];
 }
 
 @end
@@ -414,6 +541,15 @@ void JVInstallEventMonitor(void* handle, const char* eventName, uint64_t callbac
     } else if ([name isEqualToString:@"keyUp"]) {
         set.keyUpCbID = callbackID;
         [set installKeyUpMonitor];
+    } else if ([name isEqualToString:@"magnify"]) {
+        set.magnifyCbID = callbackID;
+        [set installMagnifyGesture];
+    } else if ([name isEqualToString:@"rotate"]) {
+        set.rotateCbID = callbackID;
+        [set installRotateGesture];
+    } else if ([name isEqualToString:@"scrollWheel"]) {
+        set.scrollWheelCbID = callbackID;
+        [set installScrollWheelMonitor];
     }
 }
 
@@ -443,6 +579,12 @@ void JVUpdateEventMonitorCallbackID(void* handle, const char* eventName, uint64_
         set.keyDownCbID = callbackID;
     } else if ([name isEqualToString:@"keyUp"]) {
         set.keyUpCbID = callbackID;
+    } else if ([name isEqualToString:@"magnify"]) {
+        set.magnifyCbID = callbackID;
+    } else if ([name isEqualToString:@"rotate"]) {
+        set.rotateCbID = callbackID;
+    } else if ([name isEqualToString:@"scrollWheel"]) {
+        set.scrollWheelCbID = callbackID;
     }
 }
 
