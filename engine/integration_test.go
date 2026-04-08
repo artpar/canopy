@@ -1,12 +1,15 @@
 package engine
 
 import (
-	"canopy/protocol"
-	"canopy/renderer"
+	"fmt"
+	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"canopy/protocol"
+	"canopy/renderer"
 )
 
 // feedMessages parses JSONL and feeds to session. Returns after all processed.
@@ -2775,4 +2778,110 @@ func TestModalDismissBinding(t *testing.T) {
 			t.Fatalf("expected false after dismiss, got %v", val)
 		}
 	}
+}
+
+func TestEventManagerThrottledSubscription(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":800,"height":600}
+{"type":"on","surfaceId":"main","id":"fast","event":"window.resize","handler":{"dataPath":"/size","throttle":100}}`)
+
+	// Fire rapidly — only first should get through immediately
+	sess.EventManager().Fire("window.resize", "main", `{"width":100,"height":100}`)
+	sess.EventManager().Fire("window.resize", "main", `{"width":200,"height":200}`)
+	sess.EventManager().Fire("window.resize", "main", `{"width":300,"height":300}`)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/size")
+	if !found {
+		t.Fatal("expected /size to be set")
+	}
+	// Should have first event's data (throttle fires immediately, then drops)
+	m, _ := val.(map[string]interface{})
+	if w, _ := m["width"].(float64); w != 100 {
+		t.Errorf("expected width=100 (first throttled event), got %v", w)
+	}
+}
+
+func TestEventManagerDebouncedSubscription(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":800,"height":600}
+{"type":"on","surfaceId":"main","id":"debounced","event":"window.resize","handler":{"dataPath":"/size","debounce":50}}`)
+
+	sess.EventManager().Fire("window.resize", "main", `{"width":100,"height":100}`)
+	sess.EventManager().Fire("window.resize", "main", `{"width":200,"height":200}`)
+	sess.EventManager().Fire("window.resize", "main", `{"width":300,"height":300}`)
+
+	// Wait for debounce to fire
+	time.Sleep(80 * time.Millisecond)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/size")
+	if !found {
+		t.Fatal("expected /size to be set after debounce")
+	}
+	m, _ := val.(map[string]interface{})
+	if w, _ := m["width"].(float64); w != 300 {
+		t.Errorf("expected width=300 (last debounced event), got %v", w)
+	}
+}
+
+func TestTCPListenerSubscription(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":800,"height":600}`)
+
+	// Use a random port
+	sess.EventManager().Subscribe(protocol.OnMessage{
+		Type:      protocol.MsgOn,
+		SurfaceID: "main",
+		ID:        "tcp-1",
+		Event:     "system.network.tcp",
+		Config:    map[string]interface{}{"port": float64(19876)},
+		Handler:   protocol.EventAction{DataPath: "/tcp/data"},
+	})
+
+	// Give the listener time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Connect and send a line
+	conn, err := net.Dial("tcp", "localhost:19876")
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	fmt.Fprintln(conn, `{"msg":"hello"}`)
+	conn.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/tcp/data")
+	if !found {
+		t.Fatal("expected /tcp/data to be set after TCP message")
+	}
+	m, ok := val.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", val, val)
+	}
+	if msg, _ := m["msg"].(string); msg != "hello" {
+		t.Errorf("expected msg='hello', got %v", msg)
+	}
+
+	sess.EventManager().Unsubscribe("tcp-1")
 }

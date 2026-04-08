@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -117,6 +118,73 @@ func (e *Evaluator) fnFileSave(args []any) (any, error) {
 		return nil, err
 	}
 	return path, nil
+}
+
+func (e *Evaluator) fnFileRead(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("fileRead: not available in headless mode")
+	}
+	if len(args) < 1 {
+		return nil, fmt.Errorf("fileRead: requires path argument")
+	}
+	path := toString(args[0])
+	content, err := e.Native.FileRead(path)
+	if err != nil {
+		return nil, err
+	}
+	return content, nil
+}
+
+func (e *Evaluator) fnFileWrite(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("fileWrite: not available in headless mode")
+	}
+	if len(args) < 2 {
+		return nil, fmt.Errorf("fileWrite: requires path and content arguments")
+	}
+	path := toString(args[0])
+	content := args[1]
+	var s string
+	switch v := content.(type) {
+	case string:
+		s = v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("fileWrite: failed to serialize content: %w", err)
+		}
+		s = string(b)
+	}
+	if err := e.Native.FileWrite(path, s); err != nil {
+		return nil, err
+	}
+	return "ok", nil
+}
+
+func (e *Evaluator) fnFileAppend(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("fileAppend: not available in headless mode")
+	}
+	if len(args) < 2 {
+		return nil, fmt.Errorf("fileAppend: requires path and content arguments")
+	}
+	path := toString(args[0])
+	content := args[1]
+	var s string
+	switch v := content.(type) {
+	case string:
+		s = v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("fileAppend: failed to serialize content: %w", err)
+		}
+		s = string(b)
+	}
+	if err := e.Native.FileAppend(path, s); err != nil {
+		return nil, err
+	}
+	return "ok", nil
 }
 
 func (e *Evaluator) fnAlert(args []any) (any, error) {

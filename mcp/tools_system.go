@@ -11,6 +11,9 @@ func (s *Server) registerSystemTools() {
 	s.registerOpenURL()
 	s.registerFileOpen()
 	s.registerFileSave()
+	s.registerFileRead()
+	s.registerFileWrite()
+	s.registerFileAppend()
 	s.registerAlert()
 	s.registerCameraCaptureSystem()
 	s.registerAudioRecordStartSystem()
@@ -193,6 +196,89 @@ func (s *Server) registerFileSave() {
 			return textResult("cancelled")
 		}
 		return textResult(path)
+	})
+}
+
+func (s *Server) registerFileRead() {
+	s.register("file_read", "Read file contents as string", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"path": {"type": "string", "description": "File path to read"}
+		},
+		"required": ["path"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		content, err := np.FileRead(p.Path)
+		if err != nil {
+			return errorResult("file_read: " + err.Error())
+		}
+		return textResult(content)
+	})
+}
+
+func (s *Server) registerFileWrite() {
+	s.register("file_write", "Write content to file (creates or overwrites)", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"path":    {"type": "string", "description": "File path to write"},
+			"content": {"type": "string", "description": "Content to write"}
+		},
+		"required": ["path", "content"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if err := np.FileWrite(p.Path, p.Content); err != nil {
+			return errorResult("file_write: " + err.Error())
+		}
+		return textResult("ok")
+	})
+}
+
+func (s *Server) registerFileAppend() {
+	s.register("file_append", "Append content to file (creates if missing)", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"path":    {"type": "string", "description": "File path to append to"},
+			"content": {"type": "string", "description": "Content to append"}
+		},
+		"required": ["path", "content"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if err := np.FileAppend(p.Path, p.Content); err != nil {
+			return errorResult("file_append: " + err.Error())
+		}
+		return textResult("ok")
 	})
 }
 

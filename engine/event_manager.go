@@ -18,7 +18,8 @@ type EventSubscription struct {
 	Event     string
 	SurfaceID string
 	Handler   protocol.EventAction
-	Cancel    func() // stops timer, watcher, etc. Nil for passive subscriptions.
+	Cancel    func()      // stops timer, watcher, etc. Nil for passive subscriptions.
+	throttler *Throttler  // rate limiter, nil if no throttle/debounce configured
 }
 
 // SystemEventControl is called when the EventManager needs to start or stop
@@ -76,6 +77,13 @@ func (em *EventManager) Subscribe(msg protocol.OnMessage) error {
 		Handler:   msg.Handler,
 	}
 
+	// Set up throttle/debounce if configured
+	if msg.Handler.Throttle > 0 {
+		sub.throttler = NewThrottler(msg.Handler.Throttle, "throttle")
+	} else if msg.Handler.Debounce > 0 {
+		sub.throttler = NewThrottler(msg.Handler.Debounce, "debounce")
+	}
+
 	// Start system event source if applicable
 	em.startEventSource(sub, msg.Config)
 
@@ -101,6 +109,14 @@ func (em *EventManager) startEventSource(sub *EventSubscription, config map[stri
 		em.startOnDemandSource(sub, config)
 	case "system.ipc.distributed":
 		em.startDistributedNotification(sub, config)
+	case "system.network.websocket":
+		em.startWebSocket(sub, config)
+	case "system.network.sse":
+		em.startSSE(sub, config)
+	case "system.network.tcp":
+		em.startTCPListener(sub, config)
+	case "system.network.http":
+		em.startHTTPListener(sub, config)
 	}
 }
 
@@ -309,6 +325,9 @@ func (em *EventManager) Unsubscribe(id string) error {
 		return fmt.Errorf("subscription %q not found", id)
 	}
 	event := sub.Event
+	if sub.throttler != nil {
+		sub.throttler.Stop()
+	}
 	if sub.Cancel != nil {
 		sub.Cancel()
 	}
@@ -341,11 +360,18 @@ func (em *EventManager) Fire(event string, surfaceID string, data string) {
 		if sid == "" {
 			sid = surfaceID
 		}
-		em.sess.mu.Lock()
-		if surf, ok := em.sess.surfaces[sid]; ok {
-			surf.executeEventAction(&sub.Handler, data)
+		execute := func() {
+			em.sess.mu.Lock()
+			if surf, ok := em.sess.surfaces[sid]; ok {
+				surf.executeEventAction(&sub.Handler, data)
+			}
+			em.sess.mu.Unlock()
 		}
-		em.sess.mu.Unlock()
+		if sub.throttler != nil {
+			sub.throttler.Call(execute)
+		} else {
+			execute()
+		}
 	}
 }
 
@@ -357,6 +383,9 @@ func (em *EventManager) CleanupSurface(surfaceID string) {
 	var removedEvents []string
 	for id, sub := range em.subs {
 		if sub.SurfaceID == surfaceID {
+			if sub.throttler != nil {
+				sub.throttler.Stop()
+			}
 			if sub.Cancel != nil {
 				sub.Cancel()
 			}
@@ -376,6 +405,9 @@ func (em *EventManager) CleanupAll() {
 
 	var removedEvents []string
 	for id, sub := range em.subs {
+		if sub.throttler != nil {
+			sub.throttler.Stop()
+		}
 		if sub.Cancel != nil {
 			sub.Cancel()
 		}

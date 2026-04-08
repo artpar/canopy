@@ -52,6 +52,15 @@ type NativeProvider interface {
 	// ScreenRecordStop stops a screen recording and returns the video file path.
 	ScreenRecordStop(recordingID string) (string, error)
 
+	// FileRead reads a file and returns its contents as a string.
+	FileRead(path string) (string, error)
+
+	// FileWrite writes content to a file, creating or overwriting it.
+	FileWrite(path string, content string) error
+
+	// FileAppend appends content to a file, creating it if missing.
+	FileAppend(path string, content string) error
+
 	// CleanupAll stops all active recordings and releases resources.
 	CleanupAll()
 }

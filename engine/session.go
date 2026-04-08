@@ -3,10 +3,12 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
+
 	"canopy/jlog"
 	"canopy/protocol"
 	"canopy/renderer"
-	"sync"
 )
 
 // Session manages all surfaces and routes incoming messages.
@@ -22,9 +24,10 @@ type Session struct {
 	compDefs map[string]*protocol.DefineComponent
 	pm       *ProcessManager
 	cm       *ChannelManager
-	em       *EventManager
-	recorder *Recorder
-	library  *Library
+	em             *EventManager
+	recorder       *Recorder
+	library        *Library
+	renderInterval time.Duration
 
 	// OnAction is called when any surface triggers a server-bound event.
 	OnAction func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -63,6 +66,12 @@ func (s *Session) SetLibrary(lib *Library) {
 // SetFFI sets the FFI registry for all surfaces created by this session.
 func (s *Session) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi
+}
+
+// SetRenderInterval sets the coalescing window for event-driven renders on all surfaces.
+// 0 = immediate render (default). 16ms = 60fps batching (recommended for production).
+func (s *Session) SetRenderInterval(d time.Duration) {
+	s.renderInterval = d
 }
 
 // SetNativeProvider sets the native capabilities provider for all surfaces.
@@ -367,6 +376,7 @@ func (s *Session) createSurface(cs protocol.CreateSurface) {
 
 	surf := NewSurface(cs.SurfaceID, s.rend, s.dispatch, s.ffi, s.assets)
 	surf.SetNativeProvider(s.native)
+	surf.SetRenderInterval(s.renderInterval)
 	surf.ActionHandler = s.OnAction
 	surf.SetFuncDefs(s.funcDefs)
 	surf.SetCompDefs(s.compDefs)

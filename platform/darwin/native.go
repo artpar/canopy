@@ -297,6 +297,31 @@ func (n *NativeProvider) ScreenRecordStop(recordingID string) (string, error) {
 	return "", fmt.Errorf("screen recording not yet implemented")
 }
 
+// FileRead reads a file and returns its contents as a string.
+func (n *NativeProvider) FileRead(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// FileWrite writes content to a file, creating or overwriting it.
+func (n *NativeProvider) FileWrite(path string, content string) error {
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// FileAppend appends content to a file, creating it if missing.
+func (n *NativeProvider) FileAppend(path string, content string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(content)
+	f.Close()
+	return err
+}
+
 // CleanupAll stops all active headless recordings and releases resources.
 func (n *NativeProvider) CleanupAll() {
 	activeRecordersMu.Lock()

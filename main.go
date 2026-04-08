@@ -366,8 +366,10 @@ func main() {
 						return
 					}
 					if msg == nil {
+						goSess.FlushPendingComponents()
 						if llmTr != nil && llmTr.OnInitialTurnDone != nil {
 							llmTr.OnInitialTurnDone()
+							llmTr.OnInitialTurnDone = nil
 						}
 						continue
 					}
@@ -431,6 +433,7 @@ func main() {
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
+	sess.SetRenderInterval(16 * time.Millisecond) // 60fps render coalescing
 	sess.SetNativeProvider(darwin.NewNativeProvider())
 	if ffiRegistry != nil {
 		sess.SetFFI(ffiRegistry)
@@ -471,7 +474,6 @@ func main() {
 				LibraryBlock: lib.ComponentListForPrompt(),
 			})
 			activeProcessLLM = lt
-			disp.RunOnMain(func() { darwin.SetFollowUpEnabled(true) })
 			return lt, nil
 		case "claude-code":
 			cc := transport.NewClaudeCodeTransport(transport.ClaudeCodeConfig{
@@ -588,31 +590,12 @@ func main() {
 	darwin.OnStatusMenuAppClicked = func(appPath string) {
 		jlog.Infof("main", "", "launching app: %s", appPath)
 		processID := "app_" + filepath.Base(appPath)
-
-		// Check for prompt.txt to enable LLM-powered launch
-		promptPath := filepath.Join(appPath, "prompt.txt")
-		if info, err := os.Stat(appPath); err == nil && !info.IsDir() {
-			promptPath = filepath.Join(filepath.Dir(appPath), "prompt.txt")
-		}
-
-		var tcfg protocol.ProcessTransportConfig
-		if promptData, err := os.ReadFile(promptPath); err == nil && len(promptData) > 0 {
-			tcfg = protocol.ProcessTransportConfig{
-				Type:     "llm",
-				Provider: *llmProvider,
-				Model:    *model,
-				Prompt:   string(promptData),
-			}
-		} else {
-			tcfg = protocol.ProcessTransportConfig{
-				Type: "file",
-				Path: appPath,
-			}
-		}
-
 		err := pm.Create(protocol.CreateProcess{
 			ProcessID: processID,
-			Transport: tcfg,
+			Transport: protocol.ProcessTransportConfig{
+				Type: "file",
+				Path: appPath,
+			},
 		})
 		if err != nil {
 			jlog.Errorf("main", "", "failed to launch app %s: %v", appPath, err)
@@ -715,47 +698,60 @@ func main() {
 		}
 	}
 
-	// Wire Cmd+L follow-up prompt — unified handler for all transport types
-	if llmTr != nil {
-		darwin.SetFollowUpEnabled(true)
-	}
+	// Wire Cmd+L chat window — always available globally
+	darwin.SetFollowUpEnabled(true)
 	darwin.OnFollowUpTriggered = func() {
-		go func() {
-			disp.RunOnMain(func() { darwin.SetFollowUpEnabled(false) })
-			result := darwin.ShowFollowUpPanel()
-			disp.RunOnMain(func() { darwin.SetFollowUpEnabled(true) })
-			if result == "" {
-				return
-			}
-			if llmTr != nil {
-				llmTr.SendFollowUp(result)
-			} else if activeProcessLLM != nil {
-				activeProcessLLM.SendFollowUp(result)
-			}
-		}()
+		darwin.ShowChatWindow()
 	}
 
-	// Wire Cmd+L follow-up prompt for Claude Code transport
-	if ccTr != nil {
-		// Override OnDone to also re-enable the menu item (needs disp)
-		origOnDone := ccTr.OnDone
-		ccTr.OnDone = func() {
-			if origOnDone != nil {
-				origOnDone()
-			}
-			disp.RunOnMain(func() { darwin.SetFollowUpEnabled(true) })
+	// Wire chat send handler
+	darwin.OnChatSend = func(text string) {
+		disp.RunOnMain(func() {
+			darwin.ChatAddUserMessage(text)
+			darwin.ChatSetBusy(true)
+		})
+
+		sendDone := func() {
+			disp.RunOnMain(func() {
+				darwin.ChatSetBusy(false)
+				darwin.ChatAddStatusMessage("Changes applied")
+			})
 		}
 
-		darwin.OnFollowUpTriggered = func() {
-			go func() {
-				disp.RunOnMain(func() { darwin.SetFollowUpEnabled(false) })
-				result := darwin.ShowFollowUpPanel()
-				if result == "" {
-					disp.RunOnMain(func() { darwin.SetFollowUpEnabled(true) })
-					return
+		if ccTr != nil {
+			origOnDone := ccTr.OnDone
+			ccTr.OnDone = func() {
+				if origOnDone != nil {
+					origOnDone()
 				}
-				ccTr.SendFollowUp(result)
-			}()
+				sendDone()
+			}
+			ccTr.SendFollowUp(text)
+		} else if llmTr != nil {
+			llmTr.SendFollowUp(text)
+		} else if activeProcessLLM != nil {
+			activeProcessLLM.SendFollowUp(text)
+		} else {
+			// On-demand: create an LLM process for this follow-up
+			processID := fmt.Sprintf("followup_%d", time.Now().UnixMilli())
+			err := pm.Create(protocol.CreateProcess{
+				ProcessID: processID,
+				Transport: protocol.ProcessTransportConfig{
+					Type:     "llm",
+					Provider: *llmProvider,
+					Model:    *model,
+					Prompt:   text,
+				},
+			})
+			if err != nil {
+				jlog.Errorf("main", "", "follow-up: create LLM process: %v", err)
+				disp.RunOnMain(func() {
+					darwin.ChatSetBusy(false)
+					darwin.ChatAddStatusMessage("Error: " + err.Error())
+				})
+			} else if activeProcessLLM != nil {
+				activeProcessLLM.OnInitialTurnDone = sendDone
+			}
 		}
 	}
 
@@ -827,10 +823,12 @@ func main() {
 					jlog.Info("main", "", "transport closed")
 					return
 				}
-				// Nil sentinel = first turn done (all first-turn messages consumed)
+				// Nil sentinel = turn done (flush pending components)
 				if msg == nil {
+					sess.FlushPendingComponents()
 					if llmTr != nil && llmTr.OnInitialTurnDone != nil {
 						llmTr.OnInitialTurnDone()
+						llmTr.OnInitialTurnDone = nil // one-shot
 					}
 					continue
 				}
@@ -1027,6 +1025,7 @@ func runMCP(args []string) {
 	disp := darwin.NewDispatcher()
 	rend := darwin.NewRenderer()
 	sess := engine.NewSession(rend, disp)
+	sess.SetRenderInterval(16 * time.Millisecond)
 	sess.SetNativeProvider(darwin.NewNativeProvider())
 
 	// Set up process manager for MCP mode

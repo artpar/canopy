@@ -3,6 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"canopy/jlog"
 	"canopy/protocol"
 	"canopy/renderer"
@@ -49,6 +51,11 @@ type Surface struct {
 
 	// throttlers tracks rate limiters: "componentID:eventName" → Throttler
 	throttlers map[string]*Throttler
+
+	// Render coalescing: batch rapid data model writes into single render passes
+	dirtyComponents map[string]bool
+	renderTimer     *time.Timer
+	renderInterval  time.Duration
 
 	// ActionHandler is called when a component triggers a server-bound event.
 	ActionHandler func(surfaceID string, event *protocol.EventDef, data map[string]interface{})
@@ -111,6 +118,12 @@ func (s *Surface) Resolver() *Resolver {
 func (s *Surface) SetFFI(ffi *FFIRegistry) {
 	s.ffi = ffi
 	s.resolver.evaluator.FFI = ffi
+}
+
+// SetRenderInterval sets the coalescing window for event-driven renders.
+// 0 = immediate (default, used in tests). 16ms = 60fps batching (production).
+func (s *Surface) SetRenderInterval(d time.Duration) {
+	s.renderInterval = d
 }
 
 // SetNativeProvider updates the native capabilities provider for this surface.
@@ -716,7 +729,7 @@ func (s *Surface) executeUpdateDataModel(args interface{}) {
 	}
 	affected := s.tracker.Affected(allChanged)
 	if len(affected) > 0 {
-		s.renderComponents(affected)
+		s.markDirty(affected)
 	}
 }
 
@@ -822,8 +835,45 @@ func (s *Surface) rerenderAffectedExcluding(excludeID string, changed []string) 
 		}
 	}
 	if len(toRender) > 0 {
-		s.renderComponents(toRender)
+		s.markDirty(toRender)
 	}
+}
+
+// markDirty schedules components for a coalesced render pass.
+// Multiple calls within renderInterval are batched into a single renderComponents call.
+func (s *Surface) markDirty(componentIDs []string) {
+	if len(componentIDs) == 0 {
+		return
+	}
+	if s.renderInterval <= 0 {
+		s.renderComponents(componentIDs)
+		return
+	}
+	if s.dirtyComponents == nil {
+		s.dirtyComponents = make(map[string]bool)
+	}
+	for _, id := range componentIDs {
+		s.dirtyComponents[id] = true
+	}
+	if s.renderTimer == nil {
+		s.renderTimer = time.AfterFunc(s.renderInterval, func() {
+			s.flushDirty()
+		})
+	}
+}
+
+// flushDirty renders all accumulated dirty components in a single pass.
+func (s *Surface) flushDirty() {
+	s.renderTimer = nil
+	if len(s.dirtyComponents) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(s.dirtyComponents))
+	for id := range s.dirtyComponents {
+		ids = append(ids, id)
+	}
+	s.dirtyComponents = nil
+	s.renderComponents(ids)
 }
 
 // matchesFilter checks whether native event data satisfies an EventFilter.
@@ -903,7 +953,7 @@ func (s *Surface) executeEventAction(ea *protocol.EventAction, nativeData string
 			if err == nil {
 				affected := s.tracker.Affected(changed)
 				if len(affected) > 0 {
-					s.renderComponents(affected)
+					s.markDirty(affected)
 				}
 			}
 		}
@@ -971,7 +1021,7 @@ func (s *Surface) makeDataBindingCallbacks(comp *protocol.Component) map[string]
 						toRender = append(toRender, id)
 					}
 				}
-				s.renderComponents(toRender)
+				s.markDirty(toRender)
 			}
 		}
 
@@ -1064,7 +1114,7 @@ func (s *Surface) makeDataBindingCallbacks(comp *protocol.Component) map[string]
 				}
 				affected := s.tracker.Affected(changed)
 				if len(affected) > 0 {
-					s.renderComponents(affected)
+					s.markDirty(affected)
 				}
 			}
 		}
@@ -1089,7 +1139,7 @@ func (s *Surface) makeDataBindingCallbacks(comp *protocol.Component) map[string]
 				}
 			}
 			toRender = append(toRender, compID)
-			s.renderComponents(toRender)
+			s.markDirty(toRender)
 		}
 	}
 
@@ -1104,7 +1154,7 @@ func (s *Surface) makeDataBindingCallbacks(comp *protocol.Component) map[string]
 					if err == nil {
 						affected := s.tracker.Affected(changed)
 						if len(affected) > 0 {
-							s.renderComponents(affected)
+							s.markDirty(affected)
 						}
 					}
 				}
