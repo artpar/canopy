@@ -135,6 +135,15 @@ type ResolvedProps struct {
 	ProgressValue float64 `json:"progressValue,omitempty"`
 	Indeterminate bool    `json:"indeterminate,omitempty"`
 
+	// CameraView
+	DevicePosition string `json:"devicePosition,omitempty"`
+	Mirrored       bool   `json:"mirrored,omitempty"`
+
+	// AudioRecorder
+	Format         string  `json:"format,omitempty"`
+	SampleRate     float64 `json:"sampleRate,omitempty"`
+	RecordChannels int     `json:"recordChannels,omitempty"`
+
 	// Universal
 	ContextMenu string `json:"contextMenu,omitempty"` // serialized []MenuItemSpec JSON
 }

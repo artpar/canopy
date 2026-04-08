@@ -233,6 +233,27 @@ func (r *Resolver) Resolve(comp *protocol.Component) *renderer.RenderNode {
 		p.Editable = r.resolveBoolDefault(comp.ComponentID, cp.Editable, true)
 		p.DataBinding = cp.DataBinding
 		p.FormatBinding = cp.FormatBinding
+
+	case protocol.CompCameraView:
+		p.DevicePosition = r.resolveString(comp.ComponentID, cp.DevicePosition)
+		if p.DevicePosition == "" {
+			p.DevicePosition = "front"
+		}
+		p.Mirrored = r.resolveBoolDefault(comp.ComponentID, cp.Mirrored, true)
+
+	case protocol.CompAudioRecorder:
+		p.Format = cp.Format
+		if p.Format == "" {
+			p.Format = "m4a"
+		}
+		p.SampleRate = r.resolveNumber(comp.ComponentID, cp.SampleRate)
+		if p.SampleRate == 0 {
+			p.SampleRate = 44100
+		}
+		p.RecordChannels = cp.RecordChannels
+		if p.RecordChannels == 0 {
+			p.RecordChannels = 1
+		}
 	}
 
 	node.Style = r.resolveStyle(comp.ComponentID, comp.Style)

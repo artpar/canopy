@@ -7,6 +7,8 @@ package darwin
 #include "audio.h"
 #include "video.h"
 #include "modal.h"
+#include "camera.h"
+#include "audiorecorder.h"
 */
 import "C"
 import (
@@ -26,5 +28,9 @@ func cleanupView(handle renderer.ViewHandle, compType protocol.ComponentType) {
 		C.JVCleanupVideo(unsafe.Pointer(handle))
 	case protocol.CompModal:
 		C.JVCleanupModal(unsafe.Pointer(handle))
+	case protocol.CompCameraView:
+		C.JVCleanupCamera(unsafe.Pointer(handle))
+	case protocol.CompAudioRecorder:
+		C.JVCleanupAudioRecorder(unsafe.Pointer(handle))
 	}
 }

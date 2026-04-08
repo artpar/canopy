@@ -992,6 +992,135 @@ func (s *Surface) registerCallbacks(comp *protocol.Component, node *renderer.Ren
 			s.trackCallback(comp.ComponentID, "ended", cbID)
 		}
 
+	case protocol.CompCameraView:
+		if comp.Props.OnCapture != nil && comp.Props.OnCapture.Action != nil {
+			action := comp.Props.OnCapture.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "capture", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					var captureData map[string]interface{}
+					json.Unmarshal([]byte(data), &captureData)
+					if captureData != nil {
+						for k, v := range captureData {
+							resolved[k] = v
+						}
+					}
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["capture"] = cbID
+			s.trackCallback(comp.ComponentID, "capture", cbID)
+		}
+		if comp.Props.OnError != nil && comp.Props.OnError.Action != nil {
+			action := comp.Props.OnError.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "error", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					var errData map[string]interface{}
+					json.Unmarshal([]byte(data), &errData)
+					if errData != nil {
+						for k, v := range errData {
+							resolved[k] = v
+						}
+					}
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["error"] = cbID
+			s.trackCallback(comp.ComponentID, "error", cbID)
+		}
+
+	case protocol.CompAudioRecorder:
+		if comp.Props.OnRecordingStarted != nil && comp.Props.OnRecordingStarted.Action != nil {
+			action := comp.Props.OnRecordingStarted.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "recordingStarted", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["recordingStarted"] = cbID
+			s.trackCallback(comp.ComponentID, "recordingStarted", cbID)
+		}
+		if comp.Props.OnRecordingStopped != nil && comp.Props.OnRecordingStopped.Action != nil {
+			action := comp.Props.OnRecordingStopped.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "recordingStopped", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					var recData map[string]interface{}
+					json.Unmarshal([]byte(data), &recData)
+					if recData != nil {
+						for k, v := range recData {
+							resolved[k] = v
+						}
+					}
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["recordingStopped"] = cbID
+			s.trackCallback(comp.ComponentID, "recordingStopped", cbID)
+		}
+		if comp.Props.OnLevel != nil && comp.Props.OnLevel.Action != nil {
+			action := comp.Props.OnLevel.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "level", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					var levelData map[string]interface{}
+					json.Unmarshal([]byte(data), &levelData)
+					if levelData != nil {
+						for k, v := range levelData {
+							resolved[k] = v
+						}
+					}
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["level"] = cbID
+			s.trackCallback(comp.ComponentID, "level", cbID)
+		}
+		if comp.Props.OnError != nil && comp.Props.OnError.Action != nil {
+			action := comp.Props.OnError.Action
+			cbID := s.rend.RegisterCallback(s.id, comp.ComponentID, "error", func(data string) {
+				if action.Event != nil {
+					resolved := s.resolveDataRefs(action.Event)
+					var errData map[string]interface{}
+					json.Unmarshal([]byte(data), &errData)
+					if errData != nil {
+						for k, v := range errData {
+							resolved[k] = v
+						}
+					}
+					if s.ActionHandler != nil {
+						s.ActionHandler(s.id, action.Event, resolved)
+					}
+				} else if action.FunctionCall != nil {
+					s.executeFunctionCall(action.FunctionCall)
+				}
+			})
+			node.Callbacks["error"] = cbID
+			s.trackCallback(comp.ComponentID, "error", cbID)
+		}
+
 	case protocol.CompSearchField:
 		if comp.Props.DataBinding != "" {
 			binding := comp.Props.DataBinding
@@ -1693,6 +1822,11 @@ func (s *Surface) rewritePaths(comp *protocol.Component, itemVar string, itemPat
 	rewriteAction(p.OnSearch)
 	rewriteAction(p.OnRichChange)
 	rewriteAction(p.OnDrop)
+	rewriteAction(p.OnCapture)
+	rewriteAction(p.OnError)
+	rewriteAction(p.OnRecordingStarted)
+	rewriteAction(p.OnRecordingStopped)
+	rewriteAction(p.OnLevel)
 
 	// Rewrite paths in contextMenu JSON
 	if p.ContextMenu != nil {
@@ -1776,6 +1910,11 @@ func deepCopyComponent(c protocol.Component) protocol.Component {
 	p.OnSearch = deepCopyEventAction(p.OnSearch)
 	p.OnRichChange = deepCopyEventAction(p.OnRichChange)
 	p.OnDrop = deepCopyEventAction(p.OnDrop)
+	p.OnCapture = deepCopyEventAction(p.OnCapture)
+	p.OnError = deepCopyEventAction(p.OnError)
+	p.OnRecordingStarted = deepCopyEventAction(p.OnRecordingStarted)
+	p.OnRecordingStopped = deepCopyEventAction(p.OnRecordingStopped)
+	p.OnLevel = deepCopyEventAction(p.OnLevel)
 
 	// Deep copy ContextMenu raw bytes
 	if p.ContextMenu != nil {

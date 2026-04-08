@@ -166,6 +166,8 @@ Every component and every feature gets a fixture in `testdata/`. Fixtures are:
 | `engine/channel_test.go` | Channel manager: create/delete, pub/sub, queue, cleanup | Unit |
 | `samples/dynamic_list.jsonl` | Dynamic list with add/remove + inline tests | E2E |
 | `sample_apps/*/prompt.jsonl` | Sample app cached JSONL with inline tests | E2E |
+| `testdata/camera.jsonl` | CameraView live preview + capture button | Data |
+| `testdata/audio_recorder.jsonl` | AudioRecorder with record/stop + level meter | Data |
 
 ## Architecture
 
@@ -250,9 +252,15 @@ jview exposes native macOS capabilities as evaluator functions, callable from JS
 | `alert` | title, msg, style?, buttons? | button index | Native alert dialog (NSAlert) |
 | `httpGet` | url | response body | HTTP GET (pure Go, 30s timeout) |
 | `httpPost` | url, body, type? | response body | HTTP POST (pure Go, 30s timeout) |
+| `cameraCapture` | devicePosition? | file path | Take photo, returns JPEG path |
+| `audioRecordStart` | format?, sampleRate?, channels? | recording ID | Start mic recording |
+| `audioRecordStop` | recordingID | file path | Stop recording, returns audio path |
+| `screenCapture` | captureType? | file path | Screenshot, returns PNG path |
+| `screenRecordStart` | captureType? | recording ID | Start screen recording (not yet implemented) |
+| `screenRecordStop` | recordingID | file path | Stop screen recording (not yet implemented) |
 
-### MCP Tools (7 system tools)
-`notify`, `clipboard_read`, `clipboard_write`, `open_url`, `file_open`, `file_save`, `alert`
+### MCP Tools (15 system tools)
+`notify`, `clipboard_read`, `clipboard_write`, `open_url`, `file_open`, `file_save`, `alert`, `camera_capture_headless`, `audio_record_start`, `audio_record_stop`, `screen_capture`, `screen_record_start`, `screen_record_stop`, `camera_capture`, `audio_recorder_toggle`
 
 ### Drag & Drop
 Any component can be a drop target via `onDrop` prop:
@@ -317,6 +325,19 @@ Reliability, process model, channels, always-on MCP.
 | Channel primitives (pub/sub, broadcast/queue) | infra | high | **done** |
 | Always-on MCP server | infra | high | **done** |
 | macOS .app bundle packaging | infra | low | not started |
+
+### Media Capture — COMPLETE
+2 new components, 6 new evaluator functions, 8 new MCP tools.
+
+| Task | Tag | Priority | Status |
+|------|-----|----------|--------|
+| CameraView (AVCaptureSession) | component | high | **done** |
+| AudioRecorder (AVAudioRecorder) | component | high | **done** |
+| Headless camera capture | system | high | **done** |
+| Headless audio recording | system | high | **done** |
+| Screen capture (ScreenCaptureKit) | system | medium | **done** |
+| Screen recording | system | low | not started |
+| Info.plist privacy descriptions | infra | high | **done** |
 
 ### Notes Clone — COMPLETE
 4 new native components, 3 new evaluator functions, Apple Notes sample app.

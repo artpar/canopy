@@ -166,6 +166,106 @@ func (e *Evaluator) fnHttpGet(args []any) (any, error) {
 	return string(body), nil
 }
 
+func (e *Evaluator) fnCameraCapture(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("cameraCapture: not available in headless mode")
+	}
+	devicePosition := "front"
+	if len(args) >= 1 {
+		devicePosition = toString(args[0])
+	}
+	path, err := e.Native.CameraCapture(devicePosition)
+	if err != nil {
+		return nil, err
+	}
+	return path, nil
+}
+
+func (e *Evaluator) fnAudioRecordStart(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("audioRecordStart: not available in headless mode")
+	}
+	format := "m4a"
+	sampleRate := 44100.0
+	channels := 1
+	if len(args) >= 1 {
+		format = toString(args[0])
+	}
+	if len(args) >= 2 {
+		if v, err := toFloat(args[1]); err == nil {
+			sampleRate = v
+		}
+	}
+	if len(args) >= 3 {
+		if v, err := toFloat(args[2]); err == nil {
+			channels = int(v)
+		}
+	}
+	id, err := e.Native.AudioRecordStart(format, sampleRate, channels)
+	if err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+func (e *Evaluator) fnAudioRecordStop(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("audioRecordStop: not available in headless mode")
+	}
+	if len(args) < 1 {
+		return nil, fmt.Errorf("audioRecordStop requires 1 arg (recordingID)")
+	}
+	path, err := e.Native.AudioRecordStop(toString(args[0]))
+	if err != nil {
+		return nil, err
+	}
+	return path, nil
+}
+
+func (e *Evaluator) fnScreenCapture(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("screenCapture: not available in headless mode")
+	}
+	captureType := "screen"
+	if len(args) >= 1 {
+		captureType = toString(args[0])
+	}
+	path, err := e.Native.ScreenCapture(captureType)
+	if err != nil {
+		return nil, err
+	}
+	return path, nil
+}
+
+func (e *Evaluator) fnScreenRecordStart(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("screenRecordStart: not available in headless mode")
+	}
+	captureType := "screen"
+	if len(args) >= 1 {
+		captureType = toString(args[0])
+	}
+	id, err := e.Native.ScreenRecordStart(captureType)
+	if err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+func (e *Evaluator) fnScreenRecordStop(args []any) (any, error) {
+	if e.Native == nil {
+		return nil, fmt.Errorf("screenRecordStop: not available in headless mode")
+	}
+	if len(args) < 1 {
+		return nil, fmt.Errorf("screenRecordStop requires 1 arg (recordingID)")
+	}
+	path, err := e.Native.ScreenRecordStop(toString(args[0]))
+	if err != nil {
+		return nil, err
+	}
+	return path, nil
+}
+
 func (e *Evaluator) fnHttpPost(args []any) (any, error) {
 	if len(args) < 2 {
 		return nil, fmt.Errorf("httpPost requires at least 2 args (url, body)")

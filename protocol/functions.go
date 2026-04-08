@@ -90,4 +90,12 @@ var FunctionRegistry = []FuncMeta{
 	{Name: "alert", Args: "title, message, style?, buttons?", Desc: "show alert dialog, returns button index (0-based)", Category: "system"},
 	{Name: "httpGet", Args: "url", Desc: "HTTP GET request, returns response body as string", Category: "system"},
 	{Name: "httpPost", Args: "url, body, contentType?", Desc: "HTTP POST request, returns response body as string", Category: "system"},
+
+	// Media capture
+	{Name: "cameraCapture", Args: "devicePosition?", Desc: "take a photo, returns file path to JPEG", Category: "media"},
+	{Name: "audioRecordStart", Args: "format?, sampleRate?, channels?", Desc: "start recording audio, returns recording ID", Category: "media"},
+	{Name: "audioRecordStop", Args: "recordingID", Desc: "stop recording, returns file path", Category: "media"},
+	{Name: "screenCapture", Args: "captureType?", Desc: "take a screenshot, returns file path to PNG", Category: "media"},
+	{Name: "screenRecordStart", Args: "captureType?", Desc: "start screen recording, returns recording ID", Category: "media"},
+	{Name: "screenRecordStop", Args: "recordingID", Desc: "stop screen recording, returns video file path", Category: "media"},
 }

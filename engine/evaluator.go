@@ -99,6 +99,12 @@ func init() {
 		"alert":                (*Evaluator).fnAlert,
 		"httpGet":              (*Evaluator).fnHttpGet,
 		"httpPost":             (*Evaluator).fnHttpPost,
+		"cameraCapture":        (*Evaluator).fnCameraCapture,
+		"audioRecordStart":     (*Evaluator).fnAudioRecordStart,
+		"audioRecordStop":      (*Evaluator).fnAudioRecordStop,
+		"screenCapture":        (*Evaluator).fnScreenCapture,
+		"screenRecordStart":    (*Evaluator).fnScreenRecordStart,
+		"screenRecordStop":     (*Evaluator).fnScreenRecordStop,
 	}
 
 	// Validate: every registry entry has an impl, and vice versa

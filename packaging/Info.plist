@@ -22,6 +22,10 @@
 	<string>13.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Canopy needs camera access to display live camera preview and capture photos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Canopy needs microphone access to record audio.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 

@@ -12,6 +12,12 @@ func (s *Server) registerSystemTools() {
 	s.registerFileOpen()
 	s.registerFileSave()
 	s.registerAlert()
+	s.registerCameraCaptureSystem()
+	s.registerAudioRecordStartSystem()
+	s.registerAudioRecordStopSystem()
+	s.registerScreenCaptureSystem()
+	s.registerScreenRecordStartSystem()
+	s.registerScreenRecordStopSystem()
 }
 
 func (s *Server) registerNotify() {
@@ -227,6 +233,186 @@ func (s *Server) registerAlert() {
 			return errorResult(err.Error())
 		}
 		return &ToolCallResult{Content: []ContentBlock{cb}}
+	})
+}
+
+func (s *Server) registerCameraCaptureSystem() {
+	s.register("camera_capture_headless", "Take a photo using the camera (no preview)", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"device_position": {"type": "string", "enum": ["front", "back"], "description": "Camera position (default: front)"}
+		},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			DevicePosition string `json:"device_position"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if p.DevicePosition == "" {
+			p.DevicePosition = "front"
+		}
+		path, err := np.CameraCapture(p.DevicePosition)
+		if err != nil {
+			return errorResult("camera_capture: " + err.Error())
+		}
+		return textResult(path)
+	})
+}
+
+func (s *Server) registerAudioRecordStartSystem() {
+	s.register("audio_record_start", "Start recording audio from the microphone", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"format":      {"type": "string", "enum": ["m4a", "wav"], "description": "Audio format (default: m4a)"},
+			"sample_rate": {"type": "number", "description": "Sample rate in Hz (default: 44100)"},
+			"channels":    {"type": "integer", "description": "Number of channels (default: 1)"}
+		},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			Format     string  `json:"format"`
+			SampleRate float64 `json:"sample_rate"`
+			Channels   int     `json:"channels"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if p.Format == "" {
+			p.Format = "m4a"
+		}
+		if p.SampleRate == 0 {
+			p.SampleRate = 44100
+		}
+		if p.Channels == 0 {
+			p.Channels = 1
+		}
+		id, err := np.AudioRecordStart(p.Format, p.SampleRate, p.Channels)
+		if err != nil {
+			return errorResult("audio_record_start: " + err.Error())
+		}
+		return textResult(id)
+	})
+}
+
+func (s *Server) registerAudioRecordStopSystem() {
+	s.register("audio_record_stop", "Stop a recording and return the file path", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"recording_id": {"type": "string", "description": "Recording ID from audio_record_start"}
+		},
+		"required": ["recording_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			RecordingID string `json:"recording_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		path, err := np.AudioRecordStop(p.RecordingID)
+		if err != nil {
+			return errorResult("audio_record_stop: " + err.Error())
+		}
+		return textResult(path)
+	})
+}
+
+func (s *Server) registerScreenCaptureSystem() {
+	s.register("screen_capture", "Take a screenshot of the entire screen", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"capture_type": {"type": "string", "enum": ["screen"], "description": "Capture type (default: screen)"}
+		},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			CaptureType string `json:"capture_type"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if p.CaptureType == "" {
+			p.CaptureType = "screen"
+		}
+		path, err := np.ScreenCapture(p.CaptureType)
+		if err != nil {
+			return errorResult("screen_capture: " + err.Error())
+		}
+		return textResult(path)
+	})
+}
+
+func (s *Server) registerScreenRecordStartSystem() {
+	s.register("screen_record_start", "Start recording the screen", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"capture_type": {"type": "string", "enum": ["screen"], "description": "Capture type (default: screen)"}
+		},
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			CaptureType string `json:"capture_type"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		if p.CaptureType == "" {
+			p.CaptureType = "screen"
+		}
+		id, err := np.ScreenRecordStart(p.CaptureType)
+		if err != nil {
+			return errorResult("screen_record_start: " + err.Error())
+		}
+		return textResult(id)
+	})
+}
+
+func (s *Server) registerScreenRecordStopSystem() {
+	s.register("screen_record_stop", "Stop recording the screen and return the video file path", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"recording_id": {"type": "string", "description": "Recording ID from screen_record_start"}
+		},
+		"required": ["recording_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		np := s.sess.NativeProvider()
+		if np == nil {
+			return errorResult("native provider not available")
+		}
+		var p struct {
+			RecordingID string `json:"recording_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid args: " + err.Error())
+		}
+		path, err := np.ScreenRecordStop(p.RecordingID)
+		if err != nil {
+			return errorResult("screen_record_stop: " + err.Error())
+		}
+		return textResult(path)
 	})
 }
 

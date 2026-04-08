@@ -1,6 +1,8 @@
 #import <Cocoa/Cocoa.h>
 #import <UserNotifications/UserNotifications.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <AVFoundation/AVFoundation.h>
+#import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <objc/runtime.h>
 
 #include "native.h"
@@ -234,4 +236,253 @@ void JVAlertAsync(const char *title, const char *message, const char *style,
             GoNativeDialogResult(requestID, buf);
         }
     });
+}
+
+// --- Camera Capture (headless, one-shot) ---
+
+@interface JVHeadlessPhotoDelegate : NSObject <AVCapturePhotoCaptureDelegate>
+@property (nonatomic, assign) uint64_t requestID;
+@property (nonatomic, strong) AVCaptureSession *session;
+@property (nonatomic, strong) dispatch_queue_t sessionQueue;
+@end
+
+// Static reference to keep delegate alive during capture
+static JVHeadlessPhotoDelegate *sActivePhotoDelegate = nil;
+
+@implementation JVHeadlessPhotoDelegate
+
+- (void)captureOutput:(AVCapturePhotoOutput *)output
+    didFinishProcessingPhoto:(AVCapturePhoto *)photo
+                       error:(NSError *)error {
+    // Stop session and release device
+    AVCaptureSession *sess = self.session;
+    dispatch_queue_t q = self.sessionQueue;
+    if (sess && q) {
+        dispatch_async(q, ^{
+            for (AVCaptureInput *input in sess.inputs) { [sess removeInput:input]; }
+            for (AVCaptureOutput *out in sess.outputs) { [sess removeOutput:out]; }
+            [sess stopRunning];
+        });
+    }
+    self.session = nil;
+    self.sessionQueue = nil;
+
+    if (error) {
+        GoNativeDialogResult(self.requestID, NULL);
+        sActivePhotoDelegate = nil;
+        return;
+    }
+
+    NSData *imageData = [photo fileDataRepresentation];
+    if (!imageData) {
+        GoNativeDialogResult(self.requestID, NULL);
+        sActivePhotoDelegate = nil;
+        return;
+    }
+
+    NSString *timestamp = [NSString stringWithFormat:@"%lld", (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
+    NSString *filename = [NSString stringWithFormat:@"canopy_photo_%@.jpg", timestamp];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+
+    if ([imageData writeToFile:path atomically:YES]) {
+        GoNativeDialogResult(self.requestID, [path UTF8String]);
+    } else {
+        GoNativeDialogResult(self.requestID, NULL);
+    }
+
+    // Release static reference — session + queue freed by ARC
+    sActivePhotoDelegate = nil;
+}
+
+@end
+
+void JVCameraCaptureAsync(const char *devicePosition, uint64_t requestID) {
+    NSString *posStr = devicePosition ? [NSString stringWithUTF8String:devicePosition] : @"front";
+
+    dispatch_queue_t sessionQueue = dispatch_queue_create("com.canopy.camera.headless", DISPATCH_QUEUE_SERIAL);
+
+    dispatch_async(sessionQueue, ^{
+        // Check permission
+        AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+        if (status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted) {
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+        if (status == AVAuthorizationStatusNotDetermined) {
+            dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+            __block BOOL granted = NO;
+            [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(BOOL g) {
+                granted = g;
+                dispatch_semaphore_signal(sema);
+            }];
+            dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+            if (!granted) {
+                GoNativeDialogResult(requestID, NULL);
+                return;
+            }
+        }
+
+        AVCaptureDevicePosition pos = [posStr isEqualToString:@"back"]
+            ? AVCaptureDevicePositionBack : AVCaptureDevicePositionFront;
+
+        AVCaptureDeviceDiscoverySession *discovery = [AVCaptureDeviceDiscoverySession
+            discoverySessionWithDeviceTypes:@[AVCaptureDeviceTypeBuiltInWideAngleCamera]
+                                  mediaType:AVMediaTypeVideo
+                                   position:pos];
+        AVCaptureDevice *device = discovery.devices.firstObject;
+        if (!device) device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+        if (!device) {
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+
+        AVCaptureSession *session = [[AVCaptureSession alloc] init];
+        session.sessionPreset = AVCaptureSessionPresetPhoto;
+
+        NSError *inputError = nil;
+        AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&inputError];
+        if (!input || ![session canAddInput:input]) {
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+        [session addInput:input];
+
+        AVCapturePhotoOutput *photoOutput = [[AVCapturePhotoOutput alloc] init];
+        if (![session canAddOutput:photoOutput]) {
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+        [session addOutput:photoOutput];
+
+        [session startRunning];
+
+        // Brief delay to let auto-exposure settle
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), sessionQueue, ^{
+            JVHeadlessPhotoDelegate *delegate = [[JVHeadlessPhotoDelegate alloc] init];
+            delegate.requestID = requestID;
+            delegate.session = session;
+            delegate.sessionQueue = sessionQueue;
+            sActivePhotoDelegate = delegate; // prevent dealloc
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
+                [photoOutput capturePhotoWithSettings:settings delegate:delegate];
+            });
+        });
+    });
+}
+
+// --- Audio Recording (headless) ---
+
+void* JVAudioRecordStart(const char *path, const char *format, double sampleRate, int channels) {
+    NSString *pathStr = [NSString stringWithUTF8String:path];
+    NSString *formatStr = format ? [NSString stringWithUTF8String:format] : @"m4a";
+    NSURL *url = [NSURL fileURLWithPath:pathStr];
+
+    AudioFormatID formatID = kAudioFormatMPEG4AAC;
+    if ([formatStr isEqualToString:@"wav"]) {
+        formatID = kAudioFormatLinearPCM;
+    }
+
+    NSDictionary *settings = @{
+        AVFormatIDKey: @(formatID),
+        AVSampleRateKey: @(sampleRate),
+        AVNumberOfChannelsKey: @(channels),
+    };
+
+    NSError *error = nil;
+    AVAudioRecorder *recorder = [[AVAudioRecorder alloc] initWithURL:url settings:settings error:&error];
+    if (!recorder) return NULL;
+
+    if (![recorder record]) {
+        return NULL;
+    }
+
+    return (__bridge_retained void*)recorder;
+}
+
+double JVAudioRecordStop(void *recorderHandle) {
+    if (!recorderHandle) return -1;
+    AVAudioRecorder *recorder = (__bridge_transfer AVAudioRecorder*)recorderHandle;
+    NSTimeInterval duration = recorder.currentTime;
+    [recorder stop];
+    return duration;
+}
+
+// --- Screen Capture ---
+
+void JVScreenCaptureAsync(const char *captureType, uint64_t requestID) {
+    if (@available(macOS 14.0, *)) {
+        [SCShareableContent getShareableContentWithCompletionHandler:^(SCShareableContent *content, NSError *error) {
+            if (error || content.displays.count == 0) {
+                GoNativeDialogResult(requestID, NULL);
+                return;
+            }
+
+            SCDisplay *display = content.displays.firstObject;
+            SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]];
+
+            SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+            config.width = display.width * 2; // Retina
+            config.height = display.height * 2;
+
+            [SCScreenshotManager captureImageWithFilter:filter configuration:config completionHandler:^(CGImageRef image, NSError *captureError) {
+                if (captureError || !image) {
+                    GoNativeDialogResult(requestID, NULL);
+                    return;
+                }
+
+                NSString *timestamp = [NSString stringWithFormat:@"%lld", (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
+                NSString *filename = [NSString stringWithFormat:@"canopy_screenshot_%@.png", timestamp];
+                NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+                NSURL *url = [NSURL fileURLWithPath:path];
+
+                CGImageDestinationRef dest = CGImageDestinationCreateWithURL((__bridge CFURLRef)url, (__bridge CFStringRef)UTTypePNG.identifier, 1, NULL);
+                if (!dest) {
+                    GoNativeDialogResult(requestID, NULL);
+                    return;
+                }
+                CGImageDestinationAddImage(dest, image, NULL);
+                if (CGImageDestinationFinalize(dest)) {
+                    GoNativeDialogResult(requestID, [path UTF8String]);
+                } else {
+                    GoNativeDialogResult(requestID, NULL);
+                }
+                CFRelease(dest);
+            }];
+        }];
+    } else {
+        // macOS 13 fallback: use CGWindowListCreateImage
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        CGImageRef image = CGWindowListCreateImage(CGRectInfinite,
+            kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowImageDefault);
+#pragma clang diagnostic pop
+        if (!image) {
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+
+        NSString *timestamp = [NSString stringWithFormat:@"%lld", (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
+        NSString *filename = [NSString stringWithFormat:@"canopy_screenshot_%@.png", timestamp];
+        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+        NSURL *url = [NSURL fileURLWithPath:path];
+
+        CGImageDestinationRef dest = CGImageDestinationCreateWithURL((__bridge CFURLRef)url, (__bridge CFStringRef)UTTypePNG.identifier, 1, NULL);
+        if (!dest) {
+            CGImageRelease(image);
+            GoNativeDialogResult(requestID, NULL);
+            return;
+        }
+        CGImageDestinationAddImage(dest, image, NULL);
+        BOOL ok = CGImageDestinationFinalize(dest);
+        CFRelease(dest);
+        CGImageRelease(image);
+
+        if (ok) {
+            GoNativeDialogResult(requestID, [path UTF8String]);
+        } else {
+            GoNativeDialogResult(requestID, NULL);
+        }
+    }
 }

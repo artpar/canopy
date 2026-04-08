@@ -6,6 +6,8 @@ package darwin
 
 #include <stdlib.h>
 #include "app.h"
+#include "camera.h"
+#include "audiorecorder.h"
 */
 import "C"
 import (
@@ -144,6 +146,10 @@ func (r *DarwinRenderer) CreateView(surfaceID string, node *renderer.RenderNode)
 		handle = createRichTextEditorView(node, surfaceID)
 	case protocol.CompProgressBar:
 		handle = createProgressBarView(node)
+	case protocol.CompCameraView:
+		handle = createCameraView(node, surfaceID)
+	case protocol.CompAudioRecorder:
+		handle = createAudioRecorderView(node, surfaceID)
 	default:
 		jlog.Warnf("darwin", surfaceID, "unsupported component type %s", node.Type)
 		return 0
@@ -237,6 +243,10 @@ func (r *DarwinRenderer) UpdateView(surfaceID string, handle renderer.ViewHandle
 		updateRichTextEditorView(handle, node)
 	case protocol.CompProgressBar:
 		updateProgressBarView(handle, node)
+	case protocol.CompCameraView:
+		updateCameraView(handle, node)
+	case protocol.CompAudioRecorder:
+		updateAudioRecorderView(handle, node)
 	default:
 		jlog.Warnf("darwin", surfaceID, "unsupported update for component type %s", node.Type)
 	}
@@ -432,6 +442,22 @@ func (r *DarwinRenderer) SetAppMode(mode, icon, title string, callbackID rendere
 	SetAppMode(mode, icon, title, uint64(callbackID))
 	if len(menuItems) > 0 {
 		SetStatusMenuDynamic(menuItems)
+	}
+}
+
+// CameraCapture triggers a still photo capture on a CameraView component.
+func (r *DarwinRenderer) CameraCapture(surfaceID, componentID string) {
+	handle := r.GetHandle(surfaceID, componentID)
+	if handle != 0 {
+		C.JVCameraCapture(unsafe.Pointer(handle))
+	}
+}
+
+// AudioRecorderToggle starts or stops recording on an AudioRecorder component.
+func (r *DarwinRenderer) AudioRecorderToggle(surfaceID, componentID string) {
+	handle := r.GetHandle(surfaceID, componentID)
+	if handle != 0 {
+		C.JVAudioRecorderToggle(unsafe.Pointer(handle))
 	}
 }
 

@@ -1,0 +1,2 @@
+{"type":"createSurface","surfaceId":"main","title":"Audio Recorder Test","width":400,"height":200}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"padding":16,"gap":12},"children":["recorder","status"]},{"componentId":"recorder","type":"AudioRecorder","props":{"format":"m4a","sampleRate":44100,"recordChannels":1}},{"componentId":"status","type":"Text","props":{"content":"Ready to record"}}]}

@@ -29,4 +29,29 @@ type NativeProvider interface {
 	// style: "informational", "warning", or "critical".
 	// buttons: list of button titles (first is default). Empty uses ["OK"].
 	Alert(title, message, style string, buttons []string) (int, error)
+
+	// CameraCapture takes a one-shot photo without a preview component.
+	// devicePosition: "front" or "back". Returns the file path to the JPEG.
+	CameraCapture(devicePosition string) (string, error)
+
+	// AudioRecordStart begins recording audio to a temp file.
+	// format: "m4a" or "wav". Returns a recording ID for AudioRecordStop.
+	AudioRecordStart(format string, sampleRate float64, channels int) (string, error)
+
+	// AudioRecordStop stops a recording and returns the file path.
+	AudioRecordStop(recordingID string) (string, error)
+
+	// ScreenCapture takes a screenshot and returns the file path to the PNG.
+	// captureType: "screen" (entire display).
+	ScreenCapture(captureType string) (string, error)
+
+	// ScreenRecordStart begins recording the screen.
+	// Returns a recording ID for ScreenRecordStop.
+	ScreenRecordStart(captureType string) (string, error)
+
+	// ScreenRecordStop stops a screen recording and returns the video file path.
+	ScreenRecordStop(recordingID string) (string, error)
+
+	// CleanupAll stops all active recordings and releases resources.
+	CleanupAll()
 }

@@ -37,6 +37,8 @@ func (s *Server) registerTools() {
 	s.registerPublish()
 	s.registerSubscribe()
 	s.registerUnsubscribe()
+	s.registerCameraCapture()
+	s.registerAudioRecorderToggle()
 	s.registerSystemTools()
 }
 
@@ -448,6 +450,56 @@ func (s *Server) registerInteract() {
 		})
 		dispatchSync(s.disp, func() struct{} { return struct{}{} })
 		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("sent %s to %s with value %q", p.Event, p.ComponentID, p.Value))}}
+	})
+}
+
+func (s *Server) registerCameraCapture() {
+	s.register("camera_capture", "Trigger a still photo capture on a CameraView component", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"surface_id": {"type": "string", "description": "Surface ID"},
+			"component_id": {"type": "string", "description": "Component ID of the CameraView"}
+		},
+		"required": ["surface_id", "component_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		var p struct {
+			SurfaceID   string `json:"surface_id"`
+			ComponentID string `json:"component_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.CameraCapture(p.SurfaceID, p.ComponentID)
+			return struct{}{}
+		})
+		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("triggered photo capture on %s", p.ComponentID))}}
+	})
+}
+
+func (s *Server) registerAudioRecorderToggle() {
+	s.register("audio_recorder_toggle", "Start or stop recording on an AudioRecorder component", json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"surface_id": {"type": "string", "description": "Surface ID"},
+			"component_id": {"type": "string", "description": "Component ID of the AudioRecorder"}
+		},
+		"required": ["surface_id", "component_id"],
+		"additionalProperties": false
+	}`), func(args json.RawMessage) *ToolCallResult {
+		var p struct {
+			SurfaceID   string `json:"surface_id"`
+			ComponentID string `json:"component_id"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return errorResult("invalid params: " + err.Error())
+		}
+		dispatchSync(s.disp, func() struct{} {
+			s.rend.AudioRecorderToggle(p.SurfaceID, p.ComponentID)
+			return struct{}{}
+		})
+		return &ToolCallResult{Content: []ContentBlock{TextContent(fmt.Sprintf("toggled recording on %s", p.ComponentID))}}
 	})
 }
 

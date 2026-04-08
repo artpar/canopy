@@ -1,0 +1,2 @@
+{"type":"createSurface","surfaceId":"main","title":"Camera Test","width":400,"height":380}
+{"type":"updateComponents","surfaceId":"main","components":[{"componentId":"root","type":"Column","props":{"padding":16,"gap":12},"children":["cam","captureBtn","status"]},{"componentId":"cam","type":"CameraView","props":{"devicePosition":"front","mirrored":true},"style":{"width":320,"height":240}},{"componentId":"captureBtn","type":"Button","props":{"label":"Take Photo","style":"primary"}},{"componentId":"status","type":"Text","props":{"content":"Camera ready"}}]}

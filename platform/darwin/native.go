@@ -2,7 +2,7 @@ package darwin
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc
-#cgo LDFLAGS: -framework Cocoa -framework UserNotifications -framework UniformTypeIdentifiers
+#cgo LDFLAGS: -framework Cocoa -framework UserNotifications -framework UniformTypeIdentifiers -framework AVFoundation -framework ScreenCaptureKit -framework CoreGraphics -framework ImageIO
 
 #include "native.h"
 #include <stdlib.h>
@@ -12,6 +12,7 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -194,4 +195,114 @@ func (n *NativeProvider) Alert(title, message, style string, buttons []string) (
 	idx := 0
 	fmt.Sscanf(*res.value, "%d", &idx)
 	return idx, nil
+}
+
+// CameraCapture takes a one-shot photo without a preview component.
+func (n *NativeProvider) CameraCapture(devicePosition string) (string, error) {
+	cPos := C.CString(devicePosition)
+	defer C.free(unsafe.Pointer(cPos))
+
+	reqID, ch := allocRequest()
+	C.JVCameraCaptureAsync(cPos, C.uint64_t(reqID))
+
+	res := <-ch
+	if res.value == nil {
+		return "", fmt.Errorf("camera capture failed or access denied")
+	}
+	return *res.value, nil
+}
+
+// activeRecorders tracks headless audio recordings by ID.
+var (
+	activeRecorders   = make(map[string]activeRecording)
+	activeRecordersMu sync.Mutex
+	nextRecorderID    atomic.Uint64
+)
+
+type activeRecording struct {
+	handle unsafe.Pointer
+	path   string
+}
+
+func init() {
+	nextRecorderID.Store(1)
+}
+
+// AudioRecordStart begins recording audio to a temp file.
+func (n *NativeProvider) AudioRecordStart(format string, sampleRate float64, channels int) (string, error) {
+	ext := "m4a"
+	if format == "wav" {
+		ext = "wav"
+	}
+	timestamp := fmt.Sprintf("%d", nextRecorderID.Add(1)-1)
+	path := fmt.Sprintf("%s/canopy_recording_%s.%s", os.TempDir(), timestamp, ext)
+
+	cPath := C.CString(path)
+	cFormat := C.CString(format)
+	defer C.free(unsafe.Pointer(cPath))
+	defer C.free(unsafe.Pointer(cFormat))
+
+	handle := C.JVAudioRecordStart(cPath, cFormat, C.double(sampleRate), C.int(channels))
+	if handle == nil {
+		return "", fmt.Errorf("failed to start audio recording")
+	}
+
+	id := fmt.Sprintf("rec_%s", timestamp)
+	activeRecordersMu.Lock()
+	activeRecorders[id] = activeRecording{handle: handle, path: path}
+	activeRecordersMu.Unlock()
+
+	return id, nil
+}
+
+// AudioRecordStop stops a recording and returns the file path.
+func (n *NativeProvider) AudioRecordStop(recordingID string) (string, error) {
+	activeRecordersMu.Lock()
+	rec, ok := activeRecorders[recordingID]
+	if ok {
+		delete(activeRecorders, recordingID)
+	}
+	activeRecordersMu.Unlock()
+
+	if !ok {
+		return "", fmt.Errorf("recording %q not found", recordingID)
+	}
+
+	C.JVAudioRecordStop(rec.handle)
+	return rec.path, nil
+}
+
+// ScreenCapture takes a screenshot and returns the file path.
+func (n *NativeProvider) ScreenCapture(captureType string) (string, error) {
+	cType := C.CString(captureType)
+	defer C.free(unsafe.Pointer(cType))
+
+	reqID, ch := allocRequest()
+	C.JVScreenCaptureAsync(cType, C.uint64_t(reqID))
+
+	res := <-ch
+	if res.value == nil {
+		return "", fmt.Errorf("screen capture failed or access denied")
+	}
+	return *res.value, nil
+}
+
+// ScreenRecordStart begins recording the screen (not yet implemented).
+func (n *NativeProvider) ScreenRecordStart(captureType string) (string, error) {
+	return "", fmt.Errorf("screen recording not yet implemented")
+}
+
+// ScreenRecordStop stops a screen recording (not yet implemented).
+func (n *NativeProvider) ScreenRecordStop(recordingID string) (string, error) {
+	return "", fmt.Errorf("screen recording not yet implemented")
+}
+
+// CleanupAll stops all active headless recordings and releases resources.
+func (n *NativeProvider) CleanupAll() {
+	activeRecordersMu.Lock()
+	for id, rec := range activeRecorders {
+		C.JVAudioRecordStop(rec.handle)
+		delete(activeRecorders, id)
+	}
+	activeRecordersMu.Unlock()
 }

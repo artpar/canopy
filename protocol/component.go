@@ -29,6 +29,8 @@ const (
 	CompOutlineView   ComponentType = "OutlineView"
 	CompRichTextEditor ComponentType = "RichTextEditor"
 	CompProgressBar    ComponentType = "ProgressBar"
+	CompCameraView     ComponentType = "CameraView"
+	CompAudioRecorder  ComponentType = "AudioRecorder"
 )
 
 // DynamicStyleProps holds visual styling overrides applicable to any component.
@@ -206,6 +208,20 @@ type Props struct {
 	// ProgressBar
 	ProgressValue   *DynamicNumber  `json:"progressValue,omitempty"`
 	Indeterminate   *DynamicBoolean `json:"indeterminate,omitempty"`
+
+	// CameraView
+	DevicePosition *DynamicString  `json:"devicePosition,omitempty"` // "front" (default), "back"
+	Mirrored       *DynamicBoolean `json:"mirrored,omitempty"`
+	OnCapture      *EventAction    `json:"onCapture,omitempty"`  // fired with {"path": "/tmp/photo.jpg"}
+	OnError        *EventAction    `json:"onError,omitempty"`    // fired with {"error": "..."}
+
+	// AudioRecorder
+	Format              string          `json:"format,omitempty"`              // "m4a" (default), "wav"
+	SampleRate          *DynamicNumber  `json:"sampleRate,omitempty"`          // default 44100
+	RecordChannels      int             `json:"recordChannels,omitempty"`      // 1 (mono, default) or 2 (stereo)
+	OnRecordingStarted  *EventAction    `json:"onRecordingStarted,omitempty"`
+	OnRecordingStopped  *EventAction    `json:"onRecordingStopped,omitempty"`  // {"path":"...","duration":5.2}
+	OnLevel             *EventAction    `json:"onLevel,omitempty"`             // {"level":-12.5}
 
 	// Drag & Drop
 	OnDrop *EventAction `json:"onDrop,omitempty"` // fired when files/text dropped; data: {"paths":[...],"text":"..."}

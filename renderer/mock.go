@@ -353,6 +353,10 @@ func (m *MockRenderer) UpdateWindow(surfaceID string, title string, minWidth, mi
 
 func (m *MockRenderer) SetAppMode(mode, icon, title string, callbackID CallbackID, menuItems []MenuItemSpec) {}
 
+func (m *MockRenderer) CameraCapture(surfaceID, componentID string) {}
+
+func (m *MockRenderer) AudioRecorderToggle(surfaceID, componentID string) {}
+
 // MockDispatcher executes functions immediately (synchronous, for tests).
 type MockDispatcher struct{}
 

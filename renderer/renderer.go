@@ -76,4 +76,10 @@ type Renderer interface {
 	// mode: "normal", "menubar", "accessory"
 	// menuItems: dynamic items for the status bar dropdown menu (menubar mode)
 	SetAppMode(mode, icon, title string, callbackID CallbackID, menuItems []MenuItemSpec)
+
+	// CameraCapture triggers a still photo capture on a CameraView component.
+	CameraCapture(surfaceID, componentID string)
+
+	// AudioRecorderToggle starts or stops recording on an AudioRecorder component.
+	AudioRecorderToggle(surfaceID, componentID string)
 }
