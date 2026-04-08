@@ -22,6 +22,7 @@ type Session struct {
 	compDefs map[string]*protocol.DefineComponent
 	pm       *ProcessManager
 	cm       *ChannelManager
+	em       *EventManager
 	recorder *Recorder
 	library  *Library
 
@@ -30,13 +31,15 @@ type Session struct {
 }
 
 func NewSession(rend renderer.Renderer, dispatch renderer.Dispatcher) *Session {
-	return &Session{
+	s := &Session{
 		surfaces: make(map[string]*Surface),
 		rend:     rend,
 		dispatch: dispatch,
 		funcDefs: make(map[string]*FuncDef),
 		compDefs: make(map[string]*protocol.DefineComponent),
 	}
+	s.em = NewEventManager(s)
+	return s
 }
 
 // SetRecorder sets the recorder for this session. When set, all recordable
@@ -85,6 +88,11 @@ func (s *Session) SetChannelManager(cm *ChannelManager) {
 // ChannelManager returns the attached channel manager, or nil.
 func (s *Session) ChannelManager() *ChannelManager {
 	return s.cm
+}
+
+// EventManager returns the session's event manager for on/off subscriptions.
+func (s *Session) EventManager() *EventManager {
+	return s.em
 }
 
 // FlushPendingComponents flushes buffered updateComponents on all surfaces.
@@ -303,6 +311,18 @@ func (s *Session) handleMessageLocked(msg *protocol.Message) {
 			s.rend.SetAppMode(sam.Mode, sam.Icon, sam.Title, 0, menuItems)
 		})
 
+	case protocol.MsgOn:
+		on := msg.Body.(protocol.OnMessage)
+		if err := s.em.Subscribe(on); err != nil {
+			logError("session", on.SurfaceID, fmt.Sprintf("on subscribe error: %v", err))
+		}
+
+	case protocol.MsgOff:
+		off := msg.Body.(protocol.OffMessage)
+		if err := s.em.Unsubscribe(off.ID); err != nil {
+			logError("session", "", fmt.Sprintf("off unsubscribe error: %v", err))
+		}
+
 	default:
 		logWarn("session", "", fmt.Sprintf("unknown message type %s", msg.Type))
 	}
@@ -388,6 +408,10 @@ func (s *Session) deleteSurface(surfaceID string) {
 	}
 	surf.CleanupAll(true) // skip individual RemoveView — DestroyWindow handles it atomically
 	delete(s.surfaces, surfaceID)
+	// Clean up event subscriptions scoped to this surface
+	if s.em != nil {
+		s.em.CleanupSurface(surfaceID)
+	}
 	s.dispatch.RunOnMain(func() {
 		s.rend.DestroyWindow(surfaceID)
 	})

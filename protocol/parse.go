@@ -219,6 +219,20 @@ func ParseLine(line []byte) (*Message, error) {
 		}
 		msg.Body = sam
 
+	case MsgOn:
+		var on OnMessage
+		if err := json.Unmarshal(env.Payload, &on); err != nil {
+			return nil, fmt.Errorf("parse on: %w", err)
+		}
+		msg.Body = on
+
+	case MsgOff:
+		var off OffMessage
+		if err := json.Unmarshal(env.Payload, &off); err != nil {
+			return nil, fmt.Errorf("parse off: %w", err)
+		}
+		msg.Body = off
+
 	default:
 		return nil, fmt.Errorf("unknown message type: %s", env.Type)
 	}

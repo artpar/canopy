@@ -1940,3 +1940,100 @@ func TestKeyDownCallbackRegistration(t *testing.T) {
 	}
 	t.Fatal("area not found in created views")
 }
+
+// --- on/off message tests ---
+
+func TestOnMessageSubscription(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"updateDataModel","surfaceId":"s1","ops":[{"op":"add","path":"/size","value":{}}]}
+{"type":"on","surfaceId":"s1","id":"resize-1","event":"window.resize","handler":{"dataPath":"/size"}}`)
+
+	// EventManager should have the subscription
+	em := sess.EventManager()
+	em.mu.Lock()
+	_, exists := em.subs["resize-1"]
+	em.mu.Unlock()
+	if !exists {
+		t.Fatal("subscription resize-1 not found")
+	}
+
+	// Fire the event
+	em.Fire("window.resize", "s1", `{"width":800,"height":600}`)
+
+	// Check that /size was updated
+	if surf, ok := sess.surfaces["s1"]; ok {
+		val, found := surf.dm.Get("/size")
+		if !found {
+			t.Fatal("/size not found")
+		}
+		sizeMap, ok := val.(map[string]interface{})
+		if !ok {
+			t.Fatalf("/size is %T, want map", val)
+		}
+		if sizeMap["width"] != float64(800) {
+			t.Errorf("width = %v, want 800", sizeMap["width"])
+		}
+	}
+}
+
+func TestOffMessageUnsubscribes(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"on","surfaceId":"s1","id":"timer-1","event":"system.timer","handler":{"dataPath":"/tick"}}
+{"type":"off","id":"timer-1"}`)
+
+	em := sess.EventManager()
+	em.mu.Lock()
+	_, exists := em.subs["timer-1"]
+	em.mu.Unlock()
+	if exists {
+		t.Fatal("subscription timer-1 should have been removed")
+	}
+}
+
+func TestOnMessageWithAction(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	var firedEvent string
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"on","surfaceId":"s1","id":"close-1","event":"window.close","handler":{"action":{"event":{"name":"windowClosed"}}}}`)
+
+	if surf, ok := sess.surfaces["s1"]; ok {
+		surf.ActionHandler = func(sid string, event *protocol.EventDef, data map[string]interface{}) {
+			firedEvent = event.Name
+		}
+	}
+
+	sess.EventManager().Fire("window.close", "s1", "{}")
+
+	if firedEvent != "windowClosed" {
+		t.Errorf("firedEvent = %q, want windowClosed", firedEvent)
+	}
+}
+
+func TestOnMessageCleanupOnSurfaceDelete(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"s1","title":"T"}
+{"type":"on","surfaceId":"s1","id":"sub-1","event":"window.resize","handler":{"dataPath":"/size"}}
+{"type":"deleteSurface","surfaceId":"s1"}`)
+
+	em := sess.EventManager()
+	em.mu.Lock()
+	_, exists := em.subs["sub-1"]
+	em.mu.Unlock()
+	if exists {
+		t.Fatal("subscription should have been cleaned up with surface deletion")
+	}
+}
