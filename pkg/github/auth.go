@@ -15,7 +15,7 @@ import (
 // OAuth App client ID for Canopy. Users authorize via device flow.
 // To create your own: https://github.com/settings/applications/new
 // Set "Device flow" enabled, callback URL can be anything.
-const oauthClientID = "CANOPY_GITHUB_CLIENT_ID"
+const oauthClientID = "Ov23liIxnaZL67UgbTJg"
 
 var (
 	deviceCodeURL = "https://github.com/login/device/code"
