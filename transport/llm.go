@@ -87,6 +87,9 @@ type LLMTransport struct {
 	// The consumer dispatches the capture to the main thread and responds
 	// on the per-request ResultCh.
 	ScreenshotReqCh chan ScreenshotRequest
+
+	// followUps receives user follow-up prompts (e.g. from Cmd+L).
+	followUps chan string
 }
 
 func NewLLMTransport(cfg LLMConfig) *LLMTransport {
@@ -98,6 +101,7 @@ func NewLLMTransport(cfg LLMConfig) *LLMTransport {
 		messages:        make(chan *protocol.Message, 64),
 		errors:          make(chan error, 8),
 		actions:         make(chan actionPayload, 16),
+		followUps:       make(chan string, 1),
 		done:            make(chan struct{}),
 		TestResultCh:    make(chan string, 1),
 		LayoutResultCh:  make(chan string, 1),
@@ -124,6 +128,14 @@ func (t *LLMTransport) Stop() {
 			t.cancel()
 		}
 	})
+}
+
+// SendFollowUp sends a user follow-up prompt (e.g. from Cmd+L) as a new conversation turn.
+func (t *LLMTransport) SendFollowUp(prompt string) {
+	select {
+	case t.followUps <- prompt:
+	case <-t.done:
+	}
 }
 
 func (t *LLMTransport) SendAction(surfaceID string, event *protocol.EventDef, data map[string]interface{}) {
@@ -195,13 +207,18 @@ func (t *LLMTransport) run() {
 			jlog.Infof("transport", "", "post-turn hook accepted generation (turn %d)", turnNum)
 		}
 
-		// Wait for a user action to trigger the next turn
+		// Wait for a user action or follow-up prompt to trigger the next turn
 		select {
 		case ap := <-t.actions:
 			userMsg := t.formatAction(ap)
 			history = append(history, anyllm.Message{
 				Role:    anyllm.RoleUser,
 				Content: userMsg,
+			})
+		case prompt := <-t.followUps:
+			history = append(history, anyllm.Message{
+				Role:    anyllm.RoleUser,
+				Content: prompt,
 			})
 		case <-t.done:
 			return

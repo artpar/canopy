@@ -629,6 +629,23 @@ func main() {
 		}
 	}
 
+	// Wire Cmd+L follow-up prompt for LLM transport
+	if llmTr != nil {
+		lt := llmTr
+		darwin.SetFollowUpEnabled(true)
+		darwin.OnFollowUpTriggered = func() {
+			go func() {
+				disp.RunOnMain(func() { darwin.SetFollowUpEnabled(false) })
+				result := darwin.ShowFollowUpPanel()
+				disp.RunOnMain(func() { darwin.SetFollowUpEnabled(true) })
+				if result == "" {
+					return
+				}
+				lt.SendFollowUp(result)
+			}()
+		}
+	}
+
 	// Wire Cmd+L follow-up prompt for Claude Code transport
 	if ccTr != nil {
 		// Override OnDone to also re-enable the menu item (needs disp)
