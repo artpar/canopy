@@ -21,13 +21,18 @@ type EventSubscription struct {
 	Cancel    func() // stops timer, watcher, etc. Nil for passive subscriptions.
 }
 
+// SystemEventControl is called when the EventManager needs to start or stop
+// a platform-specific event source. action is "start" or "stop".
+type SystemEventControl func(event string, action string, config map[string]interface{})
+
 // EventManager manages event subscriptions from "on"/"off" protocol messages.
 // It handles subscription lifecycle and cleanup.
 type EventManager struct {
-	mu   sync.Mutex
-	subs map[string]*EventSubscription // subscriptionID → subscription
-	sess *Session
-	seq  int // auto-increment for unnamed subscriptions
+	mu      sync.Mutex
+	subs    map[string]*EventSubscription // subscriptionID → subscription
+	sess    *Session
+	seq     int // auto-increment for unnamed subscriptions
+	control SystemEventControl
 }
 
 // NewEventManager creates an EventManager attached to the given session.
@@ -36,6 +41,13 @@ func NewEventManager(sess *Session) *EventManager {
 		subs: make(map[string]*EventSubscription),
 		sess: sess,
 	}
+}
+
+// SetControl sets the callback for starting/stopping platform event sources.
+func (em *EventManager) SetControl(fn SystemEventControl) {
+	em.mu.Lock()
+	em.control = fn
+	em.mu.Unlock()
 }
 
 // Subscribe registers an event subscription. If no ID is provided, one is generated.
@@ -85,6 +97,10 @@ func (em *EventManager) startEventSource(sub *EventSubscription, config map[stri
 		em.startTimer(sub, config)
 	case "system.fs.watch":
 		em.startFSWatch(sub, config)
+	case "system.bluetooth", "system.location", "system.usb":
+		em.startOnDemandSource(sub, config)
+	case "system.ipc.distributed":
+		em.startDistributedNotification(sub, config)
 	}
 }
 
@@ -212,6 +228,77 @@ func (em *EventManager) startFSWatch(sub *EventSubscription, config map[string]i
 	}()
 }
 
+// onDemandEvents tracks which on-demand sources need ref-counted start/stop.
+var onDemandEvents = map[string]bool{
+	"system.bluetooth": true,
+	"system.location":  true,
+	"system.usb":       true,
+}
+
+// startOnDemandSource starts a platform event source via the control callback.
+// Reference-counted: started on first subscription, stopped on last removal.
+// Called with em.mu held.
+func (em *EventManager) startOnDemandSource(sub *EventSubscription, config map[string]interface{}) {
+	event := sub.Event
+
+	// Count existing subscriptions for this event
+	count := 0
+	for _, s := range em.subs {
+		if s.Event == event {
+			count++
+		}
+	}
+
+	// First subscriber: start the source
+	if count == 0 && em.control != nil {
+		em.control(event, "start", config)
+	}
+	// No Cancel needed — stopOnDemandIfEmpty handles cleanup
+}
+
+// stopOnDemandIfEmpty stops an on-demand source if no subscribers remain.
+// Called with em.mu held.
+func (em *EventManager) stopOnDemandIfEmpty(event string) {
+	if !onDemandEvents[event] || em.control == nil {
+		return
+	}
+	for _, s := range em.subs {
+		if s.Event == event {
+			return // still has subscribers
+		}
+	}
+	em.control(event, "stop", nil)
+}
+
+// startDistributedNotification starts observing a named distributed notification.
+func (em *EventManager) startDistributedNotification(sub *EventSubscription, config map[string]interface{}) {
+	name := ""
+	if config != nil {
+		if v, ok := config["name"]; ok {
+			name, _ = v.(string)
+		}
+	}
+	if name == "" {
+		jlog.Errorf("events", "", "system.ipc.distributed: no notification name specified")
+		return
+	}
+
+	if em.control != nil {
+		em.control("system.ipc.distributed", "start", map[string]interface{}{
+			"name":           name,
+			"subscriptionID": sub.ID,
+		})
+	}
+
+	sub.Cancel = func() {
+		if em.control != nil {
+			em.control("system.ipc.distributed", "stop", map[string]interface{}{
+				"subscriptionID": sub.ID,
+			})
+		}
+	}
+}
+
 // Unsubscribe removes an event subscription by ID.
 func (em *EventManager) Unsubscribe(id string) error {
 	em.mu.Lock()
@@ -221,10 +308,12 @@ func (em *EventManager) Unsubscribe(id string) error {
 	if !exists {
 		return fmt.Errorf("subscription %q not found", id)
 	}
+	event := sub.Event
 	if sub.Cancel != nil {
 		sub.Cancel()
 	}
 	delete(em.subs, id)
+	em.stopOnDemandIfEmpty(event)
 	jlog.Infof("events", "", "unsubscribed: id=%s", id)
 	return nil
 }
@@ -265,13 +354,18 @@ func (em *EventManager) CleanupSurface(surfaceID string) {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
+	var removedEvents []string
 	for id, sub := range em.subs {
 		if sub.SurfaceID == surfaceID {
 			if sub.Cancel != nil {
 				sub.Cancel()
 			}
+			removedEvents = append(removedEvents, sub.Event)
 			delete(em.subs, id)
 		}
+	}
+	for _, event := range removedEvents {
+		em.stopOnDemandIfEmpty(event)
 	}
 }
 
@@ -280,10 +374,15 @@ func (em *EventManager) CleanupAll() {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
+	var removedEvents []string
 	for id, sub := range em.subs {
 		if sub.Cancel != nil {
 			sub.Cancel()
 		}
+		removedEvents = append(removedEvents, sub.Event)
 		delete(em.subs, id)
+	}
+	for _, event := range removedEvents {
+		em.stopOnDemandIfEmpty(event)
 	}
 }

@@ -57,6 +57,16 @@ func loadEnvFile() {
 	}
 }
 
+// hash returns a simple FNV-1a hash of a string, for use as subscription IDs.
+func hash(s string) uint64 {
+	var h uint64 = 14695981039346656037
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211
+	}
+	return h
+}
+
 func main() {
 	// macOS requires the main thread for AppKit
 	runtime.LockOSThread()
@@ -506,6 +516,56 @@ func main() {
 	// Wire system events from native observers → EventManager
 	darwin.SetSystemEventHandler(func(event, data string) {
 		sess.EventManager().Fire(event, "", data)
+	})
+
+	// Wire hardware events (distributed notifications) → EventManager
+	darwin.SetHardwareEventHandler(func(subscriptionID uint64, data string) {
+		// Hardware events with subscription IDs are handled per-subscription
+		// For now, distributed notifications fire through the generic system event path
+		sess.EventManager().Fire("system.ipc.distributed", "", data)
+	})
+
+	// Set up on-demand event source control (bluetooth, location, USB, distributed notifications)
+	sess.EventManager().SetControl(func(event, action string, config map[string]interface{}) {
+		disp.RunOnMain(func() {
+			switch event {
+			case "system.bluetooth":
+				if action == "start" {
+					darwin.StartBluetoothObserver()
+				} else {
+					darwin.StopBluetoothObserver()
+				}
+			case "system.location":
+				if action == "start" {
+					darwin.StartLocationObserver()
+				} else {
+					darwin.StopLocationObserver()
+				}
+			case "system.usb":
+				if action == "start" {
+					darwin.StartUSBObserver()
+				} else {
+					darwin.StopUSBObserver()
+				}
+			case "system.ipc.distributed":
+				if config == nil {
+					return
+				}
+				if action == "start" {
+					name, _ := config["name"].(string)
+					subID, _ := config["subscriptionID"].(string)
+					if name != "" && subID != "" {
+						// Use a hash of the subscription ID as the native callback ID
+						darwin.ObserveDistributedNotification(name, uint64(hash(subID)))
+					}
+				} else {
+					subID, _ := config["subscriptionID"].(string)
+					if subID != "" {
+						darwin.UnobserveDistributedNotification(uint64(hash(subID)))
+					}
+				}
+			}
+		})
 	})
 
 	// Start always-on system observers (lightweight NSNotificationCenter subscriptions)
@@ -966,6 +1026,53 @@ func runMCP(args []string) {
 	// Wire system events from native observers → EventManager
 	darwin.SetSystemEventHandler(func(event, data string) {
 		sess.EventManager().Fire(event, "", data)
+	})
+
+	// Wire hardware events → EventManager
+	darwin.SetHardwareEventHandler(func(subscriptionID uint64, data string) {
+		sess.EventManager().Fire("system.ipc.distributed", "", data)
+	})
+
+	// Set up on-demand event source control
+	sess.EventManager().SetControl(func(event, action string, config map[string]interface{}) {
+		disp.RunOnMain(func() {
+			switch event {
+			case "system.bluetooth":
+				if action == "start" {
+					darwin.StartBluetoothObserver()
+				} else {
+					darwin.StopBluetoothObserver()
+				}
+			case "system.location":
+				if action == "start" {
+					darwin.StartLocationObserver()
+				} else {
+					darwin.StopLocationObserver()
+				}
+			case "system.usb":
+				if action == "start" {
+					darwin.StartUSBObserver()
+				} else {
+					darwin.StopUSBObserver()
+				}
+			case "system.ipc.distributed":
+				if config == nil {
+					return
+				}
+				if action == "start" {
+					name, _ := config["name"].(string)
+					subID, _ := config["subscriptionID"].(string)
+					if name != "" && subID != "" {
+						darwin.ObserveDistributedNotification(name, hash(subID))
+					}
+				} else {
+					subID, _ := config["subscriptionID"].(string)
+					if subID != "" {
+						darwin.UnobserveDistributedNotification(hash(subID))
+					}
+				}
+			}
+		})
 	})
 
 	// Start always-on system observers

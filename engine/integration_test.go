@@ -2241,3 +2241,74 @@ func TestMultipleWindowEventSubscribers(t *testing.T) {
 		t.Error("expected /r2 to be set")
 	}
 }
+
+func TestOnDemandSourceControl(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	var controlCalls []string
+	sess.EventManager().SetControl(func(event, action string, config map[string]interface{}) {
+		controlCalls = append(controlCalls, event+":"+action)
+	})
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":800,"height":600}
+{"type":"on","surfaceId":"main","id":"bt-1","event":"system.bluetooth","handler":{"dataPath":"/bt"}}`)
+
+	if len(controlCalls) != 1 || controlCalls[0] != "system.bluetooth:start" {
+		t.Fatalf("expected [system.bluetooth:start], got %v", controlCalls)
+	}
+
+	// Second subscriber should NOT trigger start again
+	feedMessages(t, sess, `{"type":"on","surfaceId":"main","id":"bt-2","event":"system.bluetooth","handler":{"dataPath":"/bt2"}}`)
+	if len(controlCalls) != 1 {
+		t.Fatalf("expected no additional start, got %v", controlCalls)
+	}
+
+	// Unsubscribe first — should NOT trigger stop (bt-2 still active)
+	sess.EventManager().Unsubscribe("bt-1")
+	if len(controlCalls) != 1 {
+		t.Fatalf("expected no stop yet, got %v", controlCalls)
+	}
+
+	// Unsubscribe last — should trigger stop
+	sess.EventManager().Unsubscribe("bt-2")
+	if len(controlCalls) != 2 || controlCalls[1] != "system.bluetooth:stop" {
+		t.Fatalf("expected [system.bluetooth:start, system.bluetooth:stop], got %v", controlCalls)
+	}
+}
+
+func TestDistributedNotificationSubscription(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	var controlCalls []string
+	sess.EventManager().SetControl(func(event, action string, config map[string]interface{}) {
+		name, _ := config["name"].(string)
+		controlCalls = append(controlCalls, event+":"+action+":"+name)
+	})
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":800,"height":600}`)
+
+	sess.EventManager().Subscribe(protocol.OnMessage{
+		Type:      protocol.MsgOn,
+		SurfaceID: "main",
+		ID:        "dn-1",
+		Event:     "system.ipc.distributed",
+		Config:    map[string]interface{}{"name": "com.example.TestNotification"},
+		Handler:   protocol.EventAction{DataPath: "/ipc/last"},
+	})
+
+	if len(controlCalls) != 1 {
+		t.Fatalf("expected 1 control call, got %v", controlCalls)
+	}
+	if controlCalls[0] != "system.ipc.distributed:start:com.example.TestNotification" {
+		t.Fatalf("expected distributed start, got %v", controlCalls[0])
+	}
+
+	sess.EventManager().Unsubscribe("dn-1")
+	if len(controlCalls) != 2 {
+		t.Fatalf("expected 2 control calls, got %v", controlCalls)
+	}
+}

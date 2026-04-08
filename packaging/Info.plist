@@ -26,6 +26,10 @@
 	<string>Canopy needs camera access to display live camera preview and capture photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Canopy needs microphone access to record audio.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Canopy needs Bluetooth access to monitor device connectivity for apps that use Bluetooth events.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Canopy needs location access for apps that use location-based events.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 
