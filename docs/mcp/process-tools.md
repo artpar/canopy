@@ -26,8 +26,14 @@ mcp__canopy__list_processes()
 
 ```json
 [
-  { "id": "main", "status": "running" },
-  { "id": "worker-1", "status": "running" }
+  {
+    "id": "main",
+    "status": "running"
+  },
+  {
+    "id": "worker-1",
+    "status": "running"
+  }
 ]
 ```
 

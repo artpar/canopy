@@ -33,21 +33,43 @@ Functions for manipulating arrays (JSON arrays stored in the data model).
 Add an item to an array:
 
 ```json
-{"functionCall": {"name": "append", "args": [
-  {"path": "/items"},
-  {"title": "New Item", "done": false}
-]}}
+{
+  "functionCall": {
+    "name": "append",
+    "args": [
+      {
+        "path": "/items"
+      },
+      {
+        "title": "New Item",
+        "done": false
+      }
+    ]
+  }
+}
 ```
 
 Commonly used in an updateDataModel action:
 
 ```json
-{"op": "replace", "path": "/items", "value": {
-  "functionCall": {"name": "append", "args": [
-    {"path": "/items"},
-    {"title": "New", "done": false}
-  ]}
-}}
+{
+  "op": "replace",
+  "path": "/items",
+  "value": {
+    "functionCall": {
+      "name": "append",
+      "args": [
+        {
+          "path": "/items"
+        },
+        {
+          "title": "New",
+          "done": false
+        }
+      ]
+    }
+  }
+}
 ```
 
 ### filter
@@ -55,7 +77,18 @@ Commonly used in an updateDataModel action:
 Get items matching a condition:
 
 ```json
-{"functionCall": {"name": "filter", "args": [{"path": "/todos"}, "done", false]}}
+{
+  "functionCall": {
+    "name": "filter",
+    "args": [
+      {
+        "path": "/todos"
+      },
+      "done",
+      false
+    ]
+  }
+}
 ```
 
 Returns all todo items where `done` is `false`.
@@ -65,7 +98,20 @@ Returns all todo items where `done` is `false`.
 Search by substring (case-insensitive):
 
 ```json
-{"functionCall": {"name": "filterContains", "args": [{"path": "/contacts"}, "name", {"path": "/searchQuery"}]}}
+{
+  "functionCall": {
+    "name": "filterContains",
+    "args": [
+      {
+        "path": "/contacts"
+      },
+      "name",
+      {
+        "path": "/searchQuery"
+      }
+    ]
+  }
+}
 ```
 
 ### filterContainsAny
@@ -73,11 +119,23 @@ Search by substring (case-insensitive):
 Search across multiple fields:
 
 ```json
-{"functionCall": {"name": "filterContainsAny", "args": [
-  {"path": "/notes"},
-  ["title", "body"],
-  {"path": "/searchQuery"}
-]}}
+{
+  "functionCall": {
+    "name": "filterContainsAny",
+    "args": [
+      {
+        "path": "/notes"
+      },
+      [
+        "title",
+        "body"
+      ],
+      {
+        "path": "/searchQuery"
+      }
+    ]
+  }
+}
 ```
 
 ### find
@@ -85,7 +143,20 @@ Search across multiple fields:
 Get the first matching item:
 
 ```json
-{"functionCall": {"name": "find", "args": [{"path": "/users"}, "id", {"path": "/selectedId"}]}}
+{
+  "functionCall": {
+    "name": "find",
+    "args": [
+      {
+        "path": "/users"
+      },
+      "id",
+      {
+        "path": "/selectedId"
+      }
+    ]
+  }
+}
 ```
 
 ### sort
@@ -93,7 +164,18 @@ Get the first matching item:
 Sort by a field:
 
 ```json
-{"functionCall": {"name": "sort", "args": [{"path": "/items"}, "createdAt", true]}}
+{
+  "functionCall": {
+    "name": "sort",
+    "args": [
+      {
+        "path": "/items"
+      },
+      "createdAt",
+      true
+    ]
+  }
+}
 ```
 
 The third argument (`true`) sorts in descending order.
@@ -103,7 +185,20 @@ The third argument (`true`) sorts in descending order.
 Remove items matching a condition (opposite of filter):
 
 ```json
-{"functionCall": {"name": "remove", "args": [{"path": "/items"}, "id", {"path": "/deleteId"}]}}
+{
+  "functionCall": {
+    "name": "remove",
+    "args": [
+      {
+        "path": "/items"
+      },
+      "id",
+      {
+        "path": "/deleteId"
+      }
+    ]
+  }
+}
 ```
 
 ### insertAt
@@ -111,7 +206,20 @@ Remove items matching a condition (opposite of filter):
 Insert at a specific position:
 
 ```json
-{"functionCall": {"name": "insertAt", "args": [{"path": "/items"}, 0, {"title": "First"}]}}
+{
+  "functionCall": {
+    "name": "insertAt",
+    "args": [
+      {
+        "path": "/items"
+      },
+      0,
+      {
+        "title": "First"
+      }
+    ]
+  }
+}
 ```
 
 ### countWhere
@@ -119,7 +227,18 @@ Insert at a specific position:
 Count matching items:
 
 ```json
-{"functionCall": {"name": "countWhere", "args": [{"path": "/todos"}, "done", true]}}
+{
+  "functionCall": {
+    "name": "countWhere",
+    "args": [
+      {
+        "path": "/todos"
+      },
+      "done",
+      true
+    ]
+  }
+}
 ```
 
 ### length
@@ -127,5 +246,14 @@ Count matching items:
 Get array length:
 
 ```json
-{"functionCall": {"name": "length", "args": [{"path": "/items"}]}}
+{
+  "functionCall": {
+    "name": "length",
+    "args": [
+      {
+        "path": "/items"
+      }
+    ]
+  }
+}
 ```

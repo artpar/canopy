@@ -72,7 +72,9 @@ mcp__canopy__audio_record_start(sampleRate: 44100, channels: 1)
 ```
 
 ```json
-{ "recordingID": "rec_abc123" }
+{
+  "recordingID": "rec_abc123"
+}
 ```
 
 ---
@@ -95,7 +97,9 @@ mcp__canopy__audio_record_stop(recordingID: "rec_abc123")
 ```
 
 ```json
-{ "path": "/tmp/canopy_audio_rec_abc123.m4a" }
+{
+  "path": "/tmp/canopy_audio_rec_abc123.m4a"
+}
 ```
 
 ---
@@ -138,7 +142,9 @@ mcp__canopy__screen_capture()
 ```
 
 ```json
-{ "path": "/tmp/canopy_screen_capture.png" }
+{
+  "path": "/tmp/canopy_screen_capture.png"
+}
 ```
 
 Uses ScreenCaptureKit for high-quality capture. A system permission prompt may appear on first use.

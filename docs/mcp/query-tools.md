@@ -26,7 +26,12 @@ mcp__canopy__list_surfaces()
 
 ```json
 [
-  { "id": "main", "title": "My App", "width": 800, "height": 600 }
+  {
+    "id": "main",
+    "title": "My App",
+    "width": 800,
+    "height": 600
+  }
 ]
 ```
 
@@ -54,8 +59,20 @@ mcp__canopy__get_tree(surface_id: "main")
   "id": "root",
   "type": "Column",
   "children": [
-    { "id": "title", "type": "Text", "props": { "content": "Hello" } },
-    { "id": "btn", "type": "Button", "props": { "label": "Click me" } }
+    {
+      "id": "title",
+      "type": "Text",
+      "props": {
+        "content": "Hello"
+      }
+    },
+    {
+      "id": "btn",
+      "type": "Button",
+      "props": {
+        "label": "Click me"
+      }
+    }
   ]
 }
 ```
@@ -84,7 +101,11 @@ mcp__canopy__get_component(surface_id: "main", component_id: "email-field")
 {
   "id": "email-field",
   "type": "TextField",
-  "props": { "label": "Email", "value": "user@example.com", "placeholder": "Enter email" }
+  "props": {
+    "label": "Email",
+    "value": "user@example.com",
+    "placeholder": "Enter email"
+  }
 }
 ```
 
@@ -133,7 +154,12 @@ mcp__canopy__get_layout(surface_id: "main", component_id: "sidebar")
 ```
 
 ```json
-{ "x": 0, "y": 0, "width": 250, "height": 600 }
+{
+  "x": 0,
+  "y": 0,
+  "width": 250,
+  "height": 600
+}
 ```
 
 ---
@@ -158,7 +184,10 @@ mcp__canopy__get_style(surface_id: "main", component_id: "heading")
 
 ```json
 {
-  "font": { "name": "System Bold", "size": 24 },
+  "font": {
+    "name": "System Bold",
+    "size": 24
+  },
   "textColor": "#000000",
   "backgroundColor": "#FFFFFF",
   "opacity": 1.0

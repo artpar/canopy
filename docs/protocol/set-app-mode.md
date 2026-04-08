@@ -12,17 +12,36 @@ Switches the application's activation policy between normal, menubar, and access
 ## Example
 
 ```json
-{"type":"setAppMode","mode":"menubar","icon":"bolt.fill","title":"My App"}
+{
+  "type": "setAppMode",
+  "mode": "menubar",
+  "icon": "bolt.fill",
+  "title": "My App"
+}
 ```
 
 With menu items:
 
 ```json
-{"type":"setAppMode","mode":"menubar","icon":"bolt.fill","menuItems":[
-  {"id":"show","label":"Show Window"},
-  {"separator":true},
-  {"id":"quit","label":"Quit","keyEquivalent":"q"}
-]}
+{
+  "type": "setAppMode",
+  "mode": "menubar",
+  "icon": "bolt.fill",
+  "menuItems": [
+    {
+      "id": "show",
+      "label": "Show Window"
+    },
+    {
+      "separator": true
+    },
+    {
+      "id": "quit",
+      "label": "Quit",
+      "keyEquivalent": "q"
+    }
+  ]
+}
 ```
 
 ## Fields

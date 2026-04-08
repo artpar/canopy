@@ -12,11 +12,21 @@ Routes a message to a running process's transport.
 ## Example
 
 ```json
-{"type":"sendToProcess","processId":"agent","message":{
-  "type":"updateDataModel","surfaceId":"main","ops":[
-    {"op":"replace","path":"/prompt","value":"Add a delete button"}
-  ]
-}}
+{
+  "type": "sendToProcess",
+  "processId": "agent",
+  "message": {
+    "type": "updateDataModel",
+    "surfaceId": "main",
+    "ops": [
+      {
+        "op": "replace",
+        "path": "/prompt",
+        "value": "Add a delete button"
+      }
+    ]
+  }
+}
 ```
 
 ## Fields

@@ -12,13 +12,25 @@ Sends a value to a channel, delivering it to all subscribers (broadcast) or the 
 ## Example
 
 ```json
-{"type":"publish","channelId":"notifications","value":"System update available"}
+{
+  "type": "publish",
+  "channelId": "notifications",
+  "value": "System update available"
+}
 ```
 
 With an object value:
 
 ```json
-{"type":"publish","channelId":"events","value":{"type":"click","target":"submit","timestamp":1234567890}}
+{
+  "type": "publish",
+  "channelId": "events",
+  "value": {
+    "type": "click",
+    "target": "submit",
+    "timestamp": 1234567890
+  }
+}
 ```
 
 ## Fields

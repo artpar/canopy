@@ -21,7 +21,11 @@ Every Canopy package has a `canopy.json` file at the root of the repository. Thi
   "license": "MIT",
   "icon": "note.text",
   "entry": "prompt.jsonl",
-  "keywords": ["notes", "productivity", "rich-text"],
+  "keywords": [
+    "notes",
+    "productivity",
+    "rich-text"
+  ],
   "dependencies": {
     "sidebar-tree": ">=1.0.0"
   }

@@ -12,7 +12,13 @@ Modifies properties of an existing window after creation.
 ## Example
 
 ```json
-{"type":"updateWindow","surfaceId":"main","title":"Updated Title","minWidth":400,"minHeight":300}
+{
+  "type": "updateWindow",
+  "surfaceId": "main",
+  "title": "Updated Title",
+  "minWidth": 400,
+  "minHeight": 300
+}
 ```
 
 ## Fields

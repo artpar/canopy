@@ -12,10 +12,27 @@ Dynamically loads a native C shared library and registers its functions for use 
 ## Example
 
 ```json
-{"type":"loadLibrary","path":"/usr/local/lib/libmath.dylib","prefix":"math_",
-  "functions":[
-    {"name":"factorial","symbol":"math_factorial","returnType":"int","paramTypes":["int"]},
-    {"name":"fibonacci","symbol":"math_fib","returnType":"int","paramTypes":["int"]}
+{
+  "type": "loadLibrary",
+  "path": "/usr/local/lib/libmath.dylib",
+  "prefix": "math_",
+  "functions": [
+    {
+      "name": "factorial",
+      "symbol": "math_factorial",
+      "returnType": "int",
+      "paramTypes": [
+        "int"
+      ]
+    },
+    {
+      "name": "fibonacci",
+      "symbol": "math_fib",
+      "returnType": "int",
+      "paramTypes": [
+        "int"
+      ]
+    }
   ]
 }
 ```

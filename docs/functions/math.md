@@ -26,11 +26,35 @@ Functions for arithmetic operations.
 ### Basic Arithmetic
 
 ```json
-{"functionCall": {"name": "add", "args": [{"path": "/price"}, {"path": "/tax"}]}}
+{
+  "functionCall": {
+    "name": "add",
+    "args": [
+      {
+        "path": "/price"
+      },
+      {
+        "path": "/tax"
+      }
+    ]
+  }
+}
 ```
 
 ```json
-{"functionCall": {"name": "multiply", "args": [{"path": "/quantity"}, {"path": "/unitPrice"}]}}
+{
+  "functionCall": {
+    "name": "multiply",
+    "args": [
+      {
+        "path": "/quantity"
+      },
+      {
+        "path": "/unitPrice"
+      }
+    ]
+  }
+}
 ```
 
 ### calc
@@ -38,7 +62,22 @@ Functions for arithmetic operations.
 Perform an operation with a dynamic operator -- useful when the operation itself comes from the data model:
 
 ```json
-{"functionCall": {"name": "calc", "args": [{"path": "/operator"}, {"path": "/left"}, {"path": "/right"}]}}
+{
+  "functionCall": {
+    "name": "calc",
+    "args": [
+      {
+        "path": "/operator"
+      },
+      {
+        "path": "/left"
+      },
+      {
+        "path": "/right"
+      }
+    ]
+  }
+}
 ```
 
 The first argument must be one of `"+"`, `"-"`, `"*"`, or `"/"`.
@@ -48,10 +87,29 @@ The first argument must be one of `"+"`, `"-"`, `"*"`, or `"/"`.
 Nest function calls for complex expressions:
 
 ```json
-{"functionCall": {"name": "subtract", "args": [
-  {"functionCall": {"name": "multiply", "args": [{"path": "/quantity"}, {"path": "/price"}]}},
-  {"path": "/discount"}
-]}}
+{
+  "functionCall": {
+    "name": "subtract",
+    "args": [
+      {
+        "functionCall": {
+          "name": "multiply",
+          "args": [
+            {
+              "path": "/quantity"
+            },
+            {
+              "path": "/price"
+            }
+          ]
+        }
+      },
+      {
+        "path": "/discount"
+      }
+    ]
+  }
+}
 ```
 
 This computes `(quantity * price) - discount`.
@@ -61,10 +119,24 @@ This computes `(quantity * price) - discount`.
 Convert a string to a number for arithmetic:
 
 ```json
-{"functionCall": {"name": "add", "args": [
-  {"functionCall": {"name": "toNumber", "args": [{"path": "/inputValue"}]}},
-  1
-]}}
+{
+  "functionCall": {
+    "name": "add",
+    "args": [
+      {
+        "functionCall": {
+          "name": "toNumber",
+          "args": [
+            {
+              "path": "/inputValue"
+            }
+          ]
+        }
+      },
+      1
+    ]
+  }
+}
 ```
 
 ### negate
@@ -72,5 +144,14 @@ Convert a string to a number for arithmetic:
 Flip the sign of a number:
 
 ```json
-{"functionCall": {"name": "negate", "args": [{"path": "/balance"}]}}
+{
+  "functionCall": {
+    "name": "negate",
+    "args": [
+      {
+        "path": "/balance"
+      }
+    ]
+  }
+}
 ```

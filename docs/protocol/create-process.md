@@ -12,13 +12,35 @@ Spawns a background process with its own message transport.
 ## Example
 
 ```json
-{"type":"createProcess","processId":"timer","transport":{
-  "type":"interval",
-  "interval":1000,
-  "message":{"type":"updateDataModel","surfaceId":"main","ops":[
-    {"op":"replace","path":"/tick","value":{"functionCall":{"name":"add","args":[{"path":"/tick"},1]}}}
-  ]}
-}}
+{
+  "type": "createProcess",
+  "processId": "timer",
+  "transport": {
+    "type": "interval",
+    "interval": 1000,
+    "message": {
+      "type": "updateDataModel",
+      "surfaceId": "main",
+      "ops": [
+        {
+          "op": "replace",
+          "path": "/tick",
+          "value": {
+            "functionCall": {
+              "name": "add",
+              "args": [
+                {
+                  "path": "/tick"
+                },
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
 ```
 
 ## Fields

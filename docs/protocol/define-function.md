@@ -12,15 +12,36 @@ Registers a reusable parametric function that can be called from expressions and
 ## Example
 
 ```json
-{"type":"defineFunction","name":"appendDigit","params":["digit"],
-  "body":{
-    "functionCall":{
-      "call":"updateDataModel",
-      "args":{"ops":[
-        {"op":"replace","path":"/display","value":{
-          "functionCall":{"name":"concat","args":[{"path":"/display"},{"param":"digit"}]}
-        }}
-      ]}
+{
+  "type": "defineFunction",
+  "name": "appendDigit",
+  "params": [
+    "digit"
+  ],
+  "body": {
+    "functionCall": {
+      "call": "updateDataModel",
+      "args": {
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/display",
+            "value": {
+              "functionCall": {
+                "name": "concat",
+                "args": [
+                  {
+                    "path": "/display"
+                  },
+                  {
+                    "param": "digit"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
     }
   }
 }
@@ -46,12 +67,28 @@ Registers a reusable parametric function that can be called from expressions and
 
 In an expression:
 ```json
-{"functionCall": {"name": "appendDigit", "args": ["5"]}}
+{
+  "functionCall": {
+    "name": "appendDigit",
+    "args": [
+      "5"
+    ]
+  }
+}
 ```
 
 In an action:
 ```json
-{"action": {"functionCall": {"call": "appendDigit", "args": ["5"]}}}
+{
+  "action": {
+    "functionCall": {
+      "call": "appendDigit",
+      "args": [
+        "5"
+      ]
+    }
+  }
+}
 ```
 
 ## Related

@@ -12,7 +12,10 @@ Includes another JSONL file, inlining its messages at the current position in th
 ## Example
 
 ```json
-{"type":"include","path":"components/sidebar.jsonl"}
+{
+  "type": "include",
+  "path": "components/sidebar.jsonl"
+}
 ```
 
 ## Fields
@@ -40,10 +43,28 @@ Includes another JSONL file, inlining its messages at the current position in th
 
 **main.jsonl:**
 ```json
-{"type":"include","path":"lib/components.jsonl"}
-{"type":"include","path":"lib/functions.jsonl"}
-{"type":"createSurface","surfaceId":"main","title":"My App","width":800,"height":600}
-{"type":"include","path":"screens/home.jsonl"}
+{
+  "type": "include",
+  "path": "lib/components.jsonl"
+}
+
+{
+  "type": "include",
+  "path": "lib/functions.jsonl"
+}
+
+{
+  "type": "createSurface",
+  "surfaceId": "main",
+  "title": "My App",
+  "width": 800,
+  "height": 600
+}
+
+{
+  "type": "include",
+  "path": "screens/home.jsonl"
+}
 ```
 
 **lib/components.jsonl:**

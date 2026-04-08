@@ -12,7 +12,10 @@ Closes a window and cleans up all its components, bindings, and callbacks.
 ## Example
 
 ```json
-{"type":"deleteSurface","surfaceId":"main"}
+{
+  "type": "deleteSurface",
+  "surfaceId": "main"
+}
 ```
 
 ## Fields

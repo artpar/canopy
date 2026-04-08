@@ -12,7 +12,10 @@ Terminates a running process.
 ## Example
 
 ```json
-{"type":"stopProcess","processId":"timer"}
+{
+  "type": "stopProcess",
+  "processId": "timer"
+}
 ```
 
 ## Fields

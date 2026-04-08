@@ -12,11 +12,45 @@ Registers a reusable component template that can be instantiated with `useCompon
 ## Example
 
 ```json
-{"type":"defineComponent","name":"IconButton","params":["icon","label","action"],
-  "components":[
-    {"componentId":"_root","type":"Row","props":{"gap":8,"align":"center"},"children":["_icon","_text"]},
-    {"componentId":"_icon","type":"Icon","props":{"name":{"param":"icon"}}},
-    {"componentId":"_text","type":"Text","props":{"content":{"param":"label"}}}
+{
+  "type": "defineComponent",
+  "name": "IconButton",
+  "params": [
+    "icon",
+    "label",
+    "action"
+  ],
+  "components": [
+    {
+      "componentId": "_root",
+      "type": "Row",
+      "props": {
+        "gap": 8,
+        "align": "center"
+      },
+      "children": [
+        "_icon",
+        "_text"
+      ]
+    },
+    {
+      "componentId": "_icon",
+      "type": "Icon",
+      "props": {
+        "name": {
+          "param": "icon"
+        }
+      }
+    },
+    {
+      "componentId": "_text",
+      "type": "Text",
+      "props": {
+        "content": {
+          "param": "label"
+        }
+      }
+    }
   ]
 }
 ```
@@ -43,10 +77,14 @@ Registers a reusable component template that can be instantiated with `useCompon
 In an `updateComponents` message:
 
 ```json
-{"componentId":"saveBtn","useComponent":"IconButton","args":{
-  "icon":"square.and.arrow.down",
-  "label":"Save"
-}}
+{
+  "componentId": "saveBtn",
+  "useComponent": "IconButton",
+  "args": {
+    "icon": "square.and.arrow.down",
+    "label": "Save"
+  }
+}
 ```
 
 The `_root` component becomes `saveBtn`, `_icon` becomes `saveBtn__icon`, and `_text` becomes `saveBtn__text`.

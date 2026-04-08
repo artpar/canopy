@@ -27,11 +27,33 @@ That's Canopy.
 A2UI (AI-to-UI) is a JSONL protocol. Each line is a self-contained message. Messages create windows, define components, update data, wire up interactions:
 
 ```json
-{"type":"createSurface","surfaceId":"main","title":"My App"}
-{"type":"updateComponents","surfaceId":"main","components":[
-  {"componentId":"root","type":"Column","children":["greeting"]},
-  {"componentId":"greeting","type":"Text","props":{"content":"Hello, world","variant":"h1"}}
-]}
+{
+  "type": "createSurface",
+  "surfaceId": "main",
+  "title": "My App"
+}
+
+{
+  "type": "updateComponents",
+  "surfaceId": "main",
+  "components": [
+    {
+      "componentId": "root",
+      "type": "Column",
+      "children": [
+        "greeting"
+      ]
+    },
+    {
+      "componentId": "greeting",
+      "type": "Text",
+      "props": {
+        "content": "Hello, world",
+        "variant": "h1"
+      }
+    }
+  ]
+}
 ```
 
 Two lines. A native macOS window with a heading. No Xcode. No Swift. No build step.
@@ -70,8 +92,32 @@ Canopy reads A2UI JSONL and renders it as native macOS widgets:
 Canopy apps don't have event loops. They have a data model — a JSON document addressed by JSON Pointers — and bindings that connect components to paths in that model.
 
 ```json
-{"componentId":"name","type":"TextField","props":{"placeholder":"Your name","dataBinding":"/user/name"}}
-{"componentId":"greeting","type":"Text","props":{"content":{"functionCall":{"name":"concat","args":["Hello, ",{"path":"/user/name"}]}}}}
+{
+  "componentId": "name",
+  "type": "TextField",
+  "props": {
+    "placeholder": "Your name",
+    "dataBinding": "/user/name"
+  }
+}
+
+{
+  "componentId": "greeting",
+  "type": "Text",
+  "props": {
+    "content": {
+      "functionCall": {
+        "name": "concat",
+        "args": [
+          "Hello, ",
+          {
+            "path": "/user/name"
+          }
+        ]
+      }
+    }
+  }
+}
 ```
 
 Type in the text field → the data model updates at `/user/name` → the greeting text re-renders. No event handlers, no state management, no boilerplate. The engine tracks bindings and propagates changes automatically.

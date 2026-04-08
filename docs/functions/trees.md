@@ -22,12 +22,28 @@ Tree functions expect data in this format:
 
 ```json
 [
-  {"id": "root", "name": "Root", "children": [
-    {"id": "child1", "name": "Child 1", "children": []},
-    {"id": "child2", "name": "Child 2", "children": [
-      {"id": "grandchild1", "name": "Grandchild 1", "children": []}
-    ]}
-  ]}
+  {
+    "id": "root",
+    "name": "Root",
+    "children": [
+      {
+        "id": "child1",
+        "name": "Child 1",
+        "children": []
+      },
+      {
+        "id": "child2",
+        "name": "Child 2",
+        "children": [
+          {
+            "id": "grandchild1",
+            "name": "Grandchild 1",
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
 ]
 ```
 
@@ -40,11 +56,27 @@ Each node must have an `id` field and a `children` array.
 Add a new node as a child of an existing node:
 
 ```json
-{"functionCall": {"name": "appendToTree", "args": [
-  {"path": "/folders"},
-  "child2",
-  {"id": {"functionCall": {"name": "uuid", "args": []}}, "name": "New Folder", "children": []}
-]}}
+{
+  "functionCall": {
+    "name": "appendToTree",
+    "args": [
+      {
+        "path": "/folders"
+      },
+      "child2",
+      {
+        "id": {
+          "functionCall": {
+            "name": "uuid",
+            "args": []
+          }
+        },
+        "name": "New Folder",
+        "children": []
+      }
+    ]
+  }
+}
 ```
 
 This inserts the new folder as a child of the node with `id` "child2".
@@ -52,11 +84,22 @@ This inserts the new folder as a child of the node with `id` "child2".
 If `parentId` is empty or null, the item is appended to the root array:
 
 ```json
-{"functionCall": {"name": "appendToTree", "args": [
-  {"path": "/folders"},
-  "",
-  {"id": "top-level", "name": "Top Level", "children": []}
-]}}
+{
+  "functionCall": {
+    "name": "appendToTree",
+    "args": [
+      {
+        "path": "/folders"
+      },
+      "",
+      {
+        "id": "top-level",
+        "name": "Top Level",
+        "children": []
+      }
+    ]
+  }
+}
 ```
 
 ### removeFromTree
@@ -64,10 +107,19 @@ If `parentId` is empty or null, the item is appended to the root array:
 Remove a node by ID, searching the entire tree:
 
 ```json
-{"functionCall": {"name": "removeFromTree", "args": [
-  {"path": "/folders"},
-  {"path": "/selectedFolderId"}
-]}}
+{
+  "functionCall": {
+    "name": "removeFromTree",
+    "args": [
+      {
+        "path": "/folders"
+      },
+      {
+        "path": "/selectedFolderId"
+      }
+    ]
+  }
+}
 ```
 
 The search is recursive -- the node is found and removed regardless of its depth in the tree.
@@ -77,36 +129,94 @@ The search is recursive -- the node is found and removed regardless of its depth
 Tree functions pair naturally with the [OutlineView](../components/outlineview) component:
 
 ```json
-{"type":"updateDataModel","surfaceId":"main","ops":[
-  {"op":"add","path":"/folders","value":[
-    {"id":"inbox","name":"Inbox","icon":"tray","children":[]},
-    {"id":"archive","name":"Archive","icon":"archivebox","children":[
-      {"id":"2024","name":"2024","children":[]},
-      {"id":"2025","name":"2025","children":[]}
-    ]}
-  ]}
-]}
+{
+  "type": "updateDataModel",
+  "surfaceId": "main",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/folders",
+      "value": [
+        {
+          "id": "inbox",
+          "name": "Inbox",
+          "icon": "tray",
+          "children": []
+        },
+        {
+          "id": "archive",
+          "name": "Archive",
+          "icon": "archivebox",
+          "children": [
+            {
+              "id": "2024",
+              "name": "2024",
+              "children": []
+            },
+            {
+              "id": "2025",
+              "name": "2025",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
 Add a folder:
 
 ```json
-{"op":"replace","path":"/folders","value":{
-  "functionCall":{"name":"appendToTree","args":[
-    {"path":"/folders"},
-    {"path":"/selectedFolderId"},
-    {"id":{"functionCall":{"name":"uuid","args":[]}},"name":"New Folder","icon":"folder","children":[]}
-  ]}
-}}
+{
+  "op": "replace",
+  "path": "/folders",
+  "value": {
+    "functionCall": {
+      "name": "appendToTree",
+      "args": [
+        {
+          "path": "/folders"
+        },
+        {
+          "path": "/selectedFolderId"
+        },
+        {
+          "id": {
+            "functionCall": {
+              "name": "uuid",
+              "args": []
+            }
+          },
+          "name": "New Folder",
+          "icon": "folder",
+          "children": []
+        }
+      ]
+    }
+  }
+}
 ```
 
 Delete a folder:
 
 ```json
-{"op":"replace","path":"/folders","value":{
-  "functionCall":{"name":"removeFromTree","args":[
-    {"path":"/folders"},
-    {"path":"/selectedFolderId"}
-  ]}
-}}
+{
+  "op": "replace",
+  "path": "/folders",
+  "value": {
+    "functionCall": {
+      "name": "removeFromTree",
+      "args": [
+        {
+          "path": "/folders"
+        },
+        {
+          "path": "/selectedFolderId"
+        }
+      ]
+    }
+  }
+}
 ```

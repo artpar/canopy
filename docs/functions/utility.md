@@ -28,7 +28,16 @@ General-purpose functions for formatting, conversion, and common operations.
 Convert a number or boolean to string:
 
 ```json
-{"functionCall": {"name": "toString", "args": [{"path": "/count"}]}}
+{
+  "functionCall": {
+    "name": "toString",
+    "args": [
+      {
+        "path": "/count"
+      }
+    ]
+  }
+}
 ```
 
 ### format
@@ -36,12 +45,23 @@ Convert a number or boolean to string:
 Template with positional arguments:
 
 ```json
-{"functionCall": {"name": "format", "args": [
-  "Order #{0}: {1} items, ${2}",
-  {"path": "/orderId"},
-  {"path": "/itemCount"},
-  {"path": "/total"}
-]}}
+{
+  "functionCall": {
+    "name": "format",
+    "args": [
+      "Order #{0}: {1} items, ${2}",
+      {
+        "path": "/orderId"
+      },
+      {
+        "path": "/itemCount"
+      },
+      {
+        "path": "/total"
+      }
+    ]
+  }
+}
 ```
 
 Produces something like `"Order #42: 3 items, $59.99"`.
@@ -51,7 +71,12 @@ Produces something like `"Order #42: 3 items, $59.99"`.
 Get the current timestamp:
 
 ```json
-{"functionCall": {"name": "now", "args": []}}
+{
+  "functionCall": {
+    "name": "now",
+    "args": []
+  }
+}
 ```
 
 Returns an ISO 8601 string like `"2025-01-15T14:30:00Z"`.
@@ -61,7 +86,12 @@ Returns an ISO 8601 string like `"2025-01-15T14:30:00Z"`.
 Generate a unique identifier:
 
 ```json
-{"functionCall": {"name": "uuid", "args": []}}
+{
+  "functionCall": {
+    "name": "uuid",
+    "args": []
+  }
+}
 ```
 
 Returns a string like `"a1b2c3d4-e5f6-7890-abcd-ef1234567890"`.
@@ -69,12 +99,29 @@ Returns a string like `"a1b2c3d4-e5f6-7890-abcd-ef1234567890"`.
 Useful when creating new items that need unique IDs:
 
 ```json
-{"op": "replace", "path": "/items", "value": {
-  "functionCall": {"name": "append", "args": [
-    {"path": "/items"},
-    {"id": {"functionCall": {"name": "uuid", "args": []}}, "title": "New Item"}
-  ]}
-}}
+{
+  "op": "replace",
+  "path": "/items",
+  "value": {
+    "functionCall": {
+      "name": "append",
+      "args": [
+        {
+          "path": "/items"
+        },
+        {
+          "id": {
+            "functionCall": {
+              "name": "uuid",
+              "args": []
+            }
+          },
+          "title": "New Item"
+        }
+      ]
+    }
+  }
+}
 ```
 
 ### formatDateRelative
@@ -82,7 +129,16 @@ Useful when creating new items that need unique IDs:
 Format a date relative to now:
 
 ```json
-{"functionCall": {"name": "formatDateRelative", "args": [{"path": "/item/createdAt"}]}}
+{
+  "functionCall": {
+    "name": "formatDateRelative",
+    "args": [
+      {
+        "path": "/item/createdAt"
+      }
+    ]
+  }
+}
 ```
 
 Returns human-readable strings like:
@@ -96,7 +152,16 @@ Returns human-readable strings like:
 Get the length of a string or array:
 
 ```json
-{"functionCall": {"name": "length", "args": [{"path": "/items"}]}}
+{
+  "functionCall": {
+    "name": "length",
+    "args": [
+      {
+        "path": "/items"
+      }
+    ]
+  }
+}
 ```
 
 ### contains
@@ -104,5 +169,15 @@ Get the length of a string or array:
 Check for a substring:
 
 ```json
-{"functionCall": {"name": "contains", "args": [{"path": "/text"}, "error"]}}
+{
+  "functionCall": {
+    "name": "contains",
+    "args": [
+      {
+        "path": "/text"
+      },
+      "error"
+    ]
+  }
+}
 ```

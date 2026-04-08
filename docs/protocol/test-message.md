@@ -12,13 +12,43 @@ Defines an inline test with assertions and event simulation. Test messages are i
 ## Example
 
 ```json
-{"type":"test","surfaceId":"main","name":"contact form renders","steps":[
-  {"assert":"component","componentId":"title","props":{"content":"Contact Us"}},
-  {"assert":"dataModel","path":"/name","value":""},
-  {"simulate":"event","componentId":"nameField","event":"change","eventData":"Alice"},
-  {"assert":"dataModel","path":"/name","value":"Alice"},
-  {"assert":"component","componentId":"previewName","props":{"content":"Alice"}}
-]}
+{
+  "type": "test",
+  "surfaceId": "main",
+  "name": "contact form renders",
+  "steps": [
+    {
+      "assert": "component",
+      "componentId": "title",
+      "props": {
+        "content": "Contact Us"
+      }
+    },
+    {
+      "assert": "dataModel",
+      "path": "/name",
+      "value": ""
+    },
+    {
+      "simulate": "event",
+      "componentId": "nameField",
+      "event": "change",
+      "eventData": "Alice"
+    },
+    {
+      "assert": "dataModel",
+      "path": "/name",
+      "value": "Alice"
+    },
+    {
+      "assert": "component",
+      "componentId": "previewName",
+      "props": {
+        "content": "Alice"
+      }
+    }
+  ]
+}
 ```
 
 ## Fields
@@ -37,13 +67,26 @@ Defines an inline test with assertions and event simulation. Test messages are i
 Check resolved props of a component (subset match):
 
 ```json
-{"assert":"component","componentId":"title","props":{"content":"Hello"}}
+{
+  "assert": "component",
+  "componentId": "title",
+  "props": {
+    "content": "Hello"
+  }
+}
 ```
 
 Optionally check the component type:
 
 ```json
-{"assert":"component","componentId":"title","componentType":"Text","props":{"content":"Hello"}}
+{
+  "assert": "component",
+  "componentId": "title",
+  "componentType": "Text",
+  "props": {
+    "content": "Hello"
+  }
+}
 ```
 
 ### dataModel
@@ -51,7 +94,11 @@ Optionally check the component type:
 Check a value in the data model:
 
 ```json
-{"assert":"dataModel","path":"/count","value":5}
+{
+  "assert": "dataModel",
+  "path": "/count",
+  "value": 5
+}
 ```
 
 ### children
@@ -59,7 +106,15 @@ Check a value in the data model:
 Check a component's child IDs:
 
 ```json
-{"assert":"children","componentId":"row","children":["a","b","c"]}
+{
+  "assert": "children",
+  "componentId": "row",
+  "children": [
+    "a",
+    "b",
+    "c"
+  ]
+}
 ```
 
 ### notExists
@@ -67,7 +122,10 @@ Check a component's child IDs:
 Assert a component does not exist:
 
 ```json
-{"assert":"notExists","componentId":"deleted"}
+{
+  "assert": "notExists",
+  "componentId": "deleted"
+}
 ```
 
 ### count
@@ -75,7 +133,11 @@ Assert a component does not exist:
 Assert the number of children:
 
 ```json
-{"assert":"count","componentId":"list","count":3}
+{
+  "assert": "count",
+  "componentId": "list",
+  "count": 3
+}
 ```
 
 ### action
@@ -83,7 +145,13 @@ Assert the number of children:
 Assert that an action was fired:
 
 ```json
-{"assert":"action","name":"submitForm","data":{"name":"Alice"}}
+{
+  "assert": "action",
+  "name": "submitForm",
+  "data": {
+    "name": "Alice"
+  }
+}
 ```
 
 ### layout
@@ -91,7 +159,14 @@ Assert that an action was fired:
 Check computed NSView frame properties:
 
 ```json
-{"assert":"layout","componentId":"box","layout":{"width":200,"height":100}}
+{
+  "assert": "layout",
+  "componentId": "box",
+  "layout": {
+    "width": 200,
+    "height": 100
+  }
+}
 ```
 
 Available properties: `x`, `y`, `width`, `height`.
@@ -101,7 +176,14 @@ Available properties: `x`, `y`, `width`, `height`.
 Check computed visual properties:
 
 ```json
-{"assert":"style","componentId":"title","style":{"fontSize":24,"fontWeight":"bold"}}
+{
+  "assert": "style",
+  "componentId": "title",
+  "style": {
+    "fontSize": 24,
+    "fontWeight": "bold"
+  }
+}
 ```
 
 Available properties: `fontSize`, `fontWeight`, `textColor`, `backgroundColor`, `opacity`.
@@ -113,7 +195,12 @@ Available properties: `fontSize`, `fontWeight`, `textColor`, `backgroundColor`, 
 Simulate user interaction on a component:
 
 ```json
-{"simulate":"event","componentId":"nameField","event":"change","eventData":"Alice"}
+{
+  "simulate": "event",
+  "componentId": "nameField",
+  "event": "change",
+  "eventData": "Alice"
+}
 ```
 
 Event types:

@@ -12,7 +12,11 @@ Creates a named communication channel for publish/subscribe messaging.
 ## Example
 
 ```json
-{"type":"createChannel","channelId":"notifications","mode":"broadcast"}
+{
+  "type": "createChannel",
+  "channelId": "notifications",
+  "mode": "broadcast"
+}
 ```
 
 ## Fields

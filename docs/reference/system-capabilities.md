@@ -40,7 +40,10 @@ Functions are called from action handlers using `functionCall`:
 {
   "type": "functionCall",
   "name": "notify",
-  "args": ["Download complete", "Your file has been saved."]
+  "args": [
+    "Download complete",
+    "Your file has been saved."
+  ]
 }
 ```
 
@@ -56,7 +59,9 @@ Or as expressions in component props:
       "action": {
         "functionCall": {
           "name": "clipboardWrite",
-          "args": ["${/data/selectedText}"]
+          "args": [
+            "${/data/selectedText}"
+          ]
         }
       }
     }

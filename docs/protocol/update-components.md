@@ -12,11 +12,39 @@ Creates or updates components within a surface. This is the primary message for 
 ## Example
 
 ```json
-{"type":"updateComponents","surfaceId":"main","components":[
-  {"componentId":"root","type":"Column","props":{"gap":16},"children":["title","btn"]},
-  {"componentId":"title","type":"Text","props":{"content":"Hello","variant":"h1"}},
-  {"componentId":"btn","type":"Button","props":{"label":"Click Me","style":"primary"}}
-]}
+{
+  "type": "updateComponents",
+  "surfaceId": "main",
+  "components": [
+    {
+      "componentId": "root",
+      "type": "Column",
+      "props": {
+        "gap": 16
+      },
+      "children": [
+        "title",
+        "btn"
+      ]
+    },
+    {
+      "componentId": "title",
+      "type": "Text",
+      "props": {
+        "content": "Hello",
+        "variant": "h1"
+      }
+    },
+    {
+      "componentId": "btn",
+      "type": "Button",
+      "props": {
+        "label": "Click Me",
+        "style": "primary"
+      }
+    }
+  ]
+}
 ```
 
 ## Fields
@@ -57,12 +85,27 @@ You can specify parent-child relationships in two ways:
 
 **Children array** (preferred):
 ```json
-{"componentId":"row","type":"Row","children":["a","b","c"]}
+{
+  "componentId": "row",
+  "type": "Row",
+  "children": [
+    "a",
+    "b",
+    "c"
+  ]
+}
 ```
 
 **parentId**:
 ```json
-{"componentId":"a","type":"Text","parentId":"row","props":{"content":"A"}}
+{
+  "componentId": "a",
+  "type": "Text",
+  "parentId": "row",
+  "props": {
+    "content": "A"
+  }
+}
 ```
 
 ## Related

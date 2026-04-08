@@ -13,12 +13,20 @@ Removes a subscription from a channel.
 
 Remove a specific subscription:
 ```json
-{"type":"unsubscribe","channelId":"notifications","targetPath":"/lastNotification"}
+{
+  "type": "unsubscribe",
+  "channelId": "notifications",
+  "targetPath": "/lastNotification"
+}
 ```
 
 Remove all subscriptions for a process:
 ```json
-{"type":"unsubscribe","channelId":"notifications","processId":"worker1"}
+{
+  "type": "unsubscribe",
+  "channelId": "notifications",
+  "processId": "worker1"
+}
 ```
 
 ## Fields

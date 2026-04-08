@@ -12,7 +12,11 @@ Registers a subscription on a channel. When values are published, they are writt
 ## Example
 
 ```json
-{"type":"subscribe","channelId":"notifications","targetPath":"/lastNotification"}
+{
+  "type": "subscribe",
+  "channelId": "notifications",
+  "targetPath": "/lastNotification"
+}
 ```
 
 ## Fields

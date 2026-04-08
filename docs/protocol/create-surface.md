@@ -12,7 +12,15 @@ Opens a new native window (NSWindow).
 ## Example
 
 ```json
-{"type":"createSurface","surfaceId":"main","title":"My App","width":800,"height":600,"backgroundColor":"#FFFFFF","padding":20}
+{
+  "type": "createSurface",
+  "surfaceId": "main",
+  "title": "My App",
+  "width": 800,
+  "height": 600,
+  "backgroundColor": "#FFFFFF",
+  "padding": 20
+}
 ```
 
 ## Fields

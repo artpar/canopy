@@ -12,22 +12,91 @@ Defines the menu bar for a surface's window.
 ## Example
 
 ```json
-{"type":"updateMenu","surfaceId":"main","items":[
-  {"id":"file","label":"File","children":[
-    {"id":"new","label":"New","keyEquivalent":"n","action":{"event":{"name":"newFile"}}},
-    {"id":"open","label":"Open...","keyEquivalent":"o","action":{"event":{"name":"openFile"}}},
-    {"separator":true},
-    {"id":"save","label":"Save","keyEquivalent":"s","action":{"event":{"name":"saveFile"}}}
-  ]},
-  {"id":"edit","label":"Edit","children":[
-    {"id":"undo","label":"Undo","keyEquivalent":"z","standardAction":"undo:"},
-    {"id":"redo","label":"Redo","keyEquivalent":"z","keyModifiers":"shift","standardAction":"redo:"},
-    {"separator":true},
-    {"id":"cut","label":"Cut","keyEquivalent":"x","standardAction":"cut:"},
-    {"id":"copy","label":"Copy","keyEquivalent":"c","standardAction":"copy:"},
-    {"id":"paste","label":"Paste","keyEquivalent":"v","standardAction":"paste:"}
-  ]}
-]}
+{
+  "type": "updateMenu",
+  "surfaceId": "main",
+  "items": [
+    {
+      "id": "file",
+      "label": "File",
+      "children": [
+        {
+          "id": "new",
+          "label": "New",
+          "keyEquivalent": "n",
+          "action": {
+            "event": {
+              "name": "newFile"
+            }
+          }
+        },
+        {
+          "id": "open",
+          "label": "Open...",
+          "keyEquivalent": "o",
+          "action": {
+            "event": {
+              "name": "openFile"
+            }
+          }
+        },
+        {
+          "separator": true
+        },
+        {
+          "id": "save",
+          "label": "Save",
+          "keyEquivalent": "s",
+          "action": {
+            "event": {
+              "name": "saveFile"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "label": "Edit",
+      "children": [
+        {
+          "id": "undo",
+          "label": "Undo",
+          "keyEquivalent": "z",
+          "standardAction": "undo:"
+        },
+        {
+          "id": "redo",
+          "label": "Redo",
+          "keyEquivalent": "z",
+          "keyModifiers": "shift",
+          "standardAction": "redo:"
+        },
+        {
+          "separator": true
+        },
+        {
+          "id": "cut",
+          "label": "Cut",
+          "keyEquivalent": "x",
+          "standardAction": "cut:"
+        },
+        {
+          "id": "copy",
+          "label": "Copy",
+          "keyEquivalent": "c",
+          "standardAction": "copy:"
+        },
+        {
+          "id": "paste",
+          "label": "Paste",
+          "keyEquivalent": "v",
+          "standardAction": "paste:"
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ## Fields

@@ -14,7 +14,17 @@ Canopy includes 50+ built-in functions for string manipulation, math, logic, arr
 Call a function with `functionCall`:
 
 ```json
-{"functionCall": {"name": "concat", "args": ["Hello, ", {"path": "/name"}]}}
+{
+  "functionCall": {
+    "name": "concat",
+    "args": [
+      "Hello, ",
+      {
+        "path": "/name"
+      }
+    ]
+  }
+}
 ```
 
 Arguments can be:

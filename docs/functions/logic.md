@@ -38,11 +38,36 @@ This is important when one branch might reference a path that doesn't exist yet.
 Choose between two values:
 
 ```json
-{"functionCall": {"name": "if", "args": [
-  {"functionCall": {"name": "greaterThan", "args": [{"path": "/count"}, 0]}},
-  {"functionCall": {"name": "concat", "args": [{"path": "/count"}, " items"]}},
-  "No items"
-]}}
+{
+  "functionCall": {
+    "name": "if",
+    "args": [
+      {
+        "functionCall": {
+          "name": "greaterThan",
+          "args": [
+            {
+              "path": "/count"
+            },
+            0
+          ]
+        }
+      },
+      {
+        "functionCall": {
+          "name": "concat",
+          "args": [
+            {
+              "path": "/count"
+            },
+            " items"
+          ]
+        }
+      },
+      "No items"
+    ]
+  }
+}
 ```
 
 ### equals
@@ -50,7 +75,17 @@ Choose between two values:
 Check string equality:
 
 ```json
-{"functionCall": {"name": "equals", "args": [{"path": "/status"}, "active"]}}
+{
+  "functionCall": {
+    "name": "equals",
+    "args": [
+      {
+        "path": "/status"
+      },
+      "active"
+    ]
+  }
+}
 ```
 
 ### Conditional Styling
@@ -58,24 +93,71 @@ Check string equality:
 Use logic functions to set dynamic styles:
 
 ```json
-{"style": {
-  "backgroundColor": {"functionCall": {"name": "if", "args": [
-    {"functionCall": {"name": "equals", "args": [{"path": "/selected"}, "true"]}},
-    "#007AFF",
-    "#FFFFFF"
-  ]}}
-}}
+{
+  "style": {
+    "backgroundColor": {
+      "functionCall": {
+        "name": "if",
+        "args": [
+          {
+            "functionCall": {
+              "name": "equals",
+              "args": [
+                {
+                  "path": "/selected"
+                },
+                "true"
+              ]
+            }
+          },
+          "#007AFF",
+          "#FFFFFF"
+        ]
+      }
+    }
+  }
+}
 ```
 
 ### Combining Conditions
 
 ```json
-{"functionCall": {"name": "and", "args": [
-  {"functionCall": {"name": "greaterThan", "args": [{"path": "/age"}, 18]}},
-  {"functionCall": {"name": "not", "args": [
-    {"functionCall": {"name": "equals", "args": [{"path": "/banned"}, true]}}
-  ]}}
-]}}
+{
+  "functionCall": {
+    "name": "and",
+    "args": [
+      {
+        "functionCall": {
+          "name": "greaterThan",
+          "args": [
+            {
+              "path": "/age"
+            },
+            18
+          ]
+        }
+      },
+      {
+        "functionCall": {
+          "name": "not",
+          "args": [
+            {
+              "functionCall": {
+                "name": "equals",
+                "args": [
+                  {
+                    "path": "/banned"
+                  },
+                  true
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 ### not
@@ -83,7 +165,16 @@ Use logic functions to set dynamic styles:
 Invert a boolean:
 
 ```json
-{"functionCall": {"name": "not", "args": [{"path": "/isHidden"}]}}
+{
+  "functionCall": {
+    "name": "not",
+    "args": [
+      {
+        "path": "/isHidden"
+      }
+    ]
+  }
+}
 ```
 
 ### or
@@ -91,7 +182,20 @@ Invert a boolean:
 Return the first truthy value:
 
 ```json
-{"functionCall": {"name": "or", "args": [{"path": "/nickname"}, {"path": "/name"}, "Anonymous"]}}
+{
+  "functionCall": {
+    "name": "or",
+    "args": [
+      {
+        "path": "/nickname"
+      },
+      {
+        "path": "/name"
+      },
+      "Anonymous"
+    ]
+  }
+}
 ```
 
 If `/nickname` is empty, falls back to `/name`, then to "Anonymous".

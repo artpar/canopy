@@ -59,7 +59,10 @@ mcp__canopy__get_pending_actions()
   {
     "actionId": "act_abc123",
     "name": "submitForm",
-    "data": { "name": "Alice", "email": "alice@example.com" }
+    "data": {
+      "name": "Alice",
+      "email": "alice@example.com"
+    }
   }
 ]
 ```

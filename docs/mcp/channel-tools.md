@@ -26,8 +26,16 @@ mcp__canopy__list_channels()
 
 ```json
 [
-  { "id": "updates", "mode": "broadcast", "subscribers": 3 },
-  { "id": "tasks", "mode": "queue", "subscribers": 2 }
+  {
+    "id": "updates",
+    "mode": "broadcast",
+    "subscribers": 3
+  },
+  {
+    "id": "tasks",
+    "mode": "queue",
+    "subscribers": 2
+  }
 ]
 ```
 

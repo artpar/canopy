@@ -12,11 +12,29 @@ Applies operations to a surface's data model. The data model is a JSON document 
 ## Example
 
 ```json
-{"type":"updateDataModel","surfaceId":"main","ops":[
-  {"op":"add","path":"/user","value":{"name":"Alice","email":"alice@example.com"}},
-  {"op":"replace","path":"/count","value":5},
-  {"op":"remove","path":"/temp"}
-]}
+{
+  "type": "updateDataModel",
+  "surfaceId": "main",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/user",
+      "value": {
+        "name": "Alice",
+        "email": "alice@example.com"
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/count",
+      "value": 5
+    },
+    {
+      "op": "remove",
+      "path": "/temp"
+    }
+  ]
+}
 ```
 
 ## Fields
@@ -42,13 +60,23 @@ Applies operations to a surface's data model. The data model is a JSON document 
 Sets a value at the path, creating intermediate objects as needed:
 
 ```json
-{"op":"add","path":"/user/name","value":"Alice"}
+{
+  "op": "add",
+  "path": "/user/name",
+  "value": "Alice"
+}
 ```
 
 Use `/-` to append to an array:
 
 ```json
-{"op":"add","path":"/items/-","value":{"title":"New item"}}
+{
+  "op": "add",
+  "path": "/items/-",
+  "value": {
+    "title": "New item"
+  }
+}
 ```
 
 ### replace
@@ -56,7 +84,11 @@ Use `/-` to append to an array:
 Updates an existing value:
 
 ```json
-{"op":"replace","path":"/count","value":10}
+{
+  "op": "replace",
+  "path": "/count",
+  "value": 10
+}
 ```
 
 ### remove
@@ -64,7 +96,10 @@ Updates an existing value:
 Deletes a value:
 
 ```json
-{"op":"remove","path":"/temp"}
+{
+  "op": "remove",
+  "path": "/temp"
+}
 ```
 
 ## Expression Values
@@ -72,9 +107,23 @@ Deletes a value:
 Values can be expressions (path references or function calls) that are resolved before applying:
 
 ```json
-{"op":"replace","path":"/total","value":{
-  "functionCall":{"name":"add","args":[{"path":"/subtotal"},{"path":"/tax"}]}
-}}
+{
+  "op": "replace",
+  "path": "/total",
+  "value": {
+    "functionCall": {
+      "name": "add",
+      "args": [
+        {
+          "path": "/subtotal"
+        },
+        {
+          "path": "/tax"
+        }
+      ]
+    }
+  }
+}
 ```
 
 ## Behavior

@@ -12,7 +12,10 @@ Removes a channel and all its subscriptions.
 ## Example
 
 ```json
-{"type":"deleteChannel","channelId":"notifications"}
+{
+  "type": "deleteChannel",
+  "channelId": "notifications"
+}
 ```
 
 ## Fields

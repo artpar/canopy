@@ -30,7 +30,18 @@ Functions for manipulating text values.
 Join values into a single string:
 
 ```json
-{"functionCall": {"name": "concat", "args": ["Hello, ", {"path": "/name"}, "!"]}}
+{
+  "functionCall": {
+    "name": "concat",
+    "args": [
+      "Hello, ",
+      {
+        "path": "/name"
+      },
+      "!"
+    ]
+  }
+}
 ```
 
 Accepts any number of arguments. Non-string values are converted automatically.
@@ -40,7 +51,18 @@ Accepts any number of arguments. Non-string values are converted automatically.
 Extract part of a string by index:
 
 ```json
-{"functionCall": {"name": "substring", "args": [{"path": "/text"}, 0, 5]}}
+{
+  "functionCall": {
+    "name": "substring",
+    "args": [
+      {
+        "path": "/text"
+      },
+      0,
+      5
+    ]
+  }
+}
 ```
 
 The `end` argument is optional. If omitted, extracts to the end of the string.
@@ -50,7 +72,15 @@ The `end` argument is optional. If omitted, extracts to the end of the string.
 Get the part after a delimiter:
 
 ```json
-{"functionCall": {"name": "substringAfter", "args": ["user@example.com", "@"]}}
+{
+  "functionCall": {
+    "name": "substringAfter",
+    "args": [
+      "user@example.com",
+      "@"
+    ]
+  }
+}
 ```
 
 Returns `"example.com"`.
@@ -60,7 +90,18 @@ Returns `"example.com"`.
 Replace all occurrences:
 
 ```json
-{"functionCall": {"name": "replace", "args": [{"path": "/text"}, "-", " "]}}
+{
+  "functionCall": {
+    "name": "replace",
+    "args": [
+      {
+        "path": "/text"
+      },
+      "-",
+      " "
+    ]
+  }
+}
 ```
 
 ### format
@@ -68,7 +109,20 @@ Replace all occurrences:
 Template string with positional placeholders:
 
 ```json
-{"functionCall": {"name": "format", "args": ["{0} has {1} items", {"path": "/name"}, {"path": "/count"}]}}
+{
+  "functionCall": {
+    "name": "format",
+    "args": [
+      "{0} has {1} items",
+      {
+        "path": "/name"
+      },
+      {
+        "path": "/count"
+      }
+    ]
+  }
+}
 ```
 
 ### contains
@@ -76,7 +130,17 @@ Template string with positional placeholders:
 Check if a string contains a substring:
 
 ```json
-{"functionCall": {"name": "contains", "args": [{"path": "/email"}, "@"]}}
+{
+  "functionCall": {
+    "name": "contains",
+    "args": [
+      {
+        "path": "/email"
+      },
+      "@"
+    ]
+  }
+}
 ```
 
 Returns `true` or `false`.

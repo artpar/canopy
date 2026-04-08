@@ -12,7 +12,11 @@ Changes the visual theme for a surface's window.
 ## Example
 
 ```json
-{"type":"setTheme","surfaceId":"main","theme":"dark"}
+{
+  "type": "setTheme",
+  "surfaceId": "main",
+  "theme": "dark"
+}
 ```
 
 ## Fields

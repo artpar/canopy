@@ -12,12 +12,34 @@ Defines a toolbar for a surface's window.
 ## Example
 
 ```json
-{"type":"updateToolbar","surfaceId":"main","items":[
-  {"id":"add","icon":"plus","label":"Add","action":{"event":{"name":"addItem"}},"bordered":true},
-  {"separator":true},
-  {"flexible":true},
-  {"id":"search","searchField":true,"dataBinding":"/searchQuery"}
-]}
+{
+  "type": "updateToolbar",
+  "surfaceId": "main",
+  "items": [
+    {
+      "id": "add",
+      "icon": "plus",
+      "label": "Add",
+      "action": {
+        "event": {
+          "name": "addItem"
+        }
+      },
+      "bordered": true
+    },
+    {
+      "separator": true
+    },
+    {
+      "flexible": true
+    },
+    {
+      "id": "search",
+      "searchField": true,
+      "dataBinding": "/searchQuery"
+    }
+  ]
+}
 ```
 
 ## Fields
