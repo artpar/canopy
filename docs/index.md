@@ -65,8 +65,8 @@ Install, publish, and discover packages on GitHub.
 </div>
 
 <div class="feature-card" markdown="1">
-### Multiple Modes
-File, prompt, Claude Code, MCP server, menubar tray.
+### App Bundling
+`canopy bundle` creates standalone `.app` bundles from any Canopy app.
 </div>
 
 </div>

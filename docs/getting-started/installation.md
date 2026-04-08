@@ -21,13 +21,20 @@ This produces `build/canopy`, the single binary that runs everything.
 
 ## App Bundle (Optional)
 
-To build a proper macOS `.app` bundle with URL scheme registration (`canopy://`) and `.jsonl` file association:
+Bundle any Canopy app into a standalone macOS `.app`:
 
 ```bash
-make app
+canopy bundle myapp/                  # -> MyApp.app
+canopy bundle -o Notes.app sample_apps/notes
 ```
 
-This creates `build/Canopy.app`. You can drag it to `/Applications` or run it directly.
+The bundled `.app` is self-contained --- double-click to launch, no CLI needed. See the [CLI Reference](cli-reference/#bundle-command) for all options.
+
+To build the Canopy runtime itself as a `.app` with URL scheme registration (`canopy://`) and `.jsonl` file association:
+
+```bash
+make app          # -> build/Canopy.app
+```
 
 ## Set Up API Keys
 

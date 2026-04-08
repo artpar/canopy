@@ -124,6 +124,16 @@ make run-app A=todo
 
 These use cached JSONL when available, or generate from the prompt file on first run.
 
+## Bundling Your App
+
+Once your app is ready, bundle it into a standalone macOS `.app`:
+
+```bash
+canopy bundle myapp/
+```
+
+The resulting `.app` is self-contained --- double-click to launch, no CLI needed. See [Bundle Command](cli-reference/#bundle-command) for options like custom icons and bundle IDs.
+
 ## Next Steps
 
 - **[CLI Reference](cli-reference/)** --- All modes, flags, and make targets

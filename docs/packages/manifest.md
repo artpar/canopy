@@ -20,6 +20,7 @@ Every Canopy package has a `canopy.json` file at the root of the repository. Thi
   "author": "artpar",
   "license": "MIT",
   "icon": "note.text",
+  "bundleId": "com.example.notes",
   "entry": "prompt.jsonl",
   "keywords": [
     "notes",
@@ -42,7 +43,8 @@ Every Canopy package has a `canopy.json` file at the root of the repository. Thi
 | `description` | string | no | Short description of what the package does. |
 | `author` | string | no | Author name or GitHub username. |
 | `license` | string | no | License identifier (e.g., `MIT`, `Apache-2.0`). |
-| `icon` | string | no | SF Symbol name for the app icon in the menubar (e.g., `note.text`, `calculator`). |
+| `icon` | string | no | SF Symbol name for the menubar (e.g., `note.text`), or path to an `.icns` file for app bundling. |
+| `bundleId` | string | no | macOS bundle identifier for `canopy bundle` (e.g., `com.example.myapp`). Defaults to `com.canopy.app.<name>`. |
 | `entry` | string | yes | Path to the main file, relative to the repo root. For apps, this is typically a `.jsonl` file. |
 | `prompt` | string | no | Path to a `prompt.txt` file for LLM-driven apps. |
 | `keywords` | array | no | Tags for search discovery. |
