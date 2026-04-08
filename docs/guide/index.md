@@ -52,3 +52,4 @@ From here, the core concepts build on each other:
 10. **[App Modes](app-modes)** -- Run as a normal app, menubar tray, or background process.
 11. **[Validation](validation)** -- Validate form fields with built-in rules.
 12. **[Drag and Drop](drag-and-drop)** -- Accept file and text drops on any component.
+13. **[Bundling & Distribution](bundling)** -- Create standalone `.app` bundles with codesigning and notarization.

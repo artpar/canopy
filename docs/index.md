@@ -65,8 +65,8 @@ Install, publish, and discover packages on GitHub.
 </div>
 
 <div class="feature-card" markdown="1">
-### App Bundling
-`canopy bundle` creates standalone `.app` bundles from any Canopy app.
+### [App Bundling](guide/bundling/)
+Bundle, sign, and notarize standalone `.app` bundles for distribution.
 </div>
 
 </div>

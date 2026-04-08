@@ -132,7 +132,7 @@ Once your app is ready, bundle it into a standalone macOS `.app`:
 canopy bundle myapp/
 ```
 
-The resulting `.app` is self-contained --- double-click to launch, no CLI needed. See [Bundle Command](cli-reference/#bundle-command) for options like custom icons and bundle IDs.
+The resulting `.app` is self-contained --- double-click to launch, no CLI needed. Add `--sign` for codesigning or `--notarize` for Gatekeeper-free distribution. See the **[Bundling & Distribution guide](/canopy/guide/bundling/)** for the full workflow.
 
 ## Next Steps
 

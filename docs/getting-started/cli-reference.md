@@ -59,7 +59,7 @@ Manage reusable components shared through GitHub:
 
 ## Bundle Command
 
-Create standalone macOS `.app` bundles from any Canopy app. The bundled app is self-contained --- double-click to launch, no CLI needed.
+Create standalone macOS `.app` bundles from any Canopy app. The bundled app is self-contained --- double-click to launch, no CLI needed. See the **[Bundling & Distribution guide](/canopy/guide/bundling/)** for signing workflows, notarization setup, and entitlements details.
 
 ```bash
 canopy bundle <app-path> [flags]
