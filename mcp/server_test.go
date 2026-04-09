@@ -59,8 +59,8 @@ func TestToolsList(t *testing.T) {
 	var result ToolsListResult
 	json.Unmarshal(resp.Result, &result)
 
-	if len(result.Tools) != 42 {
-		t.Errorf("tools count = %d, want 42", len(result.Tools))
+	if len(result.Tools) != 45 {
+		t.Errorf("tools count = %d, want 45", len(result.Tools))
 		for _, tool := range result.Tools {
 			t.Logf("  tool: %s", tool.Name)
 		}
@@ -83,6 +83,7 @@ func TestToolsList(t *testing.T) {
 		"camera_capture_headless": true, "audio_record_start": true,
 		"audio_record_stop": true, "screen_capture": true,
 		"screen_record_start": true, "screen_record_stop": true,
+		"file_read": true, "file_write": true, "file_append": true,
 	}
 	for _, tool := range result.Tools {
 		if !expected[tool.Name] {
@@ -346,8 +347,8 @@ func TestEndToEndJSONRPC(t *testing.T) {
 	json.Unmarshal([]byte(lines[1]), &toolsResp)
 	var toolsResult ToolsListResult
 	json.Unmarshal(toolsResp.Result, &toolsResult)
-	if len(toolsResult.Tools) != 42 {
-		t.Errorf("tools count = %d, want 42", len(toolsResult.Tools))
+	if len(toolsResult.Tools) != 45 {
+		t.Errorf("tools count = %d, want 45", len(toolsResult.Tools))
 	}
 
 	// Check ping response

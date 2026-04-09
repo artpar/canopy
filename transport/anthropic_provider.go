@@ -11,6 +11,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
+	anyllmerrors "github.com/mozilla-ai/any-llm-go/errors"
 	"github.com/mozilla-ai/any-llm-go/providers"
 )
 
@@ -49,7 +50,7 @@ func (p *AnthropicProvider) Completion(
 
 	resp, err := p.client.Messages.New(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: %w", err)
+		return nil, p.convertError(err)
 	}
 
 	return p.convertResponse(resp), nil
@@ -356,6 +357,31 @@ func (p *AnthropicProvider) convertResponse(resp *anthropic.Message) *providers.
 		}},
 		Usage: usage,
 	}
+}
+
+// convertError maps Anthropic SDK errors to typed any-llm errors.
+// Reference: providers/ErrorConverter interface
+func (p *AnthropicProvider) convertError(err error) error {
+	msg := err.Error()
+
+	// Context length / prompt too long
+	if strings.Contains(msg, "prompt is too long") || strings.Contains(msg, "too many tokens") ||
+		strings.Contains(msg, "maximum context length") {
+		return anyllmerrors.NewContextLengthError("anthropic", err)
+	}
+
+	// Rate limits
+	if strings.Contains(msg, "rate_limit") || strings.Contains(msg, "429") {
+		return anyllmerrors.NewRateLimitError("anthropic", err)
+	}
+
+	// Overloaded / server errors
+	if strings.Contains(msg, "overloaded") || strings.Contains(msg, "529") ||
+		strings.Contains(msg, "500") || strings.Contains(msg, "503") {
+		return anyllmerrors.NewProviderError("anthropic", err)
+	}
+
+	return fmt.Errorf("anthropic: %w", err)
 }
 
 func convertAnthropicStopReason(reason string) string {

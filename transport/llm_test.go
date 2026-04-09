@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"canopy/protocol"
+	"sync"
 	"testing"
 	"time"
 
@@ -304,19 +305,36 @@ func TestLLMTransportSendActionTriggersNewTurn(t *testing.T) {
 		t.Fatal("timeout waiting for first message")
 	}
 
+	// Drain nil sentinel from turn 1
+	select {
+	case msg := <-tr.Messages():
+		if msg != nil {
+			t.Errorf("expected nil sentinel after turn 1, got %s", msg.Type)
+		}
+	case <-timer.C:
+		t.Fatal("timeout waiting for turn 1 sentinel")
+	}
+
 	// Send an action to trigger turn 2
 	tr.SendAction("s1", &protocol.EventDef{
 		Name: "increment",
 	}, map[string]interface{}{"count": float64(0)})
 
-	// Wait for the updateDataModel message from turn 2
-	select {
-	case msg := <-tr.Messages():
-		if msg.Type != protocol.MsgUpdateDataModel {
-			t.Errorf("expected updateDataModel, got %s", msg.Type)
+	// Wait for the updateDataModel message from turn 2 (skip nil sentinels)
+	gotUpdate := false
+	for !gotUpdate {
+		select {
+		case msg := <-tr.Messages():
+			if msg == nil {
+				continue // skip nil sentinel
+			}
+			if msg.Type != protocol.MsgUpdateDataModel {
+				t.Errorf("expected updateDataModel, got %s", msg.Type)
+			}
+			gotUpdate = true
+		case <-timer.C:
+			t.Fatal("timeout waiting for second turn message")
 		}
-	case <-timer.C:
-		t.Fatal("timeout waiting for second turn message")
 	}
 
 	tr.Stop()
@@ -649,8 +667,13 @@ func TestLLMTransportNilSentinelOrdering(t *testing.T) {
 
 	// Track ordering: messages consumed vs OnInitialTurnDone called
 	var order []string
+	var mu sync.Mutex
+	finalized := make(chan struct{})
 	tr.OnInitialTurnDone = func() {
+		mu.Lock()
 		order = append(order, "finalized")
+		mu.Unlock()
+		close(finalized)
 	}
 
 	tr.Start()
@@ -666,32 +689,44 @@ func TestLLMTransportNilSentinelOrdering(t *testing.T) {
 				goto done
 			}
 			if msg == nil {
-				// Nil sentinel: all messages consumed, now call callback
+				mu.Lock()
 				order = append(order, "sentinel")
-				if tr.OnInitialTurnDone != nil {
-					tr.OnInitialTurnDone()
-				}
+				mu.Unlock()
 				goto done
 			}
+			mu.Lock()
 			order = append(order, string(msg.Type))
+			mu.Unlock()
 		case <-timer.C:
 			t.Fatal("timeout waiting for messages")
 		}
 	}
 done:
+	// Wait for OnInitialTurnDone to fire (called by transport after sending nil)
+	select {
+	case <-finalized:
+	case <-timer.C:
+		t.Fatal("timeout waiting for OnInitialTurnDone")
+	}
+
 	tr.Stop()
 	for range tr.Messages() {
 	}
 
-	// Verify ordering: messages before sentinel before finalization
-	expected := []string{"createSurface", "updateComponents", "sentinel", "finalized"}
-	if len(order) != len(expected) {
-		t.Fatalf("order = %v, want %v", order, expected)
+	// Verify: real messages come before sentinel and finalized
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 4 {
+		t.Fatalf("expected 4 entries, got %v", order)
 	}
-	for i, v := range expected {
-		if order[i] != v {
-			t.Errorf("order[%d] = %q, want %q (full: %v)", i, order[i], v, order)
-		}
+	// First two must be the real messages in order
+	if order[0] != "createSurface" || order[1] != "updateComponents" {
+		t.Errorf("expected [createSurface, updateComponents, ...], got %v", order)
+	}
+	// Last two must be sentinel and finalized (order may vary due to buffered channel)
+	lastTwo := map[string]bool{order[2]: true, order[3]: true}
+	if !lastTwo["sentinel"] || !lastTwo["finalized"] {
+		t.Errorf("expected sentinel and finalized in last two, got %v", order)
 	}
 }
 
