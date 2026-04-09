@@ -105,7 +105,11 @@ func (em *EventManager) startEventSource(sub *EventSubscription, config map[stri
 		em.startTimer(sub, config)
 	case "system.fs.watch":
 		em.startFSWatch(sub, config)
-	case "system.bluetooth", "system.location", "system.usb":
+	case "system.bluetooth", "system.location", "system.usb",
+		"system.sensor.battery", "system.sensor.memory", "system.sensor.cpu",
+		"system.sensor.disk", "system.sensor.uptime",
+		"system.sensor.network.throughput", "system.sensor.audio",
+		"system.sensor.display", "system.sensor.activeApp":
 		em.startOnDemandSource(sub, config)
 	case "system.ipc.distributed":
 		em.startDistributedNotification(sub, config)
@@ -246,9 +250,18 @@ func (em *EventManager) startFSWatch(sub *EventSubscription, config map[string]i
 
 // onDemandEvents tracks which on-demand sources need ref-counted start/stop.
 var onDemandEvents = map[string]bool{
-	"system.bluetooth": true,
-	"system.location":  true,
-	"system.usb":       true,
+	"system.bluetooth":                true,
+	"system.location":                 true,
+	"system.usb":                      true,
+	"system.sensor.battery":           true,
+	"system.sensor.memory":            true,
+	"system.sensor.cpu":               true,
+	"system.sensor.disk":              true,
+	"system.sensor.uptime":            true,
+	"system.sensor.network.throughput": true,
+	"system.sensor.audio":             true,
+	"system.sensor.display":           true,
+	"system.sensor.activeApp":         true,
 }
 
 // startOnDemandSource starts a platform event source via the control callback.

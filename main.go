@@ -67,6 +67,30 @@ func hash(s string) uint64 {
 	return h
 }
 
+// sensorStartStop starts or stops a native sensor polling source.
+func sensorStartStop(event, action string, intervalMs int) {
+	switch event {
+	case "system.sensor.battery":
+		if action == "start" { darwin.StartBatterySensor(intervalMs) } else { darwin.StopBatterySensor() }
+	case "system.sensor.memory":
+		if action == "start" { darwin.StartMemorySensor(intervalMs) } else { darwin.StopMemorySensor() }
+	case "system.sensor.cpu":
+		if action == "start" { darwin.StartCPUSensor(intervalMs) } else { darwin.StopCPUSensor() }
+	case "system.sensor.disk":
+		if action == "start" { darwin.StartDiskSensor(intervalMs) } else { darwin.StopDiskSensor() }
+	case "system.sensor.uptime":
+		if action == "start" { darwin.StartUptimeSensor(intervalMs) } else { darwin.StopUptimeSensor() }
+	case "system.sensor.network.throughput":
+		if action == "start" { darwin.StartNetworkThroughputSensor(intervalMs) } else { darwin.StopNetworkThroughputSensor() }
+	case "system.sensor.audio":
+		if action == "start" { darwin.StartAudioSensor(intervalMs) } else { darwin.StopAudioSensor() }
+	case "system.sensor.display":
+		if action == "start" { darwin.StartDisplaySensor(intervalMs) } else { darwin.StopDisplaySensor() }
+	case "system.sensor.activeApp":
+		if action == "start" { darwin.StartActiveAppSensor(intervalMs) } else { darwin.StopActiveAppSensor() }
+	}
+}
+
 func main() {
 	// macOS requires the main thread for AppKit
 	runtime.LockOSThread()
@@ -367,10 +391,6 @@ func main() {
 					}
 					if msg == nil {
 						goSess.FlushPendingComponents()
-						if llmTr != nil && llmTr.OnInitialTurnDone != nil {
-							llmTr.OnInitialTurnDone()
-							llmTr.OnInitialTurnDone = nil
-						}
 						continue
 					}
 					goSess.HandleMessage(msg)
@@ -561,14 +581,24 @@ func main() {
 					name, _ := config["name"].(string)
 					subID, _ := config["subscriptionID"].(string)
 					if name != "" && subID != "" {
-						// Use a hash of the subscription ID as the native callback ID
-						darwin.ObserveDistributedNotification(name, uint64(hash(subID)))
+						darwin.ObserveDistributedNotification(name, hash(subID))
 					}
 				} else {
 					subID, _ := config["subscriptionID"].(string)
 					if subID != "" {
-						darwin.UnobserveDistributedNotification(uint64(hash(subID)))
+						darwin.UnobserveDistributedNotification(hash(subID))
 					}
+				}
+			default:
+				// Sensor events: system.sensor.*
+				if strings.HasPrefix(event, "system.sensor.") {
+					intervalMs := 5000
+					if config != nil {
+						if v, ok := config["interval"].(float64); ok {
+							intervalMs = int(v)
+						}
+					}
+					sensorStartStop(event, action, intervalMs)
 				}
 			}
 		})
@@ -728,19 +758,28 @@ func main() {
 			}
 			ccTr.SendFollowUp(text)
 		} else if llmTr != nil {
+			origDone := llmTr.OnInitialTurnDone
+			llmTr.OnInitialTurnDone = func() {
+				if origDone != nil {
+					origDone()
+				}
+				sendDone()
+			}
 			llmTr.SendFollowUp(text)
 		} else if activeProcessLLM != nil {
+			activeProcessLLM.OnInitialTurnDone = sendDone
 			activeProcessLLM.SendFollowUp(text)
 		} else {
-			// On-demand: create an LLM process for this follow-up
+			// On-demand: create an LLM process with current surface state as context
 			processID := fmt.Sprintf("followup_%d", time.Now().UnixMilli())
+			contextPrompt := buildFollowUpPrompt(sess, text)
 			err := pm.Create(protocol.CreateProcess{
 				ProcessID: processID,
 				Transport: protocol.ProcessTransportConfig{
 					Type:     "llm",
 					Provider: *llmProvider,
 					Model:    *model,
-					Prompt:   text,
+					Prompt:   contextPrompt,
 				},
 			})
 			if err != nil {
@@ -826,10 +865,6 @@ func main() {
 				// Nil sentinel = turn done (flush pending components)
 				if msg == nil {
 					sess.FlushPendingComponents()
-					if llmTr != nil && llmTr.OnInitialTurnDone != nil {
-						llmTr.OnInitialTurnDone()
-						llmTr.OnInitialTurnDone = nil // one-shot
-					}
 					continue
 				}
 				if firstMessage {
@@ -977,6 +1012,65 @@ func createFileTransport(path string) transport.Transport {
 	return tr
 }
 
+// buildFollowUpPrompt constructs a prompt for the on-demand LLM that includes
+// the current surface state so the LLM can make targeted modifications.
+func buildFollowUpPrompt(sess *engine.Session, userText string) string {
+	var sb strings.Builder
+	sb.WriteString("The following UI is already rendered and visible to the user.\n\n")
+
+	type treeNode struct {
+		ID       string     `json:"id"`
+		Type     string     `json:"type"`
+		Children []treeNode `json:"children,omitempty"`
+	}
+
+	for _, surfaceID := range sess.SurfaceIDs() {
+		surf := sess.GetSurface(surfaceID)
+		if surf == nil {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("Surface %q:\n", surfaceID))
+
+		// Component tree
+		tree := surf.Tree()
+		var buildNode func(id string) treeNode
+		buildNode = func(id string) treeNode {
+			comp, ok := tree.Get(id)
+			if !ok {
+				return treeNode{ID: id}
+			}
+			node := treeNode{ID: id, Type: string(comp.Type)}
+			for _, childID := range tree.Children(id) {
+				node.Children = append(node.Children, buildNode(childID))
+			}
+			return node
+		}
+		var roots []treeNode
+		for _, rid := range tree.RootIDs() {
+			roots = append(roots, buildNode(rid))
+		}
+		if treeJSON, err := json.Marshal(roots); err == nil {
+			sb.WriteString("Component tree:\n")
+			sb.Write(treeJSON)
+			sb.WriteString("\n\n")
+		}
+
+		// Data model
+		if dm, ok := surf.DM().Get(""); ok {
+			if dmJSON, err := json.Marshal(dm); err == nil {
+				sb.WriteString("Data model:\n")
+				sb.Write(dmJSON)
+				sb.WriteString("\n\n")
+			}
+		}
+	}
+
+	sb.WriteString("The user wants you to make this change: ")
+	sb.WriteString(userText)
+	sb.WriteString("\n\nModify the existing components using updateComponents. Do NOT recreate the surface or rebuild the entire UI — only change what is needed.")
+	return sb.String()
+}
+
 func createProvider(name string, apiKey string) (anyllm.Provider, error) {
 	var opts []anyllm.Option
 	if apiKey != "" {
@@ -1095,6 +1189,16 @@ func runMCP(args []string) {
 					if subID != "" {
 						darwin.UnobserveDistributedNotification(hash(subID))
 					}
+				}
+			default:
+				if strings.HasPrefix(event, "system.sensor.") {
+					intervalMs := 5000
+					if config != nil {
+						if v, ok := config["interval"].(float64); ok {
+							intervalMs = int(v)
+						}
+					}
+					sensorStartStop(event, action, intervalMs)
 				}
 			}
 		})

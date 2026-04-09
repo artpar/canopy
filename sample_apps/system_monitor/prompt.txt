@@ -1,0 +1,5 @@
+System Monitor — A native macOS system monitor that displays live sensor data.
+
+Shows real-time CPU usage, memory pressure, battery status, disk space, and network throughput.
+All data comes from native sensor event sources — no shell commands, no polling hacks.
+Optionally logs readings to a CSV file.
