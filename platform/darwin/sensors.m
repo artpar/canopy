@@ -446,3 +446,215 @@ void JVStartUptimeSensor(int intervalMs) {
 }
 
 void JVStopUptimeSensor(void) { JV_STOP_TIMER(uptimeTimer); }
+
+// ============================================================
+// TIER 3: Mouse (Global Cursor Position)
+// ============================================================
+
+static id mouseMonitor = nil;
+static dispatch_source_t mouseTimer = nil;
+static double lastMouseX = 0, lastMouseY = 0;
+
+void JVStartMouseSensor(int intervalMs) {
+    if (mouseMonitor) return;
+    if (intervalMs < 8) intervalMs = 8; // minimum ~120fps
+
+    // Global monitor for mouse moved events (no Accessibility permission needed for observe-only)
+    mouseMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:
+        (NSEventMaskMouseMoved | NSEventMaskLeftMouseDragged | NSEventMaskRightMouseDragged | NSEventMaskOtherMouseDragged)
+        handler:^(NSEvent *event) {
+            NSPoint loc = [NSEvent mouseLocation];
+            lastMouseX = loc.x;
+            lastMouseY = loc.y;
+        }];
+
+    // Also track within our own app windows
+    [NSEvent addLocalMonitorForEventsMatchingMask:
+        (NSEventMaskMouseMoved | NSEventMaskLeftMouseDragged | NSEventMaskRightMouseDragged)
+        handler:^NSEvent *(NSEvent *event) {
+            NSPoint loc = [NSEvent mouseLocation];
+            lastMouseX = loc.x;
+            lastMouseY = loc.y;
+            return event;
+        }];
+
+    // Fire at the configured interval
+    mouseTimer = createTimer(intervalMs, ^{
+        NSScreen *main = [NSScreen mainScreen];
+        CGFloat screenW = main ? main.frame.size.width : 0;
+        CGFloat screenH = main ? main.frame.size.height : 0;
+        NSString *json = [NSString stringWithFormat:
+            @"{\"x\":%.0f,\"y\":%.0f,\"screenWidth\":%.0f,\"screenHeight\":%.0f}",
+            lastMouseX, lastMouseY, screenW, screenH];
+        GoSystemEvent("system.sensor.mouse", [json UTF8String]);
+    });
+}
+
+void JVStopMouseSensor(void) {
+    if (mouseMonitor) {
+        [NSEvent removeMonitor:mouseMonitor];
+        mouseMonitor = nil;
+    }
+    JV_STOP_TIMER(mouseTimer);
+}
+
+// ============================================================
+// TIER 3: WiFi
+// ============================================================
+
+static dispatch_source_t wifiTimer = nil;
+
+void JVStartWifiSensor(int intervalMs) {
+    if (wifiTimer) return;
+    if (intervalMs < 2000) intervalMs = 2000;
+
+    wifiTimer = createTimer(intervalMs, ^{
+        // CoreWLAN is loaded dynamically to avoid hard link
+        Class cwClientClass = NSClassFromString(@"CWWiFiClient");
+        if (!cwClientClass) {
+            GoSystemEvent("system.sensor.wifi", "{\"error\":\"CoreWLAN not available\"}");
+            return;
+        }
+
+        id client = [cwClientClass performSelector:@selector(sharedWiFiClient)];
+        if (!client) return;
+
+        id iface = [client performSelector:@selector(interface)];
+        if (!iface) {
+            GoSystemEvent("system.sensor.wifi", "{\"ssid\":null,\"rssi\":0,\"connected\":false}");
+            return;
+        }
+
+        NSString *ssid = [iface performSelector:@selector(ssid)] ?: @"";
+        NSInteger rssi = [[iface valueForKey:@"rssiValue"] integerValue];
+        NSInteger noise = [[iface valueForKey:@"noiseMeasurement"] integerValue];
+        NSNumber *channelNum = [iface valueForKeyPath:@"wlanChannel.channelNumber"];
+        NSInteger channel = channelNum ? [channelNum integerValue] : 0;
+
+        // Escape SSID for JSON
+        ssid = [ssid stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+
+        NSString *json = [NSString stringWithFormat:
+            @"{\"ssid\":\"%@\",\"rssi\":%ld,\"channel\":%ld,\"noise\":%ld,\"connected\":%s}",
+            ssid, (long)rssi, (long)channel, (long)noise,
+            [ssid length] > 0 ? "true" : "false"];
+        GoSystemEvent("system.sensor.wifi", [json UTF8String]);
+    });
+}
+
+void JVStopWifiSensor(void) { JV_STOP_TIMER(wifiTimer); }
+
+// ============================================================
+// TIER 3: Processes
+// ============================================================
+
+#include <libproc.h>
+
+static dispatch_source_t processesTimer = nil;
+
+void JVStartProcessesSensor(int intervalMs) {
+    if (processesTimer) return;
+    if (intervalMs < 1000) intervalMs = 1000;
+
+    processesTimer = createTimer(intervalMs, ^{
+        // Count running processes
+        int count = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+
+        // Load averages
+        double loadAvg[3] = {0, 0, 0};
+        getloadavg(loadAvg, 3);
+
+        NSString *json = [NSString stringWithFormat:
+            @"{\"count\":%d,\"loadAvg1\":%.2f,\"loadAvg5\":%.2f,\"loadAvg15\":%.2f}",
+            count, loadAvg[0], loadAvg[1], loadAvg[2]];
+        GoSystemEvent("system.sensor.processes", [json UTF8String]);
+    });
+}
+
+void JVStopProcessesSensor(void) { JV_STOP_TIMER(processesTimer); }
+
+// ============================================================
+// TIER 3: Bluetooth Devices
+// ============================================================
+
+static dispatch_source_t btDevicesTimer = nil;
+
+void JVStartBluetoothDevicesSensor(int intervalMs) {
+    if (btDevicesTimer) return;
+    if (intervalMs < 5000) intervalMs = 5000;
+
+    btDevicesTimer = createTimer(intervalMs, ^{
+        // Load IOBluetooth dynamically
+        Class deviceClass = NSClassFromString(@"IOBluetoothDevice");
+        if (!deviceClass) {
+            GoSystemEvent("system.sensor.bluetooth.devices", "{\"devices\":[],\"error\":\"IOBluetooth not available\"}");
+            return;
+        }
+
+        NSArray *paired = [deviceClass performSelector:@selector(pairedDevices)];
+        NSMutableString *devicesJSON = [NSMutableString stringWithString:@"["];
+        BOOL first = YES;
+
+        for (id device in paired) {
+            NSString *name = [device performSelector:@selector(name)] ?: @"Unknown";
+            name = [name stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+            BOOL connected = [[device valueForKey:@"isConnected"] boolValue];
+
+            if (!first) [devicesJSON appendString:@","];
+            [devicesJSON appendFormat:@"{\"name\":\"%@\",\"connected\":%s}",
+                name, connected ? "true" : "false"];
+            first = NO;
+        }
+        [devicesJSON appendString:@"]"];
+
+        NSString *json = [NSString stringWithFormat:@"{\"devices\":%@}", devicesJSON];
+        GoSystemEvent("system.sensor.bluetooth.devices", [json UTF8String]);
+    });
+}
+
+void JVStopBluetoothDevicesSensor(void) { JV_STOP_TIMER(btDevicesTimer); }
+
+// ============================================================
+// TIER 3: Disk I/O
+// ============================================================
+
+static dispatch_source_t diskIOTimer = nil;
+static uint64_t prevDiskRead = 0, prevDiskWrite = 0;
+
+void JVStartDiskIOSensor(int intervalMs) {
+    if (diskIOTimer) return;
+    if (intervalMs < 1000) intervalMs = 1000;
+
+    prevDiskRead = 0;
+    prevDiskWrite = 0;
+
+    diskIOTimer = createTimer(intervalMs, ^{
+        // Use getrusage for self I/O (not system-wide, but no root needed)
+        struct rusage usage;
+        if (getrusage(RUSAGE_SELF, &usage) != 0) return;
+
+        // ru_inblock/ru_oublock are block I/O operations (not bytes)
+        uint64_t readBlocks = (uint64_t)usage.ru_inblock;
+        uint64_t writeBlocks = (uint64_t)usage.ru_oublock;
+
+        uint64_t readPerSec = 0, writePerSec = 0;
+        if (prevDiskRead > 0) {
+            double secs = (double)intervalMs / 1000.0;
+            readPerSec = (uint64_t)((readBlocks - prevDiskRead) / secs);
+            writePerSec = (uint64_t)((writeBlocks - prevDiskWrite) / secs);
+        }
+        prevDiskRead = readBlocks;
+        prevDiskWrite = writeBlocks;
+
+        NSString *json = [NSString stringWithFormat:
+            @"{\"readBlocks\":%llu,\"writeBlocks\":%llu,\"readBlocksPerSec\":%llu,\"writeBlocksPerSec\":%llu}",
+            readBlocks, writeBlocks, readPerSec, writePerSec];
+        GoSystemEvent("system.sensor.diskIO", [json UTF8String]);
+    });
+}
+
+void JVStopDiskIOSensor(void) {
+    JV_STOP_TIMER(diskIOTimer);
+    prevDiskRead = 0;
+    prevDiskWrite = 0;
+}

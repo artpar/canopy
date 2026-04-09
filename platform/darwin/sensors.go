@@ -31,3 +31,16 @@ func StartDisplaySensor(intervalMs int)           { C.JVStartDisplaySensor(C.int
 func StopDisplaySensor()                          { C.JVStopDisplaySensor() }
 func StartActiveAppSensor(intervalMs int)         { C.JVStartActiveAppSensor(C.int(intervalMs)) }
 func StopActiveAppSensor()                        { C.JVStopActiveAppSensor() }
+
+// Tier 3 sensors
+
+func StartMouseSensor(intervalMs int)              { C.JVStartMouseSensor(C.int(intervalMs)) }
+func StopMouseSensor()                             { C.JVStopMouseSensor() }
+func StartWifiSensor(intervalMs int)               { C.JVStartWifiSensor(C.int(intervalMs)) }
+func StopWifiSensor()                              { C.JVStopWifiSensor() }
+func StartProcessesSensor(intervalMs int)          { C.JVStartProcessesSensor(C.int(intervalMs)) }
+func StopProcessesSensor()                         { C.JVStopProcessesSensor() }
+func StartBluetoothDevicesSensor(intervalMs int)   { C.JVStartBluetoothDevicesSensor(C.int(intervalMs)) }
+func StopBluetoothDevicesSensor()                  { C.JVStopBluetoothDevicesSensor() }
+func StartDiskIOSensor(intervalMs int)             { C.JVStartDiskIOSensor(C.int(intervalMs)) }
+func StopDiskIOSensor()                            { C.JVStopDiskIOSensor() }

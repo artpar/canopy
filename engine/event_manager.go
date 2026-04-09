@@ -109,7 +109,9 @@ func (em *EventManager) startEventSource(sub *EventSubscription, config map[stri
 		"system.sensor.battery", "system.sensor.memory", "system.sensor.cpu",
 		"system.sensor.disk", "system.sensor.uptime",
 		"system.sensor.network.throughput", "system.sensor.audio",
-		"system.sensor.display", "system.sensor.activeApp":
+		"system.sensor.display", "system.sensor.activeApp",
+		"system.sensor.mouse", "system.sensor.wifi", "system.sensor.processes",
+		"system.sensor.bluetooth.devices", "system.sensor.diskIO":
 		em.startOnDemandSource(sub, config)
 	case "system.ipc.distributed":
 		em.startDistributedNotification(sub, config)
@@ -260,8 +262,13 @@ var onDemandEvents = map[string]bool{
 	"system.sensor.uptime":            true,
 	"system.sensor.network.throughput": true,
 	"system.sensor.audio":             true,
-	"system.sensor.display":           true,
-	"system.sensor.activeApp":         true,
+	"system.sensor.display":            true,
+	"system.sensor.activeApp":          true,
+	"system.sensor.mouse":              true,
+	"system.sensor.wifi":               true,
+	"system.sensor.processes":          true,
+	"system.sensor.bluetooth.devices":  true,
+	"system.sensor.diskIO":             true,
 }
 
 // startOnDemandSource starts a platform event source via the control callback.

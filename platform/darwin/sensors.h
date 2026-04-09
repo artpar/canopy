@@ -30,4 +30,20 @@ void JVStopActiveAppSensor(void);
 void JVStartUptimeSensor(int intervalMs);
 void JVStopUptimeSensor(void);
 
+// Tier 3: Cursor, WiFi, processes, bluetooth devices, disk I/O
+void JVStartMouseSensor(int intervalMs);
+void JVStopMouseSensor(void);
+
+void JVStartWifiSensor(int intervalMs);
+void JVStopWifiSensor(void);
+
+void JVStartProcessesSensor(int intervalMs);
+void JVStopProcessesSensor(void);
+
+void JVStartBluetoothDevicesSensor(int intervalMs);
+void JVStopBluetoothDevicesSensor(void);
+
+void JVStartDiskIOSensor(int intervalMs);
+void JVStopDiskIOSensor(void);
+
 #endif

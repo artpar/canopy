@@ -239,6 +239,127 @@ func TestSensorThrottledSubscription(t *testing.T) {
 	}
 }
 
+// TestMouseSensorPipeline tests that mouse position events flow through the pipeline.
+func TestMouseSensorPipeline(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":600,"height":400}
+{"type":"on","surfaceId":"main","id":"mouse","event":"system.sensor.mouse","config":{"interval":16},"handler":{"dataPath":"/mouse"}}`)
+
+	sess.EventManager().Fire("system.sensor.mouse", "main", `{"x":512,"y":384,"screenWidth":1920,"screenHeight":1080}`)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/mouse")
+	if !found {
+		t.Fatal("expected /mouse to be set")
+	}
+	m := val.(map[string]interface{})
+	if x, _ := m["x"].(float64); x != 512 {
+		t.Errorf("expected x=512, got %v", x)
+	}
+	if y, _ := m["y"].(float64); y != 384 {
+		t.Errorf("expected y=384, got %v", y)
+	}
+}
+
+// TestWifiSensorPipeline tests WiFi sensor data through the pipeline.
+func TestWifiSensorPipeline(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":600,"height":400}
+{"type":"on","surfaceId":"main","id":"wifi","event":"system.sensor.wifi","config":{"interval":5000},"handler":{"dataPath":"/wifi"}}`)
+
+	sess.EventManager().Fire("system.sensor.wifi", "main", `{"ssid":"TestNetwork","rssi":-45,"channel":36,"noise":-90,"connected":true}`)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/wifi")
+	if !found {
+		t.Fatal("expected /wifi to be set")
+	}
+	m := val.(map[string]interface{})
+	if ssid, _ := m["ssid"].(string); ssid != "TestNetwork" {
+		t.Errorf("expected ssid=TestNetwork, got %v", ssid)
+	}
+	if rssi, _ := m["rssi"].(float64); rssi != -45 {
+		t.Errorf("expected rssi=-45, got %v", rssi)
+	}
+}
+
+// TestProcessesSensorPipeline tests process count data through the pipeline.
+func TestProcessesSensorPipeline(t *testing.T) {
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":600,"height":400}
+{"type":"on","surfaceId":"main","id":"procs","event":"system.sensor.processes","config":{"interval":2000},"handler":{"dataPath":"/procs"}}`)
+
+	sess.EventManager().Fire("system.sensor.processes", "main", `{"count":342,"loadAvg1":2.5,"loadAvg5":1.8,"loadAvg15":1.2}`)
+
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	val, found := surf.dm.Get("/procs")
+	if !found {
+		t.Fatal("expected /procs to be set")
+	}
+	m := val.(map[string]interface{})
+	if count, _ := m["count"].(float64); count != 342 {
+		t.Errorf("expected count=342, got %v", count)
+	}
+	if la1, _ := m["loadAvg1"].(float64); la1 != 2.5 {
+		t.Errorf("expected loadAvg1=2.5, got %v", la1)
+	}
+}
+
+// TestMouseToFilePipeline tests the full cursor→file streaming path.
+func TestMouseToFilePipeline(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "mouse.csv")
+
+	mock := renderer.NewMockRenderer()
+	disp := &renderer.MockDispatcher{}
+	sess := NewSession(mock, disp)
+	sess.SetNativeProvider(&testNativeProvider{})
+
+	feedMessages(t, sess, `{"type":"createSurface","surfaceId":"main","title":"T","width":600,"height":400}
+{"type":"on","surfaceId":"main","id":"mouse","event":"system.sensor.mouse","config":{"interval":16},"handler":{"dataPath":"/mouse"}}`)
+
+	// Simulate 50 mouse position events
+	em := sess.EventManager()
+	for i := 0; i < 50; i++ {
+		em.Fire("system.sensor.mouse", "main", fmt.Sprintf(`{"x":%d,"y":%d}`, i*10, i*5))
+	}
+
+	// Write accumulated data to file
+	sess.mu.Lock()
+	surf := sess.surfaces["main"]
+	sess.mu.Unlock()
+
+	eval := surf.resolver.evaluator
+	eval.Eval("fileWrite", []any{logPath, "x,y\n"})
+	for i := 0; i < 50; i++ {
+		eval.Eval("fileAppend", []any{logPath, fmt.Sprintf("%d,%d\n", i*10, i*5)})
+	}
+
+	content, _ := os.ReadFile(logPath)
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	if len(lines) != 51 { // header + 50 rows
+		t.Fatalf("expected 51 lines, got %d", len(lines))
+	}
+}
+
 // TestSensorToFileStreamingPipeline tests the complete streaming path:
 // sensor event → data model → action → fileAppend
 func TestSensorToFileStreamingPipeline(t *testing.T) {

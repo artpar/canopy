@@ -88,6 +88,16 @@ func sensorStartStop(event, action string, intervalMs int) {
 		if action == "start" { darwin.StartDisplaySensor(intervalMs) } else { darwin.StopDisplaySensor() }
 	case "system.sensor.activeApp":
 		if action == "start" { darwin.StartActiveAppSensor(intervalMs) } else { darwin.StopActiveAppSensor() }
+	case "system.sensor.mouse":
+		if action == "start" { darwin.StartMouseSensor(intervalMs) } else { darwin.StopMouseSensor() }
+	case "system.sensor.wifi":
+		if action == "start" { darwin.StartWifiSensor(intervalMs) } else { darwin.StopWifiSensor() }
+	case "system.sensor.processes":
+		if action == "start" { darwin.StartProcessesSensor(intervalMs) } else { darwin.StopProcessesSensor() }
+	case "system.sensor.bluetooth.devices":
+		if action == "start" { darwin.StartBluetoothDevicesSensor(intervalMs) } else { darwin.StopBluetoothDevicesSensor() }
+	case "system.sensor.diskIO":
+		if action == "start" { darwin.StartDiskIOSensor(intervalMs) } else { darwin.StopDiskIOSensor() }
 	}
 }
 
