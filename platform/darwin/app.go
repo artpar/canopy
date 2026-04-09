@@ -90,19 +90,6 @@ func GoFollowUpTriggered() {
 	}
 }
 
-// ShowFollowUpPanel shows a native text input dialog for follow-up instructions.
-// Blocks the calling goroutine (not the main thread) until user responds.
-// Returns empty string if cancelled.
-func ShowFollowUpPanel() string {
-	reqID, ch := allocRequest()
-	C.JVShowFollowUpPanel(C.uint64_t(reqID))
-	res := <-ch
-	if res.value == nil {
-		return ""
-	}
-	return *res.value
-}
-
 // SetFollowUpEnabled enables or disables the "Refine UI..." (Cmd+L) menu item.
 func SetFollowUpEnabled(enabled bool) {
 	e := C.int(0)

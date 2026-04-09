@@ -201,6 +201,11 @@ func (p *Process) run(sess *Session, pm *ProcessManager) {
 				}
 				return
 			}
+			if msg == nil {
+				// nil sentinel = end of a generation turn; flush pending components
+				sess.FlushPendingComponents()
+				continue
+			}
 			sess.HandleMessage(msg)
 		case err, ok := <-errCh:
 			if !ok {
