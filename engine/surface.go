@@ -52,6 +52,10 @@ type Surface struct {
 	// throttlers tracks rate limiters: "componentID:eventName" → Throttler
 	throttlers map[string]*Throttler
 
+	// viewTypes tracks the rendered component type for each componentID.
+	// Used to detect type changes and recreate views instead of updating in-place.
+	viewTypes map[string]protocol.ComponentType
+
 	// Render coalescing: batch rapid data model writes into single render passes
 	dirtyComponents map[string]bool
 	renderTimer     *time.Timer
@@ -91,6 +95,7 @@ func NewSurface(id string, rend renderer.Renderer, dispatch renderer.Dispatcher,
 		funcDefs:         make(map[string]*FuncDef),
 		compDefs:         make(map[string]*protocol.DefineComponent),
 		forEachMetas:     make(map[string]*forEachMeta),
+		viewTypes:        make(map[string]protocol.ComponentType),
 	}
 }
 
@@ -566,8 +571,19 @@ func (s *Surface) renderComponents(componentIDs []string) {
 					if h == 0 {
 						logWarn("render", s.id, fmt.Sprintf("CreateView returned 0 for %s (type %s)", w.node.ComponentID, w.node.Type))
 					}
+					s.viewTypes[w.node.ComponentID] = w.node.Type
+				} else if prevType, ok := s.viewTypes[w.node.ComponentID]; ok && prevType != w.node.Type {
+					// Type changed — destroy old view and create new one to avoid ObjC selector mismatch
+					jlog.Infof("render", s.id, "type changed for %s: %s → %s, recreating view", w.node.ComponentID, prevType, w.node.Type)
+					s.rend.RemoveView(s.id, w.node.ComponentID, handle)
+					h := s.rend.CreateView(s.id, w.node)
+					if h == 0 {
+						logWarn("render", s.id, fmt.Sprintf("CreateView returned 0 for %s (type %s) after type change", w.node.ComponentID, w.node.Type))
+					}
+					s.viewTypes[w.node.ComponentID] = w.node.Type
 				} else {
 					s.rend.UpdateView(s.id, handle, w.node)
+					s.viewTypes[w.node.ComponentID] = w.node.Type
 				}
 			}()
 		}
